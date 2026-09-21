@@ -1,0 +1,60 @@
+services:
+  dsh-web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      network: host
+      args:
+        NODE_VERSION: ${NODE_VERSION:-24-bookworm-slim}
+        DSH_CLIENT_COMMIT_HASH: ${DSH_CLIENT_COMMIT_HASH:?set DSH_CLIENT_COMMIT_HASH to git rev-parse HEAD}
+    image: ${ZHISHU_HARNESS_IMAGE:-zhishu-harness:local}
+    environment:
+      DSH_HOME: /storage-root-jfs/user/dsh-home
+      DSH_WEB_PORT: 3080
+      DSH_INTERNAL_PORT: ${DSH_INTERNAL_PORT:-3081}
+      DSH_PUBLIC_AUTHORITY: ${DSH_PUBLIC_AUTHORITY:-dsh-web:3081}
+      NODE_ENV: production
+      NODE_OPTIONS: --enable-source-maps
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - type: bind
+        source: ${DSH_USER_ROOT_PATH:?set DSH_USER_ROOT_PATH to /storage-root-jfs/user-<userID>}
+        target: /storage-root-jfs/user
+    networks:
+      - gcs-dsh-internal
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl --silent --output /dev/null --max-time 3 "http://127.0.0.1:$${DSH_INTERNAL_PORT}/"
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    stop_grace_period: 30s
+    deploy:
+      mode: replicated
+      replicas: 1
+      endpoint_mode: dnsrr
+      placement:
+        constraints:
+          - node.labels.dsh==true
+          - node.labels.jfs==true
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
+        window: 60s
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+        monitor: 30s
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+        monitor: 30s
+
+networks:
+  gcs-dsh-internal:
+    name: ${GCS_DSH_NETWORK:-gcs-dsh-internal}
+    external: true
