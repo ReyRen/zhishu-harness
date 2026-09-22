@@ -57,7 +57,7 @@ printf '%s\n' "$IMAGE_ID"
 
 生产调度只使用 Worker 本地镜像，不访问外部镜像仓库。构建新版本后，必须先让所有带 `dsh=true`、`jfs=true` 标签的 Worker 都具有同一个 `IMAGE_ID`，然后将 `/etc/gcs-harness-master/master.json` 中的 `dsh.localImageID` 更新为该值并重启 Master。配置只接受 `sha256:<64位十六进制>` Image ID，不接受 tag；这样 Swarm 不会先尝试远程拉取。用户下次调用 `launch` 时会切换到新镜像，已有 `/storage-root-jfs/user-<userID>` 不变。
 
-Master 创建的生产 Service 和本 compose 验证环境都使用 2 秒健康检查间隔，以便 DSH HTTP 就绪后尽快加入路由。
+Master 创建的生产 Service 和本 compose 验证环境都使用 1 秒健康检查间隔，以便 DSH HTTP 就绪后尽快加入路由。
 
 ## 单用户验证
 

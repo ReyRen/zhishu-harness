@@ -25,11 +25,11 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - curl --silent --output /dev/null --max-time 1 "http://127.0.0.1:$${DSH_INTERNAL_PORT}/"
-      interval: 2s
-      timeout: 2s
+        - curl --silent --output /dev/null --max-time 0.5 "http://127.0.0.1:$${DSH_INTERNAL_PORT}/"
+      interval: 1s
+      timeout: 1s
       retries: 10
-      start_period: 15s
+      start_period: 10s
     stop_grace_period: 30s
     deploy:
       mode: replicated
