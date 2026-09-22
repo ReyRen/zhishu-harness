@@ -4,14 +4,14 @@
  * creation over the host filesystem via Node's stdlib (which already carries
  * the per-OS adaptation). Nothing renders on the host display, so this backend
  * serves remote clients the dialog backend cannot. Policy decisions (hidden
- * entries flagged but returned, symlinks followed, whole-filesystem scope) are
+ * entries flagged but returned, symlinks followed, optional rooted scope) are
  * recorded in the directory-picker seam Agent Note.
  * @module @deepseek-ai/dsh-host-directory-picker-browse
  */
 
-import { mkdir, opendir, stat } from 'node:fs/promises'
+import { mkdir, opendir, realpath, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { basename, dirname, join, posix, resolve, win32 } from 'node:path'
+import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep, win32 } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import {
@@ -25,16 +25,22 @@ import type {
  * Ancestor chain from the filesystem root to `target` inclusive — the
  * breadcrumb rows of a listing, every one a jump target.
  */
-function ancestryCrumbs(target: string): DirectoryEntry[] {
+function ancestryCrumbs(target: string, root?: string): DirectoryEntry[] {
   const crumbs: DirectoryEntry[] = []
   let current = target
   for (;;) {
     const parent = dirname(current)
     // basename of a root is '' — label the root crumb by its full path ('/', 'C:\').
     crumbs.unshift({ name: parent === current ? current : basename(current), path: current, hidden: false })
-    if (parent === current) return crumbs
+    if (current === root || parent === current) return crumbs
     current = parent
   }
+}
+
+/** Whether `target` is `root` or one of its descendants on the current platform. */
+function inside(root: string, target: string): boolean {
+  const child = relative(root, target)
+  return child === '' || (!isAbsolute(child) && child !== '..' && !child.startsWith(`..${sep}`))
 }
 
 /**
@@ -181,6 +187,8 @@ async function directoryRow(
 export interface Config {
   /** Complete-result bound of one listing level; see {@link BrowseDirectoryPicker.Config}. */
   maxEntries: number
+  /** Optional fully qualified directory exposed as the browse home and root. */
+  rootDirectory?: string
 }
 
 /** The `ctx.directoryPicker` browse implementation (stable capability object per service life). */
@@ -194,6 +202,7 @@ export default class BrowseDirectoryPicker extends DirectoryPicker {
    */
   static Config: z<Config> = z.object({
     maxEntries: z.natural().min(1).default(1000),
+    rootDirectory: z.string(),
   })
 
   private readonly browseCapability: DirectoryPickerCapability = {
@@ -204,6 +213,9 @@ export default class BrowseDirectoryPicker extends DirectoryPicker {
 
   constructor(ctx: Context, private readonly config: Config) {
     super(ctx)
+    if (config.rootDirectory !== undefined && !fullyQualified(config.rootDirectory)) {
+      throw new Error(`rootDirectory must be fully qualified: '${config.rootDirectory}'`)
+    }
   }
 
   /**
@@ -222,7 +234,20 @@ export default class BrowseDirectoryPicker extends DirectoryPicker {
     if (path !== undefined && !fullyQualified(path)) {
       throw new DirectoryPickerError('directory-unreadable', path, `cannot list "${path}": not a fully qualified path`)
     }
-    const target = resolve(path ?? home)
+    let root: string | undefined
+    let target = resolve(path ?? this.config.rootDirectory ?? home)
+    try {
+      if (this.config.rootDirectory !== undefined) {
+        root = await raceAbort(realpath(this.config.rootDirectory), signal)
+        target = await raceAbort(realpath(target), signal)
+        if (!inside(root, target)) {
+          throw new Error(`path is outside the configured root '${root}'`)
+        }
+      }
+    } catch (error: unknown) {
+      signal?.throwIfAborted()
+      throw new DirectoryPickerError('directory-unreadable', target, `cannot list ${target}: ${messageOf(error)}`)
+    }
     // Stream the level (opendir, one dirent at a time) into a name-sorted
     // window of maxEntries + 1 candidates: memory stays bounded no matter how
     // many children the directory holds, the window keeps the name-sorted
@@ -287,13 +312,22 @@ export default class BrowseDirectoryPicker extends DirectoryPicker {
       signal?.throwIfAborted()
       const row = await directoryRow(target, candidate.name, candidate.isDirectory, candidate.isSymbolicLink, signal)
       if (row === null) continue
+      if (root !== undefined) {
+        try {
+          if (!inside(root, await raceAbort(realpath(row.path), signal))) continue
+        } catch {
+          /* v8 ignore next 2 -- an abort landing during the containment probe is covered by raceAbort itself. */
+          if (signal?.aborted) throw asError(signal.reason)
+          continue
+        }
+      }
       if (entries.length === this.config.maxEntries) {
         truncated = true
         break
       }
       entries.push(row)
     }
-    return { path: target, home, crumbs: ancestryCrumbs(target), entries, truncated }
+    return { path: target, home: root ?? home, crumbs: ancestryCrumbs(target, root), entries, truncated }
   }
 
   private async createDirectory(path: string, name: string): Promise<string> {
@@ -302,7 +336,18 @@ export default class BrowseDirectoryPicker extends DirectoryPicker {
     if (!fullyQualified(path)) {
       throw new DirectoryPickerError('directory-create-failed', path, `cannot create under "${path}": not a fully qualified parent path`)
     }
-    const parent = resolve(path)
+    let parent = resolve(path)
+    if (this.config.rootDirectory !== undefined) {
+      try {
+        const root = await realpath(this.config.rootDirectory)
+        parent = await realpath(parent)
+        if (!inside(root, parent)) throw new Error(`path is outside the configured root '${root}'`)
+      } catch (error: unknown) {
+        throw new DirectoryPickerError(
+          'directory-create-failed', parent, `cannot create under ${parent}: ${messageOf(error)}`,
+        )
+      }
+    }
     // The backend owns segment validation; the Remote controller also refuses
     // invalid wire input, but direct service consumers must hit the same fence.
     if (name.trim() === '' || name === '.' || name === '..' || /[/\\]/.test(name)) {

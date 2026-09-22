@@ -166,6 +166,33 @@ describe('BrowseDirectoryPicker', () => {
     expect(listing.path).toBe(homedir())
   })
 
+  it('uses a configured root as home and refuses traversal and escaping symlinks', async () => {
+    const scopedRoot = join(root, 'projects')
+    await symlink(root, join(scopedRoot, 'escape'), 'junction')
+    const ctx = new Context()
+    const fiber = ctx.plugin(BrowseDirectoryPicker, { maxEntries: 1000, rootDirectory: scopedRoot })
+    await fiber.await()
+    const scoped = ctx.get('directoryPicker')!.capability()
+    if (scoped.kind !== 'browse') throw new Error('browse backend must advertise the browse capability')
+    try {
+      const listing = await scoped.list()
+      expect(listing.path).toBe(scopedRoot)
+      expect(listing.home).toBe(scopedRoot)
+      expect(listing.crumbs).toEqual([{
+        name: basename(scopedRoot), path: scopedRoot, hidden: false,
+      }])
+      expect(listing.entries.map(entry => entry.name)).toEqual(['harness'])
+
+      await expect(scoped.list(root)).rejects.toMatchObject({ code: 'directory-unreadable' })
+      await expect(scoped.createDirectory(root, 'outside')).rejects.toMatchObject({
+        code: 'directory-create-failed',
+      })
+      await expect(scoped.createDirectory(scopedRoot, 'inside')).resolves.toBe(join(scopedRoot, 'inside'))
+    } finally {
+      await fiber.dispose()
+    }
+  })
+
   it('throws directory-unreadable for a missing target', async () => {
     const missing = join(root, 'no-such-dir')
     const failure = await capability.list(missing).catch((error: unknown) => error)

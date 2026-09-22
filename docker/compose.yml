@@ -10,6 +10,9 @@ services:
     image: ${ZHISHU_HARNESS_IMAGE:-zhishu-harness:local}
     environment:
       DSH_HOME: /storage-root-jfs/user/dsh-home
+      DSH_WORKSPACE_ROOT: /storage-root-jfs/user
+      DSH_DEFAULT_WORKSPACE: /storage-root-jfs/user/workspace
+      DSH_DEFAULT_WORKSPACE_TITLE: 默认工作区
       DSH_WEB_PORT: 3080
       DSH_INTERNAL_PORT: ${DSH_INTERNAL_PORT:-3081}
       DSH_PUBLIC_AUTHORITY: ${DSH_PUBLIC_AUTHORITY:-dsh-web:3081}

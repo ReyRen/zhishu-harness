@@ -37,8 +37,15 @@ The [Workspace registry](../../workspace/workspace/README.md#first-use-workspace
 | --- | --- | --- |
 | `documentsDirectory` | System Documents directory | Fully qualified Host directory override |
 | `documentsLookupTimeoutMs` | `10000` | Positive maximum duration of OS directory lookup, in milliseconds |
+| `workspaceRootDirectory` | unrestricted | Existing fully qualified root accepted by `workspace.create` |
+| `requiredWorkspacePath` | disabled | Fully qualified Workspace created and registered during startup |
+| `requiredWorkspaceTitle` | directory name | Initial title used when startup creates the required Workspace |
 
 Documents lookup holds the registry mutation queue, so other Workspace mutations, including registration of a picked directory, can wait up to `documentsLookupTimeoutMs`. Cancellation can stop the lookup; after resolution succeeds, it does not roll back creation or registration.
+
+For managed deployments, `requiredWorkspacePath` creates and registers one Workspace during Host startup even when Session history already exists. The controller refuses removal of that registration for the process lifetime. `workspaceRootDirectory` restricts every later `workspace.create` request to that directory or a descendant after canonical path resolution, so a symlink cannot escape the configured root.
+
+The required Workspace path may equal the root or name a descendant. Startup creates missing directories recursively, retains an existing Workspace identity and title, and rejects startup when the configured root is missing, is not a directory, or does not contain the required path.
 
 -----
 

@@ -43,6 +43,14 @@ Pinning is not a config field here: compose the `-native` or `-browse` row direc
 
 A wrong `native` choice degrades to the backend's existing retryable failure dialog rather than a broken composition; composing `-browse` directly selects the safe interaction for deployments whose situation the probe cannot prove.
 
+### Configuration
+
+| Field | Default | Meaning |
+|---|---|---|
+| `browseRootDirectory` | unrestricted | Fully qualified root forwarded to the browse backend; ignored when the native backend is selected |
+
+The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-host-directory-picker-auto) is the exhaustive source for every accepted field and its JSDoc.
+
 -----
 
 <a id="understand-the-implementation"></a>

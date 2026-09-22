@@ -93,6 +93,8 @@
     # an overlay to pin the interaction.
     - id: directory-picker
       name: '@deepseek-ai/dsh-host-directory-picker-auto'
+      config:
+        browseRootDirectory: !!js process.env.DSH_WORKSPACE_ROOT
 
     # Read-only projection of current Loader entries for trusted client RPCs.
     - id: plugin-inventory
@@ -127,6 +129,10 @@
     # Workspace commands and reconnect-safe projection over Typert Remote.
     - id: workspace-controller
       name: '@deepseek-ai/dsh-api-workspace-controller'
+      config:
+        workspaceRootDirectory: !!js process.env.DSH_WORKSPACE_ROOT
+        requiredWorkspacePath: !!js process.env.DSH_DEFAULT_WORKSPACE
+        requiredWorkspaceTitle: !!js process.env.DSH_DEFAULT_WORKSPACE_TITLE
 
     - id: cordis-host-runner
       name: '@deepseek-ai/dsh-cordis-host-runner'

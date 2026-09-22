@@ -8,6 +8,16 @@ DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的�
 
 文档：[https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)
 
+## 本分支的平台部署
+
+本分支保留完整的上游 DSH Web 应用，并增加托管工作区配置以及 [docker/](docker/README.zh.md) 下的独立容器构建。多用户 Swarm 部署由以下项目组成：
+
+- [gcs-harness-master](https://github.com/ReyRen/gcs-harness-master) 负责平台身份认证、生命周期、调度与 iframe 网关。
+- [gcs-harness-worker](https://github.com/ReyRen/gcs-harness-worker) 负责 Overlay 网络内部的数据面代理。
+- 本仓库负责每用户 DSH 镜像。
+
+`master` 分支只镜像 DSH 官方 `upstream/master`。平台开发和容器构建始终使用 `main`；更新与发布流程见[容器构建指南](docker/README.zh.md)。
+
 ## 开发者预览
 
 DeepSeek Harness 处于 _开发者预览_ 阶段，正在快速迭代。**未来将出现破坏兼容性的变更。**

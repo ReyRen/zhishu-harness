@@ -31,6 +31,8 @@ kind: "package-reference"
 
 `list(path?)` 返回一个目录层级：按名称排序的子目录及其绝对路径、`hidden` 标志（POSIX 上为点前缀）、`home` 锚点，以及 `crumbs`——从根到目标的祖先链，其中每个 crumb 都是跳转目标，根以完整路径标注。不带路径时列举宿主账户的家目录。单次调用至多返回 `maxEntries` 行（配置项，默认 1,000——GitHub 网页端对目录列举采用的同一上限），被截断的层级会报告 `truncated: true`，供客户端提示层级不完整。指向目录的符号链接会被跟随；断链与循环链接被跳过。
 
+配置 `rootDirectory` 后，省略路径会列举该根，面包屑会止于此处，并且规范化路径解析后位于根外的列举或创建请求会被拒绝。跳出根的目录符号链接不会显示。
+
 ### 创建目录
 
 `createDirectory(path, name)` 在既有父目录下创建一个子目录。它不递归——父目录缺失是真实失败，不是要补造的层级——并且拒绝任何非单个非空白路径段的内容（`name` 不得包含分隔符，也不得为 `.` 或 `..`）。
@@ -44,6 +46,7 @@ kind: "package-reference"
 | 字段 | 默认值 | 含义 |
 |---|---|---|
 | `maxEntries` | `1,000` | 单个列举层级的完整结果上限；隐藏行计入该上限 |
+| `rootDirectory` | 宿主家目录 | 可选的完全限定浏览主页与根目录 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-host-directory-picker-browse)是每个受支持字段及其 JSDoc 的穷尽式真源。
 
@@ -109,7 +112,7 @@ kind: "package-reference"
 
 - **不读取 Windows 隐藏属性**——Node 的 dirent 不暴露 `FILE_ATTRIBUTE_HIDDEN`，因此在所有平台上 `hidden` 都意味着点前缀，直到原生探测值得付出相应成本为止。
 - **不枚举盘符根**——Windows 上祖先链止于盘符根；跨盘依赖浏览器 UI 的路径输入入口，而不是这里的枚举原语。
-- **全盘可浏览**——没有按部署限定的浏览根；`workspace.create` 接受任意路径，因此这里的根会限定 UX 范围，而不是安全边界。
+- **默认可浏览全盘**——未配置 `rootDirectory` 的部署保留宿主家目录入口，并接受任何完全限定目录路径。
 
 <a id="dev-note"></a>
 ### 开发备注

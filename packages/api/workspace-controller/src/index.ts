@@ -1,6 +1,8 @@
 /** Host Workspace Remote owner: explicit commands and reconnect-safe state. */
 
-import { Context } from '@deepseek-ai/cordis'
+import { mkdir, realpath, stat } from 'node:fs/promises'
+import { isAbsolute, relative, sep } from 'node:path'
+import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { WorkspaceCommands } from './commands.ts'
@@ -36,6 +38,12 @@ export interface Config {
   documentsDirectory?: string
   /** Maximum duration of the operating system's Documents lookup. */
   documentsLookupTimeoutMs?: number
+  /** Restrict Workspace registration to this existing directory and its descendants. */
+  workspaceRootDirectory?: string
+  /** Create and register this directory before the controller becomes available. */
+  requiredWorkspacePath?: string
+  /** Initial title of the required Workspace; the directory name is used when omitted. */
+  requiredWorkspaceTitle?: string
 }
 
 /** Directory policy after schema defaults have been applied. */
@@ -55,11 +63,16 @@ export class WorkspaceController extends TypertRemoteService {
   static Config: z<Config, ResolvedConfig> = z.object({
     documentsDirectory: z.string(),
     documentsLookupTimeoutMs: z.natural().min(1).default(10_000),
+    workspaceRootDirectory: z.string(),
+    requiredWorkspacePath: z.string(),
+    requiredWorkspaceTitle: z.string(),
   })
 
   private readonly config: ResolvedConfig
   private readonly commands: WorkspaceCommands
   private readonly feed: WorkspaceFeed
+  private workspaceRootDirectory?: string
+  private requiredWorkspaceId?: string
 
   /**
    * @param ctx - Host context containing the Workspace registry.
@@ -69,6 +82,15 @@ export class WorkspaceController extends TypertRemoteService {
     super(ctx, 'workspaceController', { namespace: 'workspace' })
     this.config = WorkspaceController.Config(config)
     if (this.config.documentsDirectory !== undefined) validateDocumentsDirectory(this.config.documentsDirectory)
+    if (this.config.workspaceRootDirectory !== undefined) {
+      validateDocumentsDirectory(this.config.workspaceRootDirectory)
+    }
+    if (this.config.requiredWorkspacePath !== undefined) {
+      validateDocumentsDirectory(this.config.requiredWorkspacePath)
+    }
+    if (this.config.requiredWorkspaceTitle?.trim() === '') {
+      throw new Error('requiredWorkspaceTitle must be non-blank')
+    }
     this.commands = new WorkspaceCommands(ctx)
     this.feed = new WorkspaceFeed(ctx)
     // This package is the Loader entry for both Remote owners it hosts: the
@@ -78,13 +100,43 @@ export class WorkspaceController extends TypertRemoteService {
     ctx.plugin(DirectoryPickerController)
   }
 
+  /** Resolve deployment directory policy and register the required Workspace before serving clients. */
+  protected async [Service.init](): Promise<void> {
+    if (this.config.workspaceRootDirectory !== undefined) {
+      const root = await realpath(this.config.workspaceRootDirectory)
+      if (!(await stat(root)).isDirectory()) {
+        throw new Error(`workspaceRootDirectory is not a directory: '${this.config.workspaceRootDirectory}'`)
+      }
+      this.workspaceRootDirectory = root
+    }
+    if (this.config.requiredWorkspacePath === undefined) return
+    await mkdir(this.config.requiredWorkspacePath, { recursive: true })
+    const path = await realpath(this.config.requiredWorkspacePath)
+    this.assertInsideWorkspaceRoot(path)
+    const workspace = await this.ctx.workspaceRegistry.create(path, this.config.requiredWorkspaceTitle)
+    this.requiredWorkspaceId = workspace.id
+  }
+
   /**
    * Create or idempotently resolve one Workspace over an existing directory.
    * @param request - directory path to register.
    * @returns the Workspace and whether this call created it.
    */
   @Remote('create')
-  create(request: WorkspaceCreateRequest): Promise<WorkspaceCreateValue> {
+  async create(request: WorkspaceCreateRequest): Promise<WorkspaceCreateValue> {
+    if (this.workspaceRootDirectory !== undefined) {
+      try {
+        this.assertInsideWorkspaceRoot(await realpath(request.path))
+      } catch (error: unknown) {
+        if (error instanceof RemoteError) throw error
+        throw new RemoteError(
+          'workspace/invalid-path',
+          `cannot create a Workspace at "${request.path}": ${errorMessage(error)}`,
+          { path: request.path },
+          { cause: error },
+        )
+      }
+    }
     return this.commands.create(request)
   }
 
@@ -128,6 +180,13 @@ export class WorkspaceController extends TypertRemoteService {
    */
   @Remote('delete')
   delete(request: WorkspaceDeleteRequest): Promise<WorkspaceDeleteValue> {
+    if (request.workspaceId === this.requiredWorkspaceId) {
+      return Promise.reject(new RemoteError(
+        'gateway/bad-request',
+        'the required Workspace cannot be removed',
+        {},
+      ))
+    }
     return this.commands.delete(request)
   }
 
@@ -200,6 +259,23 @@ export class WorkspaceController extends TypertRemoteService {
   follow(signal: AbortSignal): AsyncIterable<WorkspaceFollowFrame> {
     return this.feed.follow(signal)
   }
+
+  /** Refuse a canonical directory outside the configured Workspace root. */
+  private assertInsideWorkspaceRoot(path: string): void {
+    const root = this.workspaceRootDirectory
+    if (root === undefined) return
+    const child = relative(root, path)
+    if (child === '' || (!isAbsolute(child) && child !== '..' && !child.startsWith(`..${sep}`))) return
+    throw new RemoteError(
+      'workspace/invalid-path',
+      `Workspace path "${path}" is outside the configured root "${root}"`,
+      { path },
+    )
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 export default WorkspaceController

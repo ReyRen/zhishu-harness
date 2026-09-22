@@ -336,7 +336,7 @@ Host service backing the generated `ctx.remote.workspace` namespace.
  * @param request - directory path to register.
  * @returns the Workspace and whether this call created it.
  */
-@Remote('create') create(request: WorkspaceCreateRequest): Promise<WorkspaceCreateValue>
+@Remote('create') async create(request: WorkspaceCreateRequest): Promise<WorkspaceCreateValue>
 
 /**
  * Initialize or reuse the default Workspace during first-use startup.

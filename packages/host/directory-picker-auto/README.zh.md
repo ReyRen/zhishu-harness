@@ -43,6 +43,14 @@ kind: "package-reference"
 
 错误的 `native` 选择会退化为后端既有的可重试失败对话框，而不是坏掉的组合；对探查无法证明其处境的部署，直接组合 `-browse` 即选择安全的交互。
 
+### 配置
+
+| 字段 | 默认值 | 含义 |
+|---|---|---|
+| `browseRootDirectory` | 不限制 | 转发给浏览后端的完全限定根目录；选择原生后端时忽略 |
+
+生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-host-directory-picker-auto)是每个受支持字段及其 JSDoc 的穷尽式真源。
+
 -----
 
 <a id="understand-the-implementation"></a>

@@ -12,6 +12,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 // Empty type imports carry the `loader` and `webServer` Context merges for the reads below.
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-host-webserver'
@@ -28,6 +29,17 @@ export { resolveDirectoryPickerBackend } from './resolve.ts'
 export const name = 'directory-picker-auto'
 /** Required services: the effective bind host (`webServer`) and the entry tree the backend mounts into (`loader`). */
 export const inject = ['webServer', 'loader']
+
+/** Deployment policy forwarded only to the browse backend. */
+export interface Config {
+  /** Optional fully qualified directory exposed as the in-app browser root. */
+  browseRootDirectory?: string
+}
+
+/** Validated adaptive-picker configuration. */
+export const Config: z<Config> = z.object({
+  browseRootDirectory: z.string(),
+})
 
 /**
  * Host backend package per resolved kind — fixed composition vocabulary, not a
@@ -58,8 +70,9 @@ export const SURFACE_PACKAGES: Record<DirectoryPickerBackendKind, string> = {
  * joins their fibers' teardown, so unloading this plugin returns only after
  * both faces of the mounted interaction (and their dependents) quiesced.
  * @param ctx - cordis context carrying the injected `webServer` and `loader`.
+ * @param config - browse-backend directory policy.
  */
-export async function apply(ctx: Context): Promise<void> {
+export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   const backend = resolveDirectoryPickerBackend({
     bindHost: ctx.webServer.host,
     platform: process.platform,
@@ -86,7 +99,11 @@ export async function apply(ctx: Context): Promise<void> {
     }
     try {
       for (const name of [BACKEND_PACKAGES[backend], SURFACE_PACKAGES[backend]]) {
-        const id = await ctx.loader.create({ name })
+        const backendConfig = backend === 'browse' && name === BACKEND_PACKAGES.browse
+          && config.browseRootDirectory !== undefined
+          ? { rootDirectory: config.browseRootDirectory }
+          : undefined
+        const id = await ctx.loader.create({ name, ...(backendConfig === undefined ? {} : { config: backendConfig }) })
         ids.push(id)
         const entry = ctx.loader.resolve(id)
         if (entry.fiber === undefined) throw new Error(`directory-picker-auto: failed to load ${name}`)

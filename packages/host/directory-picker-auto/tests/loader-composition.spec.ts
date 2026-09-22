@@ -93,7 +93,11 @@ afterEach(async () => {
 /** Write a two-row cordis.yml (webserver + chooser), then boot it through the real Loader. */
 async function loadComposition(
   bindHost: '127.0.0.1' | '0.0.0.0',
-  options: { failSurface?: boolean; launchEnvironment?: LaunchEnvironmentSnapshot } = {},
+  options: {
+    browseRootDirectory?: string
+    failSurface?: boolean
+    launchEnvironment?: LaunchEnvironmentSnapshot
+  } = {},
 ): Promise<{ ctx: Context; configPath: string }> {
   root = await mkdtemp(join(tmpdir(), 'dsh-directory-picker-auto-'))
   const configPath = join(root, 'cordis.yml')
@@ -103,6 +107,9 @@ async function loadComposition(
     `    host: '${bindHost}'`,
     '    port: 0',
     `- name: '${AUTO}'`,
+    ...(options.browseRootDirectory === undefined
+      ? []
+      : ['  config:', `    browseRootDirectory: '${options.browseRootDirectory.replaceAll('\\', '\\\\')}'`]),
     '',
   ].join('\n'))
 
@@ -249,12 +256,18 @@ describe('real Loader composition', () => {
 
   it('mounts the browse backend for an all-interfaces bind even on an attended host', { timeout: 60_000 }, async () => {
     stubAttendedHost()
-    const { ctx } = await loadComposition('0.0.0.0')
+    const browseRoot = mkdtempSync(join(tmpdir(), 'dsh-picker-root-'))
+    onTestFinished(() => rm(browseRoot, { recursive: true, force: true }))
+    const { ctx } = await loadComposition('0.0.0.0', { browseRootDirectory: browseRoot })
 
     expect(entryNames(ctx)).toContain(BROWSE)
     expect(entryNames(ctx)).toContain(BROWSE_SURFACE)
     expect(entryNames(ctx)).not.toContain(NATIVE)
     expect(entryNames(ctx)).not.toContain(NATIVE_SURFACE)
+    const picker = ctx.get('directoryPicker') as DirectoryPicker
+    const capability = picker.capability()
+    if (capability.kind !== 'browse') throw new Error('adaptive picker did not mount browse')
+    await expect(capability.list()).resolves.toMatchObject({ path: browseRoot, home: browseRoot })
   })
 
   it('unmounts the backend when the surface entry fails to load', { timeout: 60_000 }, async () => {

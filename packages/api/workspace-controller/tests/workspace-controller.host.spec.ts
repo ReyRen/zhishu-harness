@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:f
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context, Service } from '@deepseek-ai/cordis'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
@@ -10,6 +10,7 @@ import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import WorkspaceRegistry from '@deepseek-ai/dsh-workspace'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import WorkspaceController from '../src/index.ts'
+import type { Config } from '../src/index.ts'
 import { WorkspaceFeed } from '../src/feed.ts'
 import type { WorkspaceFollowFrame } from '../src/types.ts'
 import { MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
@@ -49,7 +50,14 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve }
 }
 
-async function harness(options: { systemDocuments?: boolean } = {}) {
+class TestWorkspaceController extends WorkspaceController {
+  /** Activate the Service lifecycle used by Loader composition. */
+  activate(): Promise<void> {
+    return this[Service.init]()
+  }
+}
+
+async function harness(options: { systemDocuments?: boolean; platformWorkspace?: boolean } = {}) {
   const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'dsh-workspace-controller-')))
   tempDirs.push(root)
   const ctx = new Context()
@@ -67,8 +75,22 @@ async function harness(options: { systemDocuments?: boolean } = {}) {
     lookups: { configure: () => dispose },
     contexts: { configureHost: () => dispose },
   } as never)
-  const controller = new WorkspaceController(ctx, options.systemDocuments === true ? {} : { documentsDirectory: root })
-  return { controller, ctx, root, storageDomain }
+  let userRoot: string | undefined
+  let defaultPath: string | undefined
+  let config: Config
+  if (options.platformWorkspace === true) {
+    userRoot = stageDir(root, 'user')
+    defaultPath = join(userRoot, 'workspace')
+    config = {
+      workspaceRootDirectory: userRoot,
+      requiredWorkspacePath: defaultPath,
+      requiredWorkspaceTitle: 'Default workspace',
+    }
+  } else {
+    config = options.systemDocuments === true ? {} : { documentsDirectory: root }
+  }
+  const controller = new TestWorkspaceController(ctx, config)
+  return { controller, ctx, root, storageDomain, userRoot, defaultPath }
 }
 
 function stageDir(root: string, name: string): string {
@@ -86,6 +108,28 @@ async function nextFrame(
 }
 
 describe('WorkspaceController commands', () => {
+  it('registers and protects a required Workspace while rejecting paths outside its root', async () => {
+    const prepared = await harness({ platformWorkspace: true })
+    const { controller, userRoot, defaultPath } = prepared
+    if (userRoot === undefined || defaultPath === undefined) throw new Error('platform Workspace fixture is incomplete')
+    await controller.activate()
+
+    expect(existsSync(defaultPath)).toBe(true)
+    expect(prepared.ctx.workspaceRegistry.list()).toHaveLength(1)
+    expect(prepared.ctx.workspaceRegistry.list()[0]).toMatchObject({
+      path: realpathSync.native(defaultPath),
+      title: 'Default workspace',
+    })
+    const required = prepared.ctx.workspaceRegistry.list()[0]!
+    await expect(controller.delete({ workspaceId: required.id }))
+      .rejects.toMatchObject({ code: 'gateway/bad-request' })
+
+    await expect(controller.create({ path: stageDir(prepared.root, 'outside') }))
+      .rejects.toMatchObject({ code: 'workspace/invalid-path' })
+    await expect(controller.create({ path: stageDir(userRoot, 'project') }))
+      .resolves.toMatchObject({ created: true, workspace: { title: 'project' } })
+  })
+
   it('serializes concurrent path adoption and preserves an existing title', async () => {
     const { controller, root } = await harness()
     const path = stageDir(root, 'alpha')

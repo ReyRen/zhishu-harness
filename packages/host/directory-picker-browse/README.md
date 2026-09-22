@@ -31,6 +31,8 @@ Compose this backend when a workspace directory must be chosen without an OS cho
 
 `list(path?)` returns one directory level: name-sorted child directories with their absolute paths, a `hidden` flag (dot-prefixed on POSIX), a `home` anchor, and `crumbs` — the root-to-target ancestor chain where every crumb is a jump target and the root is labeled by its full path. An absent path lists the host account's home directory. One call returns at most `maxEntries` rows (config, default 1,000 — the bound GitHub's web UI applies to directory listings), and a cut level reports `truncated: true` so the client can say the level is incomplete. Symlinks to directories are followed; broken and cyclic links are skipped.
 
+When `rootDirectory` is configured, an absent path lists that root, breadcrumbs stop there, and listing or creation outside it is refused after canonical path resolution. Directory symlinks that leave the root are omitted.
+
 ### Creating a directory
 
 `createDirectory(path, name)` creates one child directory under an existing parent. It is non-recursive — a missing parent is a real failure, not a level to invent — and rejects anything but a single non-blank path segment (`name` must not contain separators and must not be `.` or `..`).
@@ -44,6 +46,7 @@ Both primitives refuse a path that is not fully qualified — relative forms, an
 | Field | Default | Meaning |
 |---|---|---|
 | `maxEntries` | `1,000` | Complete-result bound of one listing level; hidden rows count toward it |
+| `rootDirectory` | Host home | Optional fully qualified browse home and root |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-host-directory-picker-browse) is the exhaustive source for every accepted field and its JSDoc.
 
@@ -109,7 +112,7 @@ These limits define where the browse interaction is incomplete or intentionally 
 
 - **Windows hidden attribute is not read** — Node dirents do not expose `FILE_ATTRIBUTE_HIDDEN`, so `hidden` means dot-prefixed on every platform until a native probe is worth its cost.
 - **No drive-root enumeration** — on Windows the ancestry stops at the drive root; crossing drives waits for the browser UI's path-entry affordance rather than an enumeration primitive here.
-- **Whole-filesystem scope** — there is no per-deployment browse-root restriction; `workspace.create` accepts arbitrary paths, so a root here would be UX scoping rather than a security boundary.
+- **Whole-filesystem scope by default** — deployments that do not configure `rootDirectory` retain the host-home entry point and accept any fully qualified directory path.
 
 <a id="dev-note"></a>
 ### Dev Note

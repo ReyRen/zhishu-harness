@@ -37,8 +37,15 @@ Client 入口提供 `ClientWorkspaceModel` 和 `createWorkspaceStateStream()`。
 | --- | --- | --- |
 | `documentsDirectory` | 系统 Documents 目录 | 完全限定的 Host 目录覆盖值 |
 | `documentsLookupTimeoutMs` | `10000` | 操作系统目录查询的正数最大时长，单位为毫秒 |
+| `workspaceRootDirectory` | 不限制 | `workspace.create` 接受的现有完全限定根目录 |
+| `requiredWorkspacePath` | 禁用 | 启动期间创建并登记的完全限定 Workspace |
+| `requiredWorkspaceTitle` | 目录名 | 启动流程创建必需 Workspace 时使用的初始标题 |
 
 Documents 查询占用注册表变更队列，因此其他 Workspace 变更（包括登记已选目录）最多可能等待 `documentsLookupTimeoutMs`。取消可以停止查询；解析成功后，取消不会回滚创建或登记。
+
+对于托管部署，`requiredWorkspacePath` 会在 Host 启动期间创建并登记一个 Workspace，即使已经存在 Session 历史也是如此。控制器在本次进程生命周期内拒绝移除该登记。`workspaceRootDirectory` 在规范化路径解析后，把后续每个 `workspace.create` 请求限制在该目录或其后代中，因此软链接无法跳出所配置的根。
+
+必需 Workspace 路径可以等于根，也可以是其后代。启动流程会递归创建缺失目录，保留已有 Workspace 的身份与标题；如果配置的根不存在、不是目录或不包含必需路径，则拒绝启动。
 
 -----
 
