@@ -8,6 +8,20 @@ It is built on an **everything-is-a-plugin** architecture and powered by [Cordis
 
 Documentation: [https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)
 
+## Platform deployment in this fork
+
+This fork keeps the complete upstream DSH application unchanged and adds a
+self-contained container build under [docker/](docker/README.md). The
+multi-user Swarm deployment is composed of:
+
+- [gcs-harness-master](https://github.com/ReyRen/gcs-harness-master) for platform identity, lifecycle, scheduling, and the iframe gateway.
+- [gcs-harness-worker](https://github.com/ReyRen/gcs-harness-worker) for the internal Overlay data-plane proxy.
+- This repository for the per-user DSH image.
+
+The `master` branch only mirrors the official DSH `upstream/master`. Platform
+development and container builds always use `main`; see the
+[container build guide](docker/README.md) for the update and release workflow.
+
 ## Developer preview
 
 DeepSeek Harness is in _developer preview_ and iterating rapidly. **THERE WILL BE COMPATIBILITY-BREAKING CHANGES.**

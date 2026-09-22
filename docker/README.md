@@ -2,15 +2,30 @@
 
 本目录将当前 `zhishu-harness` 源码构建为完整原生 Web 镜像，供 `gcs-harness-master` 按用户创建 Swarm Service。镜像不修改或裁剪 DSH，不使用 Nginx 和平台 patch。
 
-## 更新上游
+## 相关项目
 
-本仓库使用 `main`，官方仓库由 `upstream/master` 跟踪：
+| 项目 | 职责 |
+| --- | --- |
+| [zhishu-harness](https://github.com/ReyRen/zhishu-harness) | 本项目；跟踪 DSH 上游并构建完整原生 Web 镜像 |
+| [gcs-harness-master](https://github.com/ReyRen/gcs-harness-master) | 根据平台用户身份创建、更新和删除用户 Swarm Service |
+| [gcs-harness-worker](https://github.com/ReyRen/gcs-harness-worker) | 在 Overlay 网络中代理 Master 与用户 DSH Service 的流量 |
+
+## 分支约定与更新上游
+
+- `master` 只用于跟踪 DSH 官方 `upstream/master`，不放平台改造，也不用于构建镜像。
+- `main` 是平台开发和唯一的镜像构建分支，包含 `docker/` 等部署文件。
+
+先在 `master` 同步官方上游，再将其合入 `main`：
 
 ```bash
 git status --short
 git fetch upstream --prune
+git switch master
+git merge --ff-only upstream/master
+git push origin master
+
 git switch main
-git merge --no-edit upstream/master
+git merge --no-edit master
 git push origin main
 ```
 
@@ -23,6 +38,8 @@ git push origin main
 ```bash
 cd /path/to/zhishu-harness
 
+test "$(git branch --show-current)" = "main"
+test -z "$(git status --porcelain)"
 COMMIT="$(git rev-parse HEAD)"
 IMAGE="zhishu-harness:main-${COMMIT:0:7}"
 
