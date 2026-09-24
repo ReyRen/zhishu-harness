@@ -14,47 +14,11 @@
 
 ## 更新上游
 
-`master` 只跟踪官方 `upstream/master`；它不包含平台改造，也绝不用于构建镜像。`main` 是平台开发和镜像构建分支。
-
-```bash
-git status --short
-git fetch upstream --prune
-git switch master
-git merge --ff-only upstream/master
-git push origin master
-
-git switch main
-git merge --no-edit master
-git push origin main
-```
-
-遇到合并冲突时应解决并测试冲突，不要用 ZIP 覆盖仓库。
+`master` 只跟踪官方 `upstream/master`；它不包含平台改造，也绝不用于构建镜像。`main` 是平台开发和镜像构建分支。冲突审查、验证、向本仓库 `main` 提 PR、构建镜像和滚动更新的步骤见[上游更新与发布指南](../docs/cookbook/updating-platform-fork.zh.md)。
 
 ## 构建镜像
 
-在 `main` 的干净工作树中，从仓库根目录执行：
-
-```bash
-cd /path/to/zhishu-harness
-test "$(git branch --show-current)" = "main"
-test -z "$(git status --porcelain)"
-COMMIT="$(git rev-parse HEAD)"
-IMAGE="zhishu-harness:main-${COMMIT:0:7}"
-
-docker build --network host \
-  --build-arg "DSH_CLIENT_COMMIT_HASH=$COMMIT" \
-  --file docker/Dockerfile \
-  --tag "$IMAGE" \
-  .
-
-docker image inspect --format '{{.Id}}' "$IMAGE"
-```
-
-根目录 `.dockerignore` 会排除 Git 元数据、依赖和构建产物。`DSH_CLIENT_COMMIT_HASH` 将源码版本写入 DSH 前端。Docker 会复用未变化的依赖层。
-
-默认使用 Debian 官方软件源。网络较慢时可在构建命令中增加 `--build-arg DEBIAN_MIRROR=http://mirrors.tuna.tsinghua.edu.cn/debian` 和 `--build-arg DEBIAN_SECURITY_MIRROR=http://mirrors.tuna.tsinghua.edu.cn/debian-security`；软件包仍由 Debian 签名校验。Dockerfile 会缓存 APT 索引和软件包，后续构建不会重复下载未变化的依赖。
-
-生产调度只使用 Worker 本地镜像。请将相同 Image ID 放到所有带 `dsh=true,jfs=true` 标签的 Worker，更新 `/etc/gcs-harness-master/master.json` 中的 `dsh.localImageID`，然后重启 Master。该字段只接受精确的 `sha256:<64 位小写十六进制字符>` Image ID，因此 Swarm 不会尝试从仓库拉取。每个用户下次调用 `launch` 时，其 Service 会切换到所配置镜像，而 `/storage-root-jfs/user-<userID>` 保持不变。
+只在带标签的 Worker 上，从已合并的干净 `main` 工作树构建。[发布指南](../docs/cookbook/updating-platform-fork.zh.md)列出了命令和 Image ID 切换步骤。Docker 会复用未变化的依赖层；`DSH_CLIENT_COMMIT_HASH` 把准确源码版本写入前端。
 
 ## 用户工作区
 
