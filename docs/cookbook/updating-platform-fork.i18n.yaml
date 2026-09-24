@@ -1,6 +1,31 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for updating-platform-fork.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/cookbook/updating-platform-fork.md
-updating-platform-fork.md: bd5e8e0fb6d23d16c2cefdbb0e34e671e5d6ecc0
-updating-platform-fork.zh.md: cc33773776fa6bffbbad39a79158ed05548f0363
+/update-upstream-and-release-the-dsh-platform-image:
+  en: 37f064b05f21cbff
+  zh: a183652cc32e1458
+/update-upstream-and-release-the-dsh-platform-image/branch-and-conflict-rules:
+  en: b84e551cb036b9a3
+  zh: 1dea17e2066f9098
+/update-upstream-and-release-the-dsh-platform-image/1-check-the-repository-and-synchronize-master:
+  en: 4ee993948647cb54
+  zh: aacb5d172e157bd7
+/update-upstream-and-release-the-dsh-platform-image/2-merge-official-code-into-a-platform-branch:
+  en: bd9aec95db696fc0
+  zh: 999785aa6fb9b7d8
+/update-upstream-and-release-the-dsh-platform-image/3-validate-and-merge-a-pull-request-into-main:
+  en: ac7d987b17f33357
+  zh: 789d112b6714024b
+/update-upstream-and-release-the-dsh-platform-image/4-confirm-the-worker-build-source:
+  en: 0dcdb72cca56db42
+  zh: 8e4556f6434f6d1c
+/update-upstream-and-release-the-dsh-platform-image/5-build-the-image-on-the-worker:
+  en: c8a6300648f47461
+  zh: 0180a8d591549631
+/update-upstream-and-release-the-dsh-platform-image/6-switch-master-and-existing-user-services:
+  en: e85914b14b0a5338
+  zh: 5f2b3e0d67aa21bb
+/update-upstream-and-release-the-dsh-platform-image/7-verify-rollback-and-clean-up:
+  en: d344fdc6f336da7a
+  zh: 43968bcbdc3e7130
