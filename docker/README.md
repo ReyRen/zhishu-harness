@@ -14,47 +14,11 @@ This directory builds the current `zhishu-harness` source into the complete nati
 
 ## Update from upstream
 
-`master` only tracks official `upstream/master`; it contains no platform changes and is never used to build images. `main` is the platform-development and image-build branch.
-
-```bash
-git status --short
-git fetch upstream --prune
-git switch master
-git merge --ff-only upstream/master
-git push origin master
-
-git switch main
-git merge --no-edit master
-git push origin main
-```
-
-Resolve and test merge conflicts instead of replacing the repository with a ZIP archive.
+`master` only tracks official `upstream/master`; it contains no platform changes and is never used to build images. `main` is the platform-development and image-build branch. Follow the [upstream update and release guide](../docs/cookbook/updating-platform-fork.md) for conflict review, validation, a pull request into this fork's `main`, image construction, and rollout.
 
 ## Build an image
 
-Run at the repository root on `main` with a clean worktree:
-
-```bash
-cd /path/to/zhishu-harness
-test "$(git branch --show-current)" = "main"
-test -z "$(git status --porcelain)"
-COMMIT="$(git rev-parse HEAD)"
-IMAGE="zhishu-harness:main-${COMMIT:0:7}"
-
-docker build --network host \
-  --build-arg "DSH_CLIENT_COMMIT_HASH=$COMMIT" \
-  --file docker/Dockerfile \
-  --tag "$IMAGE" \
-  .
-
-docker image inspect --format '{{.Id}}' "$IMAGE"
-```
-
-The root `.dockerignore` excludes Git metadata, dependencies, and build outputs. `DSH_CLIENT_COMMIT_HASH` records the source revision in the DSH frontend. Docker reuses unchanged dependency layers.
-
-The build uses the official Debian repositories by default. On a slow network, add `--build-arg DEBIAN_MIRROR=http://mirrors.tuna.tsinghua.edu.cn/debian` and `--build-arg DEBIAN_SECURITY_MIRROR=http://mirrors.tuna.tsinghua.edu.cn/debian-security` to the build command; Debian signatures still verify the packages. The Dockerfile caches APT indexes and packages so later builds do not redownload unchanged dependencies.
-
-Production scheduling uses only Worker-local images. Put the same image ID on every Worker labeled `dsh=true,jfs=true`, update `dsh.localImageID` in `/etc/gcs-harness-master/master.json`, and restart Master. The field accepts only an exact `sha256:<64 lowercase hexadecimal characters>` image ID, so Swarm does not try a registry pull. Each user's next `launch` switches its Service to the configured image without changing `/storage-root-jfs/user-<userID>`.
+Build only from a clean checkout of the merged `main` on a labeled Worker. The [release guide](../docs/cookbook/updating-platform-fork.md) gives the commands and the image-ID rollout procedure. Docker reuses unchanged dependency layers; `DSH_CLIENT_COMMIT_HASH` records the exact source revision in the frontend.
 
 ## User Workspaces
 
