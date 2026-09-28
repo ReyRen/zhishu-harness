@@ -5,7 +5,7 @@ services:
       dockerfile: docker/Dockerfile
       network: host
       args:
-        NODE_VERSION: ${NODE_VERSION:-24-bookworm-slim}
+        NODE_IMAGE: ${NODE_IMAGE:-node:24-bookworm-slim}
         DSH_CLIENT_COMMIT_HASH: ${DSH_CLIENT_COMMIT_HASH:?set DSH_CLIENT_COMMIT_HASH to git rev-parse HEAD}
     image: ${ZHISHU_HARNESS_IMAGE:-zhishu-harness:local}
     environment:

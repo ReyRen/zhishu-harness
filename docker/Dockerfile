@@ -1,10 +1,8 @@
-# syntax=docker/dockerfile:1.7
-
-ARG NODE_VERSION=24-bookworm-slim
+ARG NODE_IMAGE=node:24-bookworm-slim
 ARG DEBIAN_MIRROR=http://deb.debian.org/debian
 ARG DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security
 
-FROM node:${NODE_VERSION} AS build-base
+FROM ${NODE_IMAGE} AS build-base
 
 ARG DEBIAN_MIRROR
 ARG DEBIAN_SECURITY_MIRROR
@@ -52,7 +50,7 @@ RUN --mount=type=cache,id=zhishu-harness-pnpm,target=/pnpm/store \
 RUN test -n "${DSH_CLIENT_COMMIT_HASH}" \
   && DSH_CLIENT_COMMIT_HASH="${DSH_CLIENT_COMMIT_HASH}" pnpm run build
 
-FROM node:${NODE_VERSION} AS runtime
+FROM ${NODE_IMAGE} AS runtime
 
 ARG DEBIAN_MIRROR
 ARG DEBIAN_SECURITY_MIRROR
