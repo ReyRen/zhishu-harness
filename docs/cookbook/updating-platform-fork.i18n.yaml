@@ -12,14 +12,14 @@
   en: 4ee993948647cb54
   zh: aacb5d172e157bd7
 /update-upstream-and-release-the-dsh-platform-image/2-merge-official-code-into-a-platform-branch:
-  en: bd9aec95db696fc0
-  zh: 999785aa6fb9b7d8
+  en: 93c2ee7bb94f93d4
+  zh: 15b02daab3b7b959
 /update-upstream-and-release-the-dsh-platform-image/3-validate-and-merge-a-pull-request-into-main:
-  en: ac7d987b17f33357
-  zh: 789d112b6714024b
+  en: 6f8e50ba0773f3a6
+  zh: a1f14615f81df9c5
 /update-upstream-and-release-the-dsh-platform-image/4-confirm-the-worker-build-source:
-  en: 0dcdb72cca56db42
-  zh: 8e4556f6434f6d1c
+  en: 53fbf109ce83b7ce
+  zh: e361140e25441095
 /update-upstream-and-release-the-dsh-platform-image/5-build-the-image-on-the-worker:
   en: c8a6300648f47461
   zh: 0180a8d591549631

@@ -33,12 +33,10 @@ The push target is **only `ReyRen/zhishu-harness:master`**. Record both commit I
 
 ## 2. Merge official code into a platform branch
 
-Create the branch from the current fork `main`. The merge is paused before its commit so overlapping files can be inspected. In a conflict, stage 2 is the platform side and stage 3 is the official side; inspect both instead of accepting either side for the whole file.
+Create the branch from the current fork `main`. Run this and the next section in a **separate Git worktree outside the Mutagen synchronization root** so unmerged code does not reach the Worker; keep the primary checkout at `E:\Projects\zhishu-harness-platform\zhishu-harness` on `main`. The merge is paused before its commit so overlapping files can be inspected. In a conflict, stage 2 is the platform side and stage 3 is the official side; inspect both instead of accepting either side for the whole file.
 
 ```bash
-git switch main
-git merge --ff-only origin/main
-git switch -c sync-upstream-YYYY-MM-DD
+git switch -c sync-upstream-YYYY-MM-DD origin/main
 git merge --no-ff --no-commit master
 git status --short
 git diff --name-only --diff-filter=U
@@ -66,26 +64,42 @@ git push -u origin sync-upstream-YYYY-MM-DD
 
 Use the actual branch name in the push command. Create a GitHub PR at `ReyRen/zhishu-harness`, confirm **base `main` and head `sync-upstream-YYYY-MM-DD`**, review the changed platform files and checks, then merge it there. A green conflict indicator alone is not sufficient. Do not create this PR in the official repository.
 
-After GitHub reports the PR merged, refresh the local build source:
-
-```bash
-git switch main
-git fetch origin main
-git merge --ff-only origin/main
-git status --short --branch
-```
+After GitHub reports the PR merged, update the Worker and primary local checkout in the order in section 4. Do not switch the primary checkout while its Mutagen session is active.
 
 ## 4. Confirm the Worker build source
 
-The current DSH Worker is `172.18.36.230`, with source at `/storage-md0/renyuan/zhishu-harness-platform/zhishu-harness`. Build only after its `main` equals the merged fork `main` and its working tree is clean. If Mutagen has synchronized Git references before its index, a dirty status may be transient; compare the files and index to `origin/main` before repairing anything. Do not reset or overwrite unrecognized changes.
+The current DSH Worker is `172.18.36.230`, with source at `/storage-md0/renyuan/zhishu-harness-platform/zhishu-harness`. Mutagen synchronizes source in both directions but **does not propagate `.git`**, `node_modules`, `.dsh-build`, or a small set of Git symlinks represented differently on Windows and Linux. Update Git metadata independently on both endpoints; do not rely on Mutagen to transfer references or the index. Build only after the Worker's `main` equals the merged fork `main` and its working tree is clean.
+
+First pause the `zhishu-harness-platform` session on Windows and confirm both existing working trees are clean. If pausing fails, the Worker cannot reach the fork, or unexpected local changes are present, stop the release; do not reset or overwrite files. Once paused, fast-forward Git on the **Worker first**:
+
+```bash
+mutagen sync pause zhishu-harness-platform
+```
 
 ```bash
 cd /storage-md0/renyuan/zhishu-harness-platform/zhishu-harness
-git fetch origin main
+git fetch origin main master
+git switch master
+git merge --ff-only origin/master
 git switch main
 git merge --ff-only origin/main
 test -z "$(git status --porcelain)"
 test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+```
+
+Then fast-forward `main` in the primary Windows checkout, resume synchronization, and wait for a complete cycle. `mutagen sync list --long` must show no conflicts or transition problems, and both working trees and HEADs must match and be clean. Do not delete the old image or start building before these checks pass.
+
+```bash
+cd /e/Projects/zhishu-harness-platform/zhishu-harness
+git fetch origin main master
+git switch master
+git merge --ff-only origin/master
+git switch main
+git merge --ff-only origin/main
+git status --short --branch
+mutagen sync resume zhishu-harness-platform
+mutagen sync flush zhishu-harness-platform
+mutagen sync list zhishu-harness-platform --long
 ```
 
 ## 5. Build the image on the Worker
