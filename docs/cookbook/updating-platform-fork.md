@@ -75,9 +75,9 @@ git merge --ff-only origin/main
 git status --short --branch
 ```
 
-## 4. Confirm the build source
+## 4. Confirm the Worker build source
 
-The current DSH Worker is `172.18.36.230`, with source at `/storage-md0/renyuan/zhishu-harness-platform/zhishu-harness`. Build there only after its `main` equals the merged fork `main` and its working tree is clean. If Mutagen has synchronized Git references before its index, a dirty status may be transient; compare the files and index to `origin/main` before repairing anything. Do not reset or overwrite unrecognized changes. If the Worker lacks registry access or its checkout is not clean, use a separate clean x86_64 Linux checkout on a reachable build host; verify that checkout against the fork's merged `main` instead, replacing the `cd` path below with its actual path.
+The current DSH Worker is `172.18.36.230`, with source at `/storage-md0/renyuan/zhishu-harness-platform/zhishu-harness`. Build only after its `main` equals the merged fork `main` and its working tree is clean. If Mutagen has synchronized Git references before its index, a dirty status may be transient; compare the files and index to `origin/main` before repairing anything. Do not reset or overwrite unrecognized changes.
 
 ```bash
 cd /storage-md0/renyuan/zhishu-harness-platform/zhishu-harness
@@ -88,17 +88,15 @@ test -z "$(git status --porcelain)"
 test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
 ```
 
-## 5. Build and distribute the image
+## 5. Build the image on the Worker
 
 The image contains the native Web UI and publishes no per-user host port. It uses `/storage-root-jfs/user` inside the container; Swarm mounts each user's existing `/storage-root-jfs/user-<userID>` directory there. Never remove or recreate those user directories during a release.
 
 ```bash
 COMMIT="$(git rev-parse HEAD)"
 IMAGE="zhishu-harness:main-${COMMIT:0:7}"
-NODE_IMAGE="${NODE_IMAGE:-node:24-bookworm-slim}"
 docker build --network host \
   --build-arg "DSH_CLIENT_COMMIT_HASH=$COMMIT" \
-  --build-arg "NODE_IMAGE=$NODE_IMAGE" \
   --file docker/Dockerfile \
   --tag "$IMAGE" \
   .
@@ -106,7 +104,7 @@ IMAGE_ID="$(docker image inspect --format '{{.Id}}' "$IMAGE")"
 printf '%s %s\n' "$IMAGE" "$IMAGE_ID"
 ```
 
-Set `NODE_IMAGE` to a verified registry path when Docker Hub is unavailable; the Dockerfile uses Docker's built-in BuildKit frontend and does not pull a separate Dockerfile frontend image. On a slow package mirror, the Dockerfile also accepts `DEBIAN_MIRROR` and `DEBIAN_SECURITY_MIRROR` build arguments. When building off-Worker, transfer the image with `docker save "$IMAGE" | ssh root@172.18.36.230 docker load`, then compare the destination's `docker image inspect --format '{{.Id}}' "$IMAGE"` with `IMAGE_ID`. Before changing Master, start one disposable container on the Worker with `DSH_PUBLIC_AUTHORITY=localhost:3081` and check that port `3081` responds; an unauthenticated request to `/` returns HTTP 401. Stop the disposable container afterward. All Swarm nodes labeled `dsh=true,jfs=true` must have this exact Image ID locally.
+On a slow package mirror, the Dockerfile accepts `DEBIAN_MIRROR` and `DEBIAN_SECURITY_MIRROR` build arguments. Before changing Master, start one disposable container with `DSH_PUBLIC_AUTHORITY=localhost:3081` and check that port `3081` responds; an unauthenticated request to `/` returns HTTP 401. Stop the disposable container afterward. All Swarm nodes labeled `dsh=true,jfs=true` must have this exact Image ID locally; distribute the built image if more than one Worker is eligible.
 
 ## 6. Switch Master and existing user Services
 

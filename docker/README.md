@@ -18,7 +18,7 @@ This directory builds the current `zhishu-harness` source into the complete nati
 
 ## Build an image
 
-Build only from a clean checkout of the merged `main`. A labeled Worker is the normal build host; if it cannot reach image or package registries, build on a reachable Linux host and transfer the resulting image to every eligible Worker as described in the [release guide](../docs/cookbook/updating-platform-fork.md). `NODE_IMAGE` selects a verified Node base-image registry when Docker Hub is unavailable. Docker reuses unchanged dependency layers; `DSH_CLIENT_COMMIT_HASH` records the exact source revision in the frontend.
+Build only from a clean checkout of the merged `main` on a labeled Worker. The [release guide](../docs/cookbook/updating-platform-fork.md) gives the commands and the image-ID rollout procedure. Docker reuses unchanged dependency layers; `DSH_CLIENT_COMMIT_HASH` records the exact source revision in the frontend.
 
 ## User Workspaces
 

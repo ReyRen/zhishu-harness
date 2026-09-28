@@ -18,7 +18,7 @@
 
 ## 构建镜像
 
-只从已合并的干净 `main` 工作树构建。通常在带标签的 Worker 上构建；如果该节点无法访问镜像或软件源，则在可联网的 Linux 主机上构建，再按[发布指南](../docs/cookbook/updating-platform-fork.zh.md)将镜像传给所有合格 Worker。Docker Hub 不可用时，可用 `NODE_IMAGE` 指定已验证的 Node 基础镜像仓库。Docker 会复用未变化的依赖层；`DSH_CLIENT_COMMIT_HASH` 把准确源码版本写入前端。
+只在带标签的 Worker 上，从已合并的干净 `main` 工作树构建。[发布指南](../docs/cookbook/updating-platform-fork.zh.md)列出了命令和 Image ID 切换步骤。Docker 会复用未变化的依赖层；`DSH_CLIENT_COMMIT_HASH` 把准确源码版本写入前端。
 
 ## 用户工作区
 

@@ -17,12 +17,12 @@
 /update-upstream-and-release-the-dsh-platform-image/3-validate-and-merge-a-pull-request-into-main:
   en: ac7d987b17f33357
   zh: 789d112b6714024b
-/update-upstream-and-release-the-dsh-platform-image/4-confirm-the-build-source:
-  en: 42bcaa8d12b45d03
-  zh: bfa7ad2c111b71f0
-/update-upstream-and-release-the-dsh-platform-image/5-build-and-distribute-the-image:
-  en: 2f62cc115bb52a85
-  zh: e4c690a7f3348e8e
+/update-upstream-and-release-the-dsh-platform-image/4-confirm-the-worker-build-source:
+  en: 0dcdb72cca56db42
+  zh: 8e4556f6434f6d1c
+/update-upstream-and-release-the-dsh-platform-image/5-build-the-image-on-the-worker:
+  en: c8a6300648f47461
+  zh: 0180a8d591549631
 /update-upstream-and-release-the-dsh-platform-image/6-switch-master-and-existing-user-services:
   en: e85914b14b0a5338
   zh: 5f2b3e0d67aa21bb

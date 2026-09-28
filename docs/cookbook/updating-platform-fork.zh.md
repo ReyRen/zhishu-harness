@@ -75,9 +75,9 @@ git merge --ff-only origin/main
 git status --short --branch
 ```
 
-## 4. 确认构建来源
+## 4. 确认 Worker 构建来源
 
-目前的 DSH Worker 为 `172.18.36.230`，源码目录是 `/storage-md0/renyuan/zhishu-harness-platform/zhishu-harness`。只有该目录的 `main` 等于 Fork 中已合并的 `main`、工作树干净后，才能在该目录构建。如果 Mutagen 先同步 Git 引用、后同步索引，脏工作树状态可能是暂时的；修复之前先将文件和索引与 `origin/main` 核对。不能重置或覆盖无法确认归属的改动。如果 Worker 无法访问软件源，或其工作树不干净，则改用另一台可联网主机上独立、干净的 x86_64 Linux 工作树，并验证它与 Fork 已合并的 `main` 一致；此时将下面的 `cd` 路径替换为实际路径。
+目前的 DSH Worker 为 `172.18.36.230`，源码目录是 `/storage-md0/renyuan/zhishu-harness-platform/zhishu-harness`。只有该目录的 `main` 等于 Fork 中已合并的 `main`、工作树干净后才能构建。如果 Mutagen 先同步 Git 引用、后同步索引，脏工作树状态可能是暂时的；修复之前先将文件和索引与 `origin/main` 核对。不能重置或覆盖无法确认归属的改动。
 
 ```bash
 cd /storage-md0/renyuan/zhishu-harness-platform/zhishu-harness
@@ -88,17 +88,15 @@ test -z "$(git status --porcelain)"
 test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
 ```
 
-## 5. 构建并分发镜像
+## 5. 在 Worker 上构建镜像
 
 镜像包含原生 Web，但不发布每用户宿主机端口。容器内使用 `/storage-root-jfs/user`；Swarm 将现有的 `/storage-root-jfs/user-<userID>` 挂载到该路径。发布过程中绝不删除或重新创建这些用户目录。
 
 ```bash
 COMMIT="$(git rev-parse HEAD)"
 IMAGE="zhishu-harness:main-${COMMIT:0:7}"
-NODE_IMAGE="${NODE_IMAGE:-node:24-bookworm-slim}"
 docker build --network host \
   --build-arg "DSH_CLIENT_COMMIT_HASH=$COMMIT" \
-  --build-arg "NODE_IMAGE=$NODE_IMAGE" \
   --file docker/Dockerfile \
   --tag "$IMAGE" \
   .
@@ -106,7 +104,7 @@ IMAGE_ID="$(docker image inspect --format '{{.Id}}' "$IMAGE")"
 printf '%s %s\n' "$IMAGE" "$IMAGE_ID"
 ```
 
-Docker Hub 不可用时，将 `NODE_IMAGE` 设为已验证的镜像仓库路径；Dockerfile 使用 Docker 内置 BuildKit 前端，不再拉取独立的 Dockerfile 前端镜像。软件源较慢时，Dockerfile 还可接收 `DEBIAN_MIRROR` 与 `DEBIAN_SECURITY_MIRROR` 构建参数。如果不在 Worker 上构建，可用 `docker save "$IMAGE" | ssh root@172.18.36.230 docker load` 传送镜像，再对比目标节点的 `docker image inspect --format '{{.Id}}' "$IMAGE"` 与 `IMAGE_ID`。修改 Master 前，在 Worker 上用 `DSH_PUBLIC_AUTHORITY=localhost:3081` 启动一次性测试容器，并确认 `3081` 端口响应；未认证访问 `/` 返回 HTTP 401。随后停止测试容器。所有标记为 `dsh=true,jfs=true` 的 Swarm 节点必须在本地拥有完全相同的 Image ID。
+软件源较慢时，Dockerfile 可接收 `DEBIAN_MIRROR` 与 `DEBIAN_SECURITY_MIRROR` 构建参数。修改 Master 前，先用 `DSH_PUBLIC_AUTHORITY=localhost:3081` 启动一次性测试容器，并确认 `3081` 端口响应；未认证访问 `/` 返回 HTTP 401。随后停止测试容器。所有标记为 `dsh=true,jfs=true` 的 Swarm 节点必须在本地拥有完全相同的 Image ID；若有多个合格 Worker，需分发已构建镜像。
 
 ## 6. 切换 Master 和现有用户 Service
 
