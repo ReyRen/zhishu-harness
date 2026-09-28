@@ -33,12 +33,10 @@ git push origin master
 
 ## 2. 将官方代码合入平台工作分支
 
-从 Fork 的最新 `main` 建分支。合并先停在提交之前，以便检查双方都改过的文件。冲突时，暂存区第 2 阶段是平台版本、第 3 阶段是官方版本；应逐处比较，不能整文件接受任意一侧。
+从 Fork 的最新 `main` 建分支。为避免未合并的代码通过 Mutagen 进入 Worker，本节和下一节应在**同步目录之外的独立 Git worktree** 中执行；保持 `E:\Projects\zhishu-harness-platform\zhishu-harness` 的主检出停在 `main`。合并先停在提交之前，以便检查双方都改过的文件。冲突时，暂存区第 2 阶段是平台版本、第 3 阶段是官方版本；应逐处比较，不能整文件接受任意一侧。
 
 ```bash
-git switch main
-git merge --ff-only origin/main
-git switch -c sync-upstream-YYYY-MM-DD
+git switch -c sync-upstream-YYYY-MM-DD origin/main
 git merge --no-ff --no-commit master
 git status --short
 git diff --name-only --diff-filter=U
@@ -66,26 +64,42 @@ git push -u origin sync-upstream-YYYY-MM-DD
 
 推送时用实际分支名。在 GitHub 的 `ReyRen/zhishu-harness` 创建 PR，确认**目标为 `main`、来源为 `sync-upstream-YYYY-MM-DD`**，审查平台文件变更和检查结果后在本仓库合并。仅显示“无冲突”并不够。不要向官方仓库创建这个 PR。
 
-GitHub 显示 PR 已合并后，刷新本地构建来源：
-
-```bash
-git switch main
-git fetch origin main
-git merge --ff-only origin/main
-git status --short --branch
-```
+GitHub 显示 PR 已合并后，按第 4 节的顺序更新 Worker 和本地主检出；不要先在仍运行的 Mutagen 会话内切换主检出的分支。
 
 ## 4. 确认 Worker 构建来源
 
-目前的 DSH Worker 为 `172.18.36.230`，源码目录是 `/storage-md0/renyuan/zhishu-harness-platform/zhishu-harness`。只有该目录的 `main` 等于 Fork 中已合并的 `main`、工作树干净后才能构建。如果 Mutagen 先同步 Git 引用、后同步索引，脏工作树状态可能是暂时的；修复之前先将文件和索引与 `origin/main` 核对。不能重置或覆盖无法确认归属的改动。
+目前的 DSH Worker 为 `172.18.36.230`，源码目录是 `/storage-md0/renyuan/zhishu-harness-platform/zhishu-harness`。Mutagen 双向同步源码，但**不传播 `.git`**、`node_modules`、`.dsh-build` 和 Windows/Linux 表示方式不同的少量 Git 符号链接；两端的 Git 元数据必须分别更新，不能再依赖 Mutagen 传递 Git 引用或索引。只有 Worker 的 `main` 等于 Fork 中已合并的 `main`、工作树干净后才能构建。
+
+先在 Windows 上暂停 `zhishu-harness-platform` 同步会话，并确认两端原有工作树干净。若暂停失败、Worker 无法访问 Fork，或发现无法解释的本地改动，应停止发布，不要重置或覆盖文件。暂停成功后，**先在 Worker** 快进 Git：
+
+```bash
+mutagen sync pause zhishu-harness-platform
+```
 
 ```bash
 cd /storage-md0/renyuan/zhishu-harness-platform/zhishu-harness
-git fetch origin main
+git fetch origin main master
+git switch master
+git merge --ff-only origin/master
 git switch main
 git merge --ff-only origin/main
 test -z "$(git status --porcelain)"
 test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+```
+
+然后在 Windows 主检出快进 `main`，最后恢复同步并等待一次完整核对；`mutagen sync list --long` 不得出现冲突或转移错误，两端 `HEAD` 与工作树必须一致且干净。未完成这些检查前，不要删除旧镜像或开始构建。
+
+```bash
+cd /e/Projects/zhishu-harness-platform/zhishu-harness
+git fetch origin main master
+git switch master
+git merge --ff-only origin/master
+git switch main
+git merge --ff-only origin/main
+git status --short --branch
+mutagen sync resume zhishu-harness-platform
+mutagen sync flush zhishu-harness-platform
+mutagen sync list zhishu-harness-platform --long
 ```
 
 ## 5. 在 Worker 上构建镜像
