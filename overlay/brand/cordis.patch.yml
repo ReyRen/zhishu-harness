@@ -1,0 +1,8 @@
+# Single brand slots accept one occupant. Disable the shipped row instead of
+# editing it; this overlay is applied after the web bundle.
+- id: ui-brand-official
+  disabled: true
+
+- insert:
+    - id: zhishu-brand
+      name: ./index.js
