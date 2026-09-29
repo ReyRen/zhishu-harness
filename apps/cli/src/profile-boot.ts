@@ -195,14 +195,15 @@ interface ComposedProfile {
  * @returns the profile and its patch layers.
  */
 /**
- * Fork overlay patches under `<repo>/overlay/<name>/cordis.patch.yml`.
- * Each directory is one secondary-development plugin. They apply after the
- * shipped bundles, so an overlay can disable an upstream row without editing it.
+ * Fork Web overlay patches under `<repo>/overlay/<name>/cordis.patch.yml`.
+ * They apply only to profiles containing the Web bundle, after shipped bundles.
  * Vitest boots the same launcher and must keep the stock composition.
+ * @param profile - loaded profile whose bundle layers select the Web surface.
  * @returns absolute patch paths, in directory-name order.
  */
-function zhishuOverlayPatches(): string[] {
-  if (process.env.VITEST !== undefined) return []
+function zhishuOverlayPatches(profile: Profile): string[] {
+  if (process.env.VITEST !== undefined
+    || !profile.layers.some(layer => layer.packageName === '@deepseek-ai/dsh-web-app')) return []
   const dir = fileURLToPath(new URL('../../../overlay', import.meta.url))
   if (!existsSync(dir)) return []
   const files: string[] = []
@@ -225,7 +226,7 @@ async function composeProfile(
   if (resolvedProfile !== undefined) writeFileSync(join(profile.dir, PROFILE_ROOT_FILENAME), PROFILE_ROOT_CONFIG)
   const resolutionOptions = { installAnchor: resolvedProfile?.installAnchor ?? INSTALL_ANCHOR, profile }
   const resolution = await createRuntimeResolution(resolutionOptions)
-  const overlays = [...zhishuOverlayPatches(), ...patchFiles].flatMap(file => loadOverlayPatches(NAME, resolve(file)))
+  const overlays = [...zhishuOverlayPatches(profile), ...patchFiles].flatMap(file => loadOverlayPatches(NAME, resolve(file)))
   return { profile, resolution, overlays }
 }
 

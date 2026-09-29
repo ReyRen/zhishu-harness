@@ -9,6 +9,7 @@ import {
   type ConnectionState,
 } from './connection.ts'
 import { createWebConnectionRpc, type RpcFetch, type RpcStreamOpen } from './rpc.ts'
+import { isLoopbackHostname } from '../loopback-hostname.ts'
 import type { ClientConnectionRpc } from '../rpc.ts'
 import { resolveConnectionConfig } from '../recovery-config.ts'
 
@@ -96,8 +97,9 @@ export interface ClientTransportHooks {
    * The transport owner declares the page owns the Host outright: the Host
    * runs inside a worker this page spawned, so no other party can reach it and
    * the loopback stand-in for "the operator's own machine" is vacuous.
-   * Only a shell that assembles its own transport can set this; served pages
-   * never carry the global at all.
+   * `ctx.connection.isLoopback` then reports the privileged surface reachable
+   * regardless of the page authority. Only a shell that assembles its own
+   * transport can set this; served pages never carry the global at all.
    */
   ownsHost?: boolean
   /** HTTP origin of a shell-owned Host when its WebSocket uses a different page origin. */
@@ -131,10 +133,9 @@ export interface ConnectionInstallOptions {
  */
 export interface ConnectionHandle {
   /**
-   * Whether the privileged settings surface is reachable. This deployment
-   * treats every page as the operator of its own container, including pages
-   * opened through the platform hostname. The /api Host fence still classifies
-   * loopback hostnames on its own and is unchanged.
+   * Whether the privileged surface is reachable: the page authority is
+   * loopback, the transport declares the page owns the Host
+   * ({@link ClientTransportHooks.ownsHost}), or the context is not a browser.
    */
   readonly isLoopback: boolean
   /** Current Remote event generation and the Host facts carried by its opening frame. */
@@ -202,6 +203,7 @@ function watchBrowserNetwork(controller: ConnectionController): () => void {
  * @param options - physical carrier, reconnect timing, and page location.
  */
 export function installConnection(ctx: Context, options: ConnectionInstallOptions = {}): void {
+  const pageLocation = options.location
   const transport = options.transport
   const recovery = options.recovery ?? {}
   const rpc = transport?.rpc ?? createWebConnectionRpc(transport?.fetch, transport?.openStream)
@@ -243,7 +245,7 @@ export function installConnection(ctx: Context, options: ConnectionInstallOption
     publishState(undefined)
   }
   const handle: ConnectionHandle = {
-    isLoopback: true,
+    isLoopback: transport?.ownsHost === true || pageLocation === undefined || isLoopbackHostname(pageLocation.hostname),
     generation: {
       getSnapshot: () => generation,
       subscribe: (listener) => {
