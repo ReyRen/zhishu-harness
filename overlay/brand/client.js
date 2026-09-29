@@ -8,6 +8,8 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const LOCKUP_URL = '/overlay/zhishu-brand/logo.png'
     const MARK_URL = '/overlay/zhishu-brand/logo-mark.png'
+    const HERO_MARK_URL = '/overlay/zhishu-brand/hero.webp'
+    const HERO_LOOP_URL = '/overlay/zhishu-brand/hero-loop.webp'
     const STYLE_ID = 'zhishu-overlay-brand-style'
 
     function installStyles() {
@@ -22,6 +24,11 @@ window.__ModuleLoader__.load({
         span:has(> span [data-slot="sidebar.brand.mark"]){height:36px!important;overflow:visible!important;align-items:center!important}
         span:has(> span [data-slot="sidebar.brand.name"]){height:36px!important;overflow:visible!important}
         span:has(+ span [data-slot="sidebar.brand.name"]){display:none!important}
+        .zhishuHeroBrand{display:inline-flex;align-items:center;gap:10px}
+        .zhishuHeroBrandMark{height:32px;width:auto;object-fit:contain;display:block;animation:none!important;transform:none!important;cursor:pointer}
+        .zhishuHeroBrandDot{width:8px;height:8px;border-radius:50%;background:#000;flex:none}
+        body[data-ds-dark-theme] .zhishuHeroBrandDot{background:#fff}
+        span:has([data-slot="conversation.hero.brand.mark"]) + span > span:last-child{display:none!important}
       `
       document.head.appendChild(style)
     }
@@ -43,14 +50,35 @@ window.__ModuleLoader__.load({
       })
     }
 
+    function HeroBrandMark() {
+      const state = React.useState(HERO_MARK_URL)
+      const src = state[0]
+      const setSrc = state[1]
+      return React.createElement(
+        'span',
+        { className: 'zhishuHeroBrand' },
+        React.createElement('img', {
+          className: 'zhishuHeroBrandMark',
+          src: src,
+          alt: '',
+          'aria-hidden': 'true',
+          onMouseEnter: function () { setSrc(HERO_LOOP_URL + '?play=' + Date.now()) },
+          onMouseLeave: function () { setSrc(HERO_MARK_URL) },
+        }),
+        React.createElement('span', { className: 'zhishuHeroBrandDot', 'aria-hidden': 'true' }),
+      )
+    }
+
     const inject = ['slots']
     function apply(ctx) {
       installStyles()
       ctx.slots.inject('sidebar.brand.mark', () =>
-        ctx.slots.inject('sidebar.brand.name', function* () {
-          yield ctx.slots.register({ name: 'sidebar.brand.mark' }, BrandMark)
-          yield ctx.slots.register({ name: 'sidebar.brand.name' }, BrandName)
-        }))
+        ctx.slots.inject('sidebar.brand.name', () =>
+          ctx.slots.inject('conversation.hero.brand.mark', function* () {
+            yield ctx.slots.register({ name: 'sidebar.brand.mark' }, BrandMark)
+            yield ctx.slots.register({ name: 'sidebar.brand.name' }, BrandName)
+            yield ctx.slots.register({ name: 'conversation.hero.brand.mark' }, HeroBrandMark)
+          })))
     }
 
     exports.apply = apply
