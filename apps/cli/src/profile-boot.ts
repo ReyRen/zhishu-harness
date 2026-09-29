@@ -10,7 +10,7 @@
  * @module @deepseek-ai/dsh/profile-boot
  */
 
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { FiberState, type Context } from '@deepseek-ai/cordis'
@@ -194,6 +194,27 @@ interface ComposedProfile {
  * @param resolvedProfile - application-owned profile and installation.
  * @returns the profile and its patch layers.
  */
+/**
+ * Fork overlay patches under `<repo>/overlay/<name>/cordis.patch.yml`.
+ * Each directory is one secondary-development plugin. They apply after the
+ * shipped bundles, so an overlay can disable an upstream row without editing it.
+ * Vitest boots the same launcher and must keep the stock composition.
+ * @returns absolute patch paths, in directory-name order.
+ */
+function zhishuOverlayPatches(): string[] {
+  if (process.env.VITEST !== undefined) return []
+  const dir = fileURLToPath(new URL('../../../overlay', import.meta.url))
+  if (!existsSync(dir)) return []
+  const files: string[] = []
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const patch = join(dir, entry.name, 'cordis.patch.yml')
+    if (existsSync(patch)) files.push(patch)
+  }
+  files.sort()
+  return files
+}
+
 async function composeProfile(
   name: string,
   patchFiles: readonly string[],
@@ -204,7 +225,7 @@ async function composeProfile(
   if (resolvedProfile !== undefined) writeFileSync(join(profile.dir, PROFILE_ROOT_FILENAME), PROFILE_ROOT_CONFIG)
   const resolutionOptions = { installAnchor: resolvedProfile?.installAnchor ?? INSTALL_ANCHOR, profile }
   const resolution = await createRuntimeResolution(resolutionOptions)
-  const overlays = patchFiles.flatMap(file => loadOverlayPatches(NAME, resolve(file)))
+  const overlays = [...zhishuOverlayPatches(), ...patchFiles].flatMap(file => loadOverlayPatches(NAME, resolve(file)))
   return { profile, resolution, overlays }
 }
 

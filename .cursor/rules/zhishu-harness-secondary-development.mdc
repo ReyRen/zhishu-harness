@@ -1,0 +1,31 @@
+---
+description: zhishu-harness 基于官方 DeepSeek Harness 的二次开发约束。改 overlay、插件投放或官方源码时遵守。
+alwaysApply: true
+---
+
+# zhishu-harness 二次开发
+
+增量放在 `overlay/<name>/`，复制 `overlay/brand/`。`apps/cli/src/profile-boot.ts` 的 `zhishuOverlayPatches()` 在启动时扫描其中的 `cordis.patch.yml`；设置了 `VITEST` 时不加载。不要把补丁写进官方 `packages/**/cordis.patch.yml`。
+
+## 插件用 JavaScript，不要接入官方构建
+
+overlay 由 Node 直接加载。Host 是 `index.js`，浏览器半侧是 `client.js`，格式为 `window.__ModuleLoader__.load`。不要改成 TypeScript，也不要把它加进 `tsdown`、`tsconfig.client.json`、`pnpm-workspace.yaml`、`pnpm-lock.yaml`、`scripts/dev-web.ts` 或 `packages/client/tsdown.client.ts`。运行效果与官方客户端包编译结果相同，那些改动只增加合入上游时的冲突。
+
+## 先替换，不得已才改 packages
+
+有 slot 就占用 slot。单槽只能有一个占用者。品牌槽是 `sidebar.brand.mark` 和 `sidebar.brand.name`。不要改对话页英雄区的鱼标，除非用户明确要求。
+
+没有 slot 时，优先在 `overlay/` 写独立插件替代：补丁里按行 id `disabled: true` 关掉官方那一行，再 `insert` 自己的实现。直接改 `packages/` 和上游冲突更大，只在行为被封在插件运行之前、没有可关闭的行可以替换时才改，并且改动保持最小。已有例外：非 loopback 页面的设置持久化把客户端 `isLoopback` 固定为 true。不要改 `isLoopbackHostname`，也不要拆掉 `/api` 的 Host 围栏。
+
+## 无外网、一用户一容器时插件怎么放
+
+profile 在容器挂载的用户目录里，换镜像不会重写。开关是否打开记在该用户 `profiles/<name>/package.json` 的 `dsh.profile.bundles`，不在镜像里。
+
+- 某个用户自己安装：插件页「添加插件」，填容器内绝对路径。包必须声明 `dsh.bundle`。npm 包名和 Git 地址需要外网。
+- 全员必须加载、可以盖掉已有功能：放 `overlay/`。没有开关，不能从插件页卸载，下次启动对已有用户生效。
+- 系统功能、默认关闭、用户自己打开：写入 `OPTIONAL_BUNDLES`，作为 `apps/cli` 运行时依赖，声明 `dsh.bundle.patch`、图标和 locale，且不要写入 `web` profile 模板。稳定后把补丁挪进 `overlay/` 并从名单删除。不要把可选包写进模板来默认打开。`verify-default-product-isolation` 会拒绝，而且 `initProfile` 不改已有 profile。
+- 不要在 Harness 里做按人可见的白名单。同一镜像里可选卡片对每个用户相同。平台 `runtime-features.json` 只控制整页 Harness 谁能进入。
+
+设置里的「内置插件」是只读的已启动名单。侧栏「插件」才管理组合包。「官方」里带开关的是可选组合包，没有开关的是 `plugins.item` 配置卡片。终端卡片写入 loader 行 `bash-sandbox`（Windows 为 `pwsh-sandbox`），不是 `dsh-shell`，也不是右侧栏终端。
+
+细节见 `overlay/plugin-secondary-development.md`。
