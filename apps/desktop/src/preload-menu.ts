@@ -145,8 +145,13 @@ function installWorkspaceSwitch(): { host: HTMLElement; update(): void; dispose(
   host.append(button)
   let active: ModelSpaceState['active'] = 'conversation'
   const apply = (state: ModelSpaceState): void => {
+    if (state == null || typeof state.authenticated !== 'boolean'
+      || (state.active !== 'conversation' && state.active !== 'business')) return
     active = state.active
     host.hidden = !state.authenticated
+    // Inline display wins over the stylesheet rule that hides [hidden], including
+    // when the attribute and the property get out of step across a reload.
+    host.style.display = state.authenticated ? 'flex' : 'none'
     paint()
   }
   const paint = (): void => {
@@ -156,7 +161,13 @@ function installWorkspaceSwitch(): { host: HTMLElement; update(): void; dispose(
   }
   const onState = (_event: Electron.IpcRendererEvent, state: ModelSpaceState): void => { apply(state) }
   ipcRenderer.on(MODEL_SPACE_IPC.changed, onState)
-  void ipcRenderer.invoke(MODEL_SPACE_IPC.state).then((state: ModelSpaceState) => { apply(state) }).catch(() => undefined)
+  const pull = (): void => {
+    void ipcRenderer.invoke(MODEL_SPACE_IPC.state).then((state: ModelSpaceState) => { apply(state) }).catch(() => undefined)
+  }
+  pull()
+  // The first ask often runs before the gate exists, and the login event can land
+  // on a document that is about to be replaced. Keep asking until the switch is shown.
+  const timer = setInterval(() => { if (host.hidden) pull() }, 400)
   button.addEventListener('pointerdown', (event) => { event.preventDefault() })
   button.addEventListener('mousedown', (event) => { event.preventDefault() })
   button.addEventListener('click', () => {
@@ -172,6 +183,9 @@ function installWorkspaceSwitch(): { host: HTMLElement; update(): void; dispose(
   return {
     host,
     update: paint,
-    dispose: () => { ipcRenderer.off(MODEL_SPACE_IPC.changed, onState) },
+    dispose: () => {
+      clearInterval(timer)
+      ipcRenderer.off(MODEL_SPACE_IPC.changed, onState)
+    },
   }
 }

@@ -14,4 +14,4 @@ overlay/
     └── cordis.patch.yml   只禁用 ui-settings-account
 ```
 
-新增一块能力时复制这个目录结构，不要把补丁写进官方 `cordis.patch.yml`。官方界面里插件怎么区分、无外网部署里该放哪一类，见 [plugin-secondary-development.md](./plugin-secondary-development.md)。
+新增一块能力时复制这个目录结构，不要把补丁写进官方 `cordis.patch.yml`。官方界面里插件怎么区分、无外网部署里该放哪一类，见 [plugin-secondary-development.md](./plugin-secondary-development.md)。桌面壳登录、工作空间和 Windows 打包见 [desktop-secondary-development.md](./desktop-secondary-development.md)。

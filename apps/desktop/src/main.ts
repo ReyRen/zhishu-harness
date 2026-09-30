@@ -314,6 +314,10 @@ async function main(): Promise<void> {
   const resources = runtimeResources()
   const paths = resolveDesktopPaths()
   const development = !app.isPackaged
+  const overlayDir = development
+    ? join(app.getAppPath(), '..', '..', 'overlay')
+    : typeof process.resourcesPath === 'string' ? join(process.resourcesPath, 'overlay') : undefined
+  if (overlayDir !== undefined) process.env.DSH_ZHISHU_OVERLAY = overlayDir
   const primaryRuntime = development
     ? developmentPrimaryRuntime()
     : join(process.resourcesPath, 'runtime', 'primary-runtime')

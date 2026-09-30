@@ -10,7 +10,7 @@
  * @module @deepseek-ai/dsh/profile-boot
  */
 
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { FiberState, type Context } from '@deepseek-ai/cordis'
@@ -198,13 +198,24 @@ interface ComposedProfile {
  * Fork overlay patches under `<repo>/overlay/<name>/cordis.patch.yml`.
  * Each directory is one secondary-development plugin. They apply after the
  * shipped bundles, so an overlay can disable an upstream row without editing it.
+ * A packaged desktop app sets `DSH_ZHISHU_OVERLAY` to the copy beside its asar.
  * Vitest boots the same launcher and must keep the stock composition.
  * @returns absolute patch paths, in directory-name order.
  */
+function zhishuOverlayDirectory(): string | undefined {
+  const configured = process.env.DSH_ZHISHU_OVERLAY?.trim()
+  const candidates = configured !== undefined && configured !== ''
+    ? [resolve(configured), fileURLToPath(new URL('../../../overlay', import.meta.url))]
+    : [fileURLToPath(new URL('../../../overlay', import.meta.url))]
+  return candidates.find((dir) => {
+    try { return statSync(dir).isDirectory() } catch { return false }
+  })
+}
+
 function zhishuOverlayPatches(): string[] {
   if (process.env.VITEST !== undefined) return []
-  const dir = fileURLToPath(new URL('../../../overlay', import.meta.url))
-  if (!existsSync(dir)) return []
+  const dir = zhishuOverlayDirectory()
+  if (dir === undefined) return []
   const files: string[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue

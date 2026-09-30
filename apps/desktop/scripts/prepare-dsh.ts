@@ -99,8 +99,15 @@ function runPnpm(args: readonly string[]): Promise<void> {
         XDG_CONFIG_HOME: config,
         XDG_STATE_HOME: join(PNPM_BUILD_STATE, 'state'),
       },
-      stdio: 'inherit',
+      // electron.exe is a GUI binary. Inheriting the parent console (Cursor's
+      // ConPTY) makes its Node mode abort on exit: libuv reports
+      // PostQueuedCompletionStatus error 6 and the process status is
+      // STATUS_BREAKPOINT (2147483651), after pnpm has already finished.
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
     })
+    child.stdout?.on('data', (chunk: Buffer) => { process.stdout.write(chunk) })
+    child.stderr?.on('data', (chunk: Buffer) => { process.stderr.write(chunk) })
     child.once('error', reject)
     child.once('close', (code, signal) => {
       if (code === 0) resolvePromise()

@@ -69,6 +69,7 @@ export class ModelPlatformGate {
   private window: BrowserWindow | undefined
   private active: ModelSpace = 'conversation'
   private authenticated = false
+  private publishGeneration = 0
   private readonly onAuthenticated: () => Promise<void>
 
   /**
@@ -125,6 +126,10 @@ export class ModelPlatformGate {
     view.webContents.on('did-navigate-in-page', follow)
     window.contentView.addChildView(view)
     view.setVisible(false)
+    // The caption asks for state as soon as its document loads. That is often before
+    // this gate exists, and a later reload drops the in-flight event. Send again
+    // whenever the Harness document is actually on screen.
+    window.webContents.on('did-finish-load', () => { this.publish() })
     const fit = (): void => { this.closeMenu(); this.fit() }
     window.on('resize', fit)
     window.on('enter-full-screen', fit)
@@ -142,7 +147,10 @@ export class ModelPlatformGate {
     if (window === undefined || view === undefined) throw new Error('desktop model login: window is not attached')
     const alive = await this.sessionAlive()
     const target = alive ? `${this.origin}/desktop-entry` : `${this.origin}/login`
-    if (!alive) this.show('business')
+    // A still-valid cookie used to leave this view hidden until the first navigation.
+    // The Harness page is already underneath, so the caption never learned that
+    // login had not finished and the workspace switch stayed hidden.
+    if (!this.authenticated) this.show('business')
     window.show()
     await view.webContents.loadURL(target)
   }
@@ -226,6 +234,12 @@ export class ModelPlatformGate {
     this.fit()
     view.setVisible(space === 'business' || !this.authenticated)
     this.publish()
+    // The caption document can still be loading, or about to reload into the workspace.
+    // Repeat the same state so a listener that attaches late still unhides the switch.
+    const generation = ++this.publishGeneration
+    for (const delay of [300, 1200]) {
+      setTimeout(() => { if (this.publishGeneration === generation) this.publish() }, delay)
+    }
   }
 
   private publish(): void {

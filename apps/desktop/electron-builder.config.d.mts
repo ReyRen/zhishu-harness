@@ -21,6 +21,7 @@ export interface DesktopElectronBuilderConfig {
   readonly extraResources: readonly [
     { readonly from: string, readonly to: 'runtime' },
     { readonly from: string, readonly to: 'icon.png' },
+    { readonly from: string, readonly to: 'overlay' },
     ...{ readonly from: string, readonly to: 'tray.ico' }[],
   ]
   readonly mac: {
@@ -35,6 +36,7 @@ export interface DesktopElectronBuilderConfig {
     readonly writeUpdateInfo: boolean
   }
   readonly win: {
+    readonly icon: string
     readonly forceCodeSigning: boolean
     readonly signtoolOptions: {
       readonly publisherName: string | undefined
