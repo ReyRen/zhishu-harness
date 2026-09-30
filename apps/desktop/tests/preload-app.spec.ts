@@ -61,7 +61,21 @@ it.each(['dsh-app://shell/plugin-manager.html', 'dsh-app://other/index.html', 'h
   vi.stubGlobal('location', new URL(url))
   await import('../src/preload-app.ts')
   expect(electron.contextBridge.exposeInMainWorld).toHaveBeenCalledWith('dshDesktop', { protocolVersion: 1 })
+  expect(electron.contextBridge.exposeInMainWorld.mock.calls.some(([name]) => name === 'dshModelSpace')).toBe(false)
   expect(electron.ipcRenderer.on.mock.calls.some(([channel]) => channel === DESKTOP_IPC.browserOpenRequested)).toBe(false)
+})
+
+it('exposes the model-space switch only on the application document', async () => {
+  vi.stubGlobal('location', new URL('dsh-app://app/'))
+  await import('../src/preload-app.ts')
+  const api = electron.contextBridge.exposeInMainWorld.mock.calls.find(([name]) => name === 'dshModelSpace')?.[1] as {
+    state(): Promise<unknown>
+    switchTo(space: string): Promise<unknown>
+  }
+  await api.state()
+  await api.switchTo('business')
+  expect(electron.ipcRenderer.invoke).toHaveBeenCalledWith('zhishu-model:state')
+  expect(electron.ipcRenderer.invoke).toHaveBeenCalledWith('zhishu-model:switch', 'business')
 })
 
 it('exposes asynchronous boot only to the local application document', async () => {

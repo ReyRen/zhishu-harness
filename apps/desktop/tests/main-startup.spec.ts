@@ -116,6 +116,8 @@ const harness = await vi.hoisted(async () => {
     static getAllWindows() { return windows.filter(window => !window.destroyed) }
     setMenu() {}
     getContentBounds() { return { x: 0, y: 0, width: 900, height: 650 } }
+    getContentSize() { return [900, 650] as const }
+    readonly contentView = { addChildView: vi.fn(), removeChildView: vi.fn() }
     setBounds() {}
     setTitle = vi.fn()
     destroy() { this.destroyed = true; this.emit('closed') }
@@ -276,6 +278,19 @@ vi.mock('electron', () => ({
   shell: { openExternal: harness.openExternal },
   nativeTheme: harness.nativeTheme,
   net: { fetch: vi.fn() },
+  WebContentsView: class {
+    webContents = {
+      mainFrame: { url: '' },
+      setWindowOpenHandler: vi.fn(),
+      on: vi.fn(),
+      send: vi.fn(),
+      isDestroyed: () => false,
+      loadURL: vi.fn(async () => {}),
+    }
+    setBackgroundColor() {}
+    setVisible() {}
+    setBounds() {}
+  },
   ipcMain: {
     on: harness.ipcOn,
     handle: (channel: string, handler: InvokeHandler) => {
@@ -285,9 +300,12 @@ vi.mock('electron', () => ({
     removeHandler: (channel: string) => { harness.handlers.delete(channel) },
   },
   Menu: { setApplicationMenu: harness.menu.setApplicationMenu, buildFromTemplate: harness.menu },
-  session: { defaultSession: {
-    setPermissionCheckHandler: vi.fn(), setPermissionRequestHandler: vi.fn(), webRequest: { onBeforeSendHeaders: harness.socketHeaders },
-  } },
+  session: {
+    defaultSession: {
+      setPermissionCheckHandler: vi.fn(), setPermissionRequestHandler: vi.fn(), webRequest: { onBeforeSendHeaders: harness.socketHeaders },
+    },
+    fromPartition: () => ({ cookies: { get: async () => [] } }),
+  },
   protocol: { registerSchemesAsPrivileged: vi.fn(), handle: harness.protocolHandle },
   powerMonitor: harness.powerMonitor,
   Tray: harness.FakeTray,
@@ -1039,11 +1057,11 @@ describe('desktop main startup', () => {
   }
 
   it.each([
-    ['win32', ['--updated'], true],
-    ['win32', [], false],
-    ['darwin', ['--updated'], false],
-    ['linux', ['--updated'], false],
-  ] as const)('raises the first workspace only for a Windows installer restart (%s, %j)', async (platform, args, raises) => {
+    ['win32', ['--updated']],
+    ['win32', []],
+    ['darwin', ['--updated']],
+    ['linux', ['--updated']],
+  ] as const)('shows model login before the workspace, so an installer restart does not raise yet (%s, %j)', async (platform, args) => {
     vi.stubGlobal('process', { ...process, platform, argv: ['desktop', ...args] })
     await import('../src/main.ts')
     await harness.preparing.promise
@@ -1054,12 +1072,9 @@ describe('desktop main startup', () => {
     harness.hosts[0]!.ready.resolve()
     await window.shown.promise
     expect(window.show).toHaveBeenCalledOnce()
-    expect(window.moveTop).toHaveBeenCalledTimes(raises ? 1 : 0)
-    expect(window.focus).toHaveBeenCalledTimes(raises ? 1 : 0)
+    expect(window.moveTop).not.toHaveBeenCalled()
+    expect(window.focus).not.toHaveBeenCalled()
     expect(window.setAlwaysOnTop).not.toHaveBeenCalled()
-    if (raises) {
-      expect(window.show.mock.invocationCallOrder[0]).toBeLessThan(window.moveTop.mock.invocationCallOrder[0]!)
-    }
     window.destroy()
     harness.app.emit('second-instance')
     const replacement = harness.windows[1]!

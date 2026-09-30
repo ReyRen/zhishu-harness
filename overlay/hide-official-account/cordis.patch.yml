@@ -1,0 +1,4 @@
+# DeepSeek account menu is not the platform login. The desktop shell uses the
+# model site instead, so this row stays off for every profile that loads overlays.
+- id: ui-settings-account
+  disabled: true
