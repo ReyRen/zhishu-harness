@@ -10,6 +10,7 @@ This procedure updates `ReyRen/zhishu-harness`, builds its per-user DSH image, a
 - `origin/master` mirrors the official branch exactly. Fast-forward it only; never add platform commits or build production images from it.
 - `origin/main` contains the platform development. Merge `master` into a temporary branch based on `main`, then open a pull request **in `ReyRen/zhishu-harness` with base `main`**. Do not push the temporary branch directly to `main`.
 - Review semantic overlap even if Git reports no textual conflict. If an official change replaces or conflicts with a platform modification, use the official behavior and remove the obsolete platform source, configuration, tests, and documentation. Preserve independent platform behavior only when it still works with the official code.
+- The platform deliberately lets an authenticated non-loopback Web page persist settings to its own Host. Check this contract and its browser regression test on every upstream merge; if new official behavior truly conflicts with it, stop and request a decision instead of silently disabling settings again.
 - Never use `git push --force`, a blanket “ours/theirs” resolution, `git reset --hard`, or a ZIP overlay to complete an upstream update. Stop if ancestry or the working tree is unclear.
 
 ## 1. Check the repository and synchronize `master`

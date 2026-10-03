@@ -6,6 +6,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   apply,
+  installConnection,
   type ClientConnectionRpc,
   type ClientTransportHooks,
   type ConnectionGenerationSource,
@@ -129,9 +130,20 @@ describe('connection client apply', () => {
     expect(handle.isLoopback).toBe(true)
   })
 
-  it('reports non-loopback page authority through the connection handle', async () => {
+  it('treats a non-loopback page as the settings operator', async () => {
     ;(globalThis as Win).location = { hostname: '192.0.2.20' }
-    expect((await mount()).isLoopback).toBe(false)
+    expect((await mount()).isLoopback).toBe(true)
+  })
+
+  it('treats a directly installed non-loopback Host as the settings operator', async () => {
+    const ctx = new Context()
+    try {
+      installConnection(ctx, { location: { hostname: '192.0.2.20' } })
+      const handle = ctx.get('connection') as ConnectionHandle | undefined
+      expect(handle?.isLoopback).toBe(true)
+    } finally {
+      await ctx.fiber.dispose()
+    }
   })
 
   it('requires one generation source and ignores a stale source disposer', async () => {
