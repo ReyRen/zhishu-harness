@@ -1,16 +1,50 @@
 # 桌面端二次开发与打包说明
 
-本文记录 zhishu-harness 官方桌面壳（`apps/desktop`）上的二次开发，以及 Windows 未签名安装包怎么打。对话界面的插件增量仍放在 `overlay/`，规则见 [plugin-secondary-development.md](./plugin-secondary-development.md)。
+本文记录智枢桌面端怎样建在官方 DeepSeek Harness 上，以及 Windows 未签名安装包怎么打。对话界面的插件增量仍放在 `overlay/`，规则见 [plugin-secondary-development.md](./plugin-secondary-development.md)。
 
 这里打出来的是官方 DeepSeek Harness 桌面端，不是 `dsh-desktop` 那个智树壳。两边的安装包不能互相代替。
 
-## 桌面壳现在做什么
+## 整体实现方案
 
-启动后不再走官方 DeepSeek 账号欢迎页。窗口里先打开 model 平台自己的登录页。登录成功后，如果账号需要补录，接着打开补录页；补录成功，或账号不需要补录，进入 Harness 会话。业务空间打开的是整个 model 站点，不是单独的模型训练页。
+智枢桌面端是官方壳上的二次开发，不是另写一个应用。会话和业务仍是两个空间：会话继续用官方对话和官方运行时；业务不再在 Harness 里重做平台页面，而是在同一个窗口里直接铺上 model 站点，平台页面只在 model 仓库维护一份。登录也不再用官方 DeepSeek 账号，改走平台自己的登录页。
 
-工作空间只有两个：`conversation`（会话）和 `business`（业务）。Windows 上的切换放在标题栏「编辑」右侧，是独立的下拉层，避免被 model 页面盖住。macOS 没有这个网页标题栏按钮。
+### 为什么留在官方壳上
 
-官方账号菜单由 `overlay/hide-official-account` 关掉，不要改账号控制器，也不要改欢迎页源码。model 站点的顶栏、侧栏、标签保持显示。
+会话要的是官方智能体能力：对话、文件、Office，以及安装包里的 Python 运行时。这些封在官方桌面 Host 和 `dsh-app://app` 的对话页里。`dsh-desktop` 没有这份运行时，所以智枢不从那边长出来。官方壳负责窗口、更新、运行时和对话页。账号、补录和业务功能仍由 model 仓库维护，桌面端只加载那个站点。
+
+### 一个窗口里的两层
+
+主窗口自己的网页是 Harness 对话，地址是 `dsh-app://app/`。model 站点是盖在上面的另一个 `WebContentsView`，分区 `persist:zhishu-model`，和对话页的 cookie、存储互不相通。从登录到进入站点始终是这同一个 view。平台把登录标记写在 `sessionStorage` 里，换一个 view 就会丢。
+
+未登录时平台页盖住对话。登录完成并离开登录流程后，平台页藏起来，底下的对话页成为会话空间。再切到业务时，把已经打开的整站显示出来。模型训练只是平台里的一个功能，不是业务空间的落地页。平台自己的顶栏、侧栏、标签保持显示，桌面端不改这些。
+
+### 登录怎么接上平台
+
+启动不再打开官方欢迎页。`openInitialWindow` 创建主窗口后直接交给 `ModelPlatformGate.open()`。官方账号菜单由 `overlay/hide-official-account` 关掉。不改欢迎页源码，也不停账号控制器。
+
+冷启动先读这个分区里的 cookie，再 `POST /DistributedAISystem/UserLoginDisplayInfo`。会话还在就打开 `/desktop-entry`，由平台自己决定去补录还是进入和网页登录成功后相同的去向。cookie 无效，或还没有 cookie，就打开 `/login`。用户在登录页输入账号时不经过 `/desktop-entry`。
+
+这些路径仍算登录流程，不打开对话：`/login`、`/register`、`/desktop-entry`、`/complete-identity`。平台网页登录成功后的去向是 `/smartChat`。桌面端看到地址已经离开上述路径、并且仍是平台源站，就视为已登录：藏起平台页，调用 `enterWorkspace()`，主窗口导航到 `dsh-app://app/`。验证码和 RSA 仍由平台登录页自己完成，桌面端不重做。
+
+退出确认被取消，或官方侧还没进入会话就需要把窗口露出来时，用 `presentLogin()` 再盖上 `/login`。
+
+### 工作空间切换
+
+只有 Windows 标题栏有切换。按钮在「编辑」右侧，由 `preload-menu.ts` 画在对话页上，未登录时隐藏。下拉层是另一个 `WebContentsView`（`workspace-menu.ts`），这样平台页盖住窗口时菜单仍在最上面。macOS 没有这套网页标题栏，也就没有这个按钮。
+
+切到业务：显示平台 view。Windows 上它让出标题栏高度，避免盖住「应用 / 编辑」。切回会话：藏起平台 view。对话页一直在底下，不用重新加载。
+
+标题栏和平台页不在同一个文档里。登录状态用 `zhishu-model:state`、`zhishu-model:switch`、`zhishu-model:state-changed`、`zhishu-model:menu` 传递。对话页经常比登录门更早打开，所以状态会补发，标题栏在按钮还藏着时也会自己再问。这两处的细节见后面的打包说明。
+
+### 改动落在哪
+
+| 想改的东西 | 放哪 | 不要 |
+|---|---|---|
+| 对话界面的标识、关掉官方账号菜单 | `overlay/` 独立插件 | 改 `packages/` 里的界面源码，或把插件接进官方 `tsc` / `tsdown` |
+| 窗口、登录门、两个空间谁盖住谁、安装包里的平台地址 | `apps/desktop` | 在平台里再做一套桌面壳 |
+| 登录页、补录、`/desktop-entry`、业务功能 | model 仓库 | 在 Harness 里复制这些页面 |
+
+官方测试设置了 `VITEST` 时不加载 overlay。没有 Web 界面的 profile 也不加载。桌面端带 Web 运行时，会加载。
 
 相关代码在 `apps/desktop/src/model-space/`：
 
@@ -21,7 +55,17 @@
 | `workspace-menu.ts` | 标题栏下拉菜单 |
 | `preload-model-gate.ts` | model 页面的预加载脚本，打包后仍是 `lib/preload-model-gate.cjs` |
 
-model 仓库需要路由 `/desktop-entry`（无登录标记要求）。桌面冷启动时 cookie 还在、`sessionStorage` 已清空，用它探测登录态并进入和网页登录成功后相同的去向。第一次在登录页输入账号不走这个路由。
+## 桌面壳现在做什么
+
+表现如下。分层和原因见上面的整体实现方案。
+
+- 启动看到的是平台登录页。cookie 仍有效时不重复出登录表单，先走 `/desktop-entry`。
+- 需要补录时先补录，然后进入 Harness 会话。
+- 业务空间是整个 model 站点。
+- Windows 标题栏「编辑」右侧切换「会话 / 业务」。macOS 没有这个按钮。
+- 官方账号菜单不出现。
+
+model 仓库的 `/desktop-entry` 不能要求登录标记。冷启动时 cookie 还在、`sessionStorage` 已经空了，这个路由负责接上和网页登录成功后相同的去向。
 
 ## 模型平台地址
 
