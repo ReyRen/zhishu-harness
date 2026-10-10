@@ -23,7 +23,9 @@ alwaysApply: false
 ## 地址和安装包
 
 - 本地开发默认 `http://127.0.0.1:8888`。未打包时，shell 里的 `DSH_MODEL_ORIGIN` 只影响这一次启动。
-- 安装包地址在构建时写入 `dshModelOrigin`，默认 `https://172.18.127.67`。打包不读 shell 里的同名变量，只认 `apps/desktop/.env.windows` 或 `.env.macos`。不要提交 `.env.windows`。
+- 安装包里的页面由本机 `http://127.0.0.1:17321` 提供，静态文件在 `resources/model-site`。后台地址在安装目录的 `resources/model-gateway.json`，改完重启即可。升级安装保留已有的这份文件。不要把页面改回 `https://172.18.127.67`。
+- 走网关的请求把 `Origin` 和 `Referer` 换成 `publicOrigin`（缺省 `https://172.18.127.67`），所有转发都改，包括 `:3002`。路由自带 `host` 时只改 `Host`。开发工具里看到的仍是页面发给 `127.0.0.1` 的头。
+- 打包时 `prepare:model-site` 先构建 model（默认 `build:delivery:full`）以及 flow、prompt，再拷进安装包。`DSH_MODEL_DELIVERY=lite` 只构建主应用。`DSH_DESKTOP_SKIP_MODEL_BUILD=1` 只拷贝已经打好的 dist。
 - `overlay/` 打进 `resources/overlay`（asar 外面）。壳启动时写入 `DSH_ZHISHU_OVERLAY`。改 overlay 或壳源码后要重新打包才进安装包。
 - overlay 仍只加载到带 Web 界面的 profile；设置了 `VITEST` 时不加载。不要改成从 asar 里的相对路径读插件。
 

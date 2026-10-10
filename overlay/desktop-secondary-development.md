@@ -69,28 +69,34 @@ model 仓库的 `/desktop-entry` 不能要求登录标记。冷启动时 cookie 
 
 ## 模型平台地址
 
-本地开发加载 `http://127.0.0.1:8888`。安装包加载构建时写进去的地址，默认 `https://172.18.127.67`（443，不带端口）。安装后的程序不读本机环境变量。
+本地开发加载 `http://127.0.0.1:8888`。安装包加载本机网关 `http://127.0.0.1:17321`。页面在安装包里，后台地址在安装目录的 `resources/model-gateway.json`。安装后的程序不读本机环境变量。
 
 | 场景 | 地址从哪来 |
 |---|---|
 | `pnpm run dev:desktop` | 默认本地 8888。启动前在 shell 设置 `DSH_MODEL_ORIGIN` 可临时改掉，只影响这一次 |
-| 打包 | 读 `apps/desktop/.env.windows` 或 `.env.macos` 里的 `DSH_MODEL_ORIGIN`。不写则用 `https://172.18.127.67`，写入安装包的 `dshModelOrigin` |
+| 打包 | 页面固定为 `http://127.0.0.1:17321`，写入 `dshModelOrigin`。后台 IP 不在这里改 |
 
-实现：`apps/desktop/scripts/model-origin.mjs` 负责打包时写入；`model-gate.ts` 的 `modelPlatformOrigin` 负责运行时读取。打包会丢掉 shell 里的同名变量，只认 dotenv 文件。
+实现：`apps/desktop/scripts/model-origin.mjs` 写入页面地址；`model-gate.ts` 的 `modelPlatformOrigin` 在运行时读取。打包会丢掉 shell 里的 `DSH_MODEL_ORIGIN`。
 
 ## 平台页面打进安装包
 
-这一节是已定方案，代码还没做。当前安装包仍按上一节加载 `https://172.18.127.67`。
+打包命令会先构建 model，再把产物放进安装包。默认 `DSH_MODEL_DELIVERY=full`：在 `gcs-infer-center/web` 执行 `pnpm run build:micro`，在 `gcs-loop/frontend/apps/cozeloop` 执行 `pnpm exec rushx build`，然后在 model 执行 `npm run build:delivery:full`。`DSH_MODEL_DELIVERY=lite` 只构建 model 的 `build:delivery:lite`，不带 flow 和 prompt。产物已经打好时，设 `DSH_DESKTOP_SKIP_MODEL_BUILD=1`，脚本只拷贝现成的 dist。
 
-部署网络是局域网，后台也都在局域网里。桌面端不再打开 67 上的站点，而是把 nginx 上 `location /` 的前端页面打进安装包，并把其余 `location` 的转发放进 app 里的本机代理。后台进程仍在各自的服务器上。使用 app 的电脑要能直接访问这些 IP 和端口。还有人用浏览器打开网页时，67 上的 nginx 继续留给网页；只交付桌面端时，这台 nginx 可以不再当入口。
+拷贝结果在安装包的 `resources/model-site/`：主应用是 `app/`，flow 是 `flow/`，prompt 是 `prompt/`。app 启动后在 `127.0.0.1:17321` 提供这些页面，并按 `resources/model-gateway.json` 把接口直连到局域网后台。Harness 会话页仍打开本机 `:3002`，再转到配置里的 `harness.target`。这份配置随安装包带一份默认值。升级时若安装目录里已经有它，安装程序保留原文件。改 IP 后重启 app 即可。
 
-页面从本机打开，例如 `http://127.0.0.1:某端口`。登录到整站仍是同一个 `WebContentsView`，分区仍是 `persist:zhishu-model`。页面继续请求相对路径，本机代理再按配置直连后台。找不到的前端路径回到 `index.html`。同域微应用的构建结果和主应用页面一起放进安装包。不要用 `file://` 打开构建结果，也不要把开发服务器打进去。
+部署网络是局域网，后台也都在局域网里。使用 app 的电脑要能直接访问这些 IP 和端口。还有人用浏览器打开网页时，67 上的 nginx 继续留给网页；只交付桌面端时，这台 nginx 可以不再当入口。
 
-Harness 会话页仍是「当前主机名 + `:3002`」。本机监听 `3002`，再转到配置里的网关地址。这个监听端口跟前端构建走，不写进可改的后台地址里。
+登录到整站仍是同一个 `WebContentsView`，分区仍是 `persist:zhishu-model`。页面继续请求相对路径。找不到的前端路径回到 `index.html`。不要用 `file://` 打开构建结果。
 
-后台地址放在安装包里的一份配置中。装完后到安装目录下的固定位置修改，重启 app 后生效，不用为改 IP 重新打包。再装新版本时，这个文件已经存在就不要覆盖，避免改过的地址被默认值盖掉。新增一条转发路径，或前端页面有变，才需要重新打包。
+本地开发仍走 model 的 8888，不启动这份网关。
 
-落地之后，安装包里的平台地址改为本机代理，不再把 `https://172.18.127.67` 写入 `dshModelOrigin`。
+页面发给 `127.0.0.1:17321` 的请求，由主进程里的网关改头后再连各条 `target`。配置字段是 `publicOrigin`，默认文件里写的是 `https://172.18.127.67`。安装目录里的 `model-gateway.json` 没写这个字段，或写成空字符串时，代码用同一地址（`model-gateway.ts` 的 `DEFAULT_PUBLIC_ORIGIN`）。改这个字段后重启 app 生效。
+
+所有走网关的请求都用它，包括 `/DistributedAISystem/`、其余后台，以及 `127.0.0.1:3002` 转到 `harness.target` 的请求。浏览器原来带了 `Origin`，就换成 `publicOrigin`。`Referer` 换成这个来源，路径和查询保留。`/flow`、`/prompt` 和主应用的静态文件从磁盘读，不改这些头。
+
+`Host` 默认用 `publicOrigin` 的主机名。某一条路由自己写了 `host` 时用那个值：`/api`、`/console/api`、`/files` 用 `172.18.127.66`，`/api/v1/` 用 `172.18.29.80`。这几条的 `Origin` 和 `Referer` 仍然是 `publicOrigin`。连接仍打到该条的 `target`，不会打到 `publicOrigin` 这个地址本身。
+
+后台返回的 `Location` 若指向该后台自己的源站，会改回本机正在听的地址（`127.0.0.1:17321` 或 `:3002`）。`Set-Cookie` 里的 `Domain` 会去掉，cookie 留在 `127.0.0.1`。
 
 ### 和继续打开 67 相比
 
@@ -108,6 +114,44 @@ Harness 会话页仍是「当前主机名 + `:3002`」。本机监听 `3002`，�
 | 打开页面的速度 | 页面文件走局域网到 67 | 页面文件在本机；接口仍多一跳 nginx | 页面文件在本机；接口少一跳 nginx |
 
 打开某个业务页，快的是页面自身的脚本和样式：从本机磁盘读，不跟 67 要文件。站点已经打开之后，再进成绩这类菜单，时间主要花在接口。直连少一次 nginx 转发，局域网里通常差得不大。列表数据不会因为页面打进安装包就明显变快。
+
+## 环境变量
+
+下面这些变量在 PowerShell 里用 `$env:名字 = '值'` 设置。它只活在当前这个终端里，关掉窗口就没了。新开一个终端要重新设置。打包或 `pnpm run dev:desktop` 必须在设过变量的那个终端里执行。装好的程序不读这些变量。后台 IP 和 `publicOrigin` 改 `resources/model-gateway.json`，不靠环境变量。
+
+`apps/desktop/.env.windows` 只放应用 ID、更新源这类发布项，从 `.env.windows.example` 复制，Git 忽略。已经复制出来的文件里若还有 `DSH_MODEL_ORIGIN`，留着也不改变安装包里的页面地址。页面地址固定是 `http://127.0.0.1:17321`。
+
+| 变量 | 在哪设 | 作用 |
+|---|---|---|
+| `DSH_MODEL_ORIGIN` | 启动 `pnpm run dev:desktop` 的终端 | 未打包时改平台页地址。不设则用 `http://127.0.0.1:8888` |
+| `DSH_DESKTOP_OPEN_DEVTOOLS` | 同上。不设时开发脚本当作 `1` | 设为 `0` 时，本地开发不自动打开会话页的开发工具。安装包不看这个变量，业务页也不会因此打开 |
+| `DSH_MODEL_DELIVERY` | 执行打包命令的终端 | `full`（默认）构建 model、flow、prompt。`lite` 只构建 model 的 `build:delivery:lite` |
+| `DSH_DESKTOP_SKIP_MODEL_BUILD` | 同上 | 设为 `1` 时不重新构建，只拷贝已经打好的 dist |
+| `DSH_MODEL_ROOT` | 同上 | model 仓库路径。不设则用与 `zhishu-harness` 同级的 `model` |
+| `ELECTRON_MIRROR` | 同上 | Electron 本体的下载镜像。用法见后面的「重复下载」 |
+| `ELECTRON_BUILDER_BINARIES_MIRROR` | 同上 | electron-builder 所用二进制的下载镜像。内置 Python 仍从 GitHub 下载 |
+
+## 看安装包里的网络请求
+
+安装包启动时不会自己打开开发工具。`DSH_DESKTOP_OPEN_DEVTOOLS` 只在 `pnpm run dev:desktop` 里生效，而且打开的是会话页 `dsh-app://app/`。业务页的登录和平台接口在盖在上面的那个 view 里，会话页的网络面板看不到。
+
+要看刚打出来的程序，先完全退出已经安装的「DeepSeek Harness」，包括托盘。这个应用有单实例锁，安装版还在跑时，下面的命令只会把安装版窗口唤到前面，调试端口不会生效。
+
+在一个终端里启动解压目录。这条命令占住该终端，直到窗口关掉，不是后台任务。图形界面程序用 Ctrl+C 不一定能停掉，关掉窗口即可。
+
+```powershell
+& "C:\Users\Admin\Documents\code\zhishu-harness\apps\desktop\.desktop-build\targets\win-x64\unsigned-artifacts\win-unpacked\DeepSeek Harness.exe" --remote-debugging-port=9222
+```
+
+然后用 Chrome 打开 `chrome://inspect`，勾选 Discover network targets，在 Configure 里加上 `localhost:9222`，再对目标点 inspect。
+
+壳里是两块页面，列表行数可以比两块多：
+
+- 会话是 `dsh-app://app/`。标题相同、地址也相同的两条是同一个会话页，点其中一条即可。
+- 业务是 `http://127.0.0.1:17321` 上的那个 view，同一时间只有一个当前地址。列表里若同时有 `/login` 和 `/harnessAgent`，是这个 view 先后打开过的地址还留在列表里，对着眼前那一屏的路径点 inspect。
+- `/harnessAgent` 里嵌上 `http://127.0.0.1:3002/` 之后，列表会再多出那一条。
+
+业务页 Network 里的 `Host`、`Origin`、`Referer` 是页面发给 `127.0.0.1:17321` 的值，例如 `Origin: http://127.0.0.1:17321`。网关改成 `publicOrigin` 发生在主进程转发之后，这个面板里看不到。返回状态是后台经网关送回来的，这个能看到。
 
 ## 对话界面的 overlay
 

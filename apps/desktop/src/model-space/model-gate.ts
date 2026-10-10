@@ -7,13 +7,13 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { app, BrowserWindow, ipcMain, net, session, shell, WebContentsView, type IpcMainInvokeEvent } from 'electron'
+import { MODEL_SITE_ORIGIN } from './model-gateway.ts'
 import { MODEL_SPACE_IPC, type ModelSpace, type ModelSpaceState } from './model-space.ts'
 import { WINDOWS_TITLEBAR_HEIGHT } from '../windows-layout.ts'
 import { workspaceMenuDocument } from './workspace-menu.ts'
 
 const PARTITION = 'persist:zhishu-model'
 const DEVELOPMENT_MODEL_ORIGIN = 'http://127.0.0.1:8888'
-const PRODUCTION_MODEL_ORIGIN = 'https://172.18.127.67'
 
 /** @param raw - candidate model site. @returns origin without a path. */
 function parseModelOrigin(raw: string): string {
@@ -37,15 +37,15 @@ function packagedModelOrigin(): string | undefined {
 }
 
 /**
- * Local development loads the model dev server. A packaged app loads the origin
- * written at build time, which defaults to the production site.
+ * Local development loads the model dev server. A packaged app loads the local
+ * gateway, which serves the bundled page and proxies APIs to the LAN.
  * @param env - process environment. A shell `DSH_MODEL_ORIGIN` applies only while unpackaged.
  * @param packaged - whether this process is an installed build.
  * @returns origin of the model site, without a path.
  */
 export function modelPlatformOrigin(env: NodeJS.ProcessEnv = process.env, packaged = app.isPackaged): string {
   if (!packaged) return parseModelOrigin(env.DSH_MODEL_ORIGIN?.trim() || DEVELOPMENT_MODEL_ORIGIN)
-  return parseModelOrigin(packagedModelOrigin() || PRODUCTION_MODEL_ORIGIN)
+  return parseModelOrigin(packagedModelOrigin() || MODEL_SITE_ORIGIN)
 }
 
 /** Pages that stay on the login flow and do not open the Harness workspace yet. */

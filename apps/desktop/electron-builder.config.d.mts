@@ -22,6 +22,8 @@ export interface DesktopElectronBuilderConfig {
     { readonly from: string, readonly to: 'runtime' },
     { readonly from: string, readonly to: 'icon.png' },
     { readonly from: string, readonly to: 'overlay' },
+    { readonly from: string, readonly to: 'model-site' },
+    { readonly from: string, readonly to: 'model-gateway.json' },
     ...{ readonly from: string, readonly to: 'tray.ico' }[],
   ]
   readonly mac: {

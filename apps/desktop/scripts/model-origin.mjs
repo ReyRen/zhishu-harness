@@ -1,7 +1,8 @@
 /** Model site baked into a packaged desktop build. Dev uses the local server instead. */
 
 export const DEVELOPMENT_MODEL_ORIGIN = 'http://127.0.0.1:8888'
-export const PRODUCTION_MODEL_ORIGIN = 'https://172.18.127.67'
+/** Page origin of a packaged app. Backend addresses live in model-gateway.json, not here. */
+export const PACKAGED_MODEL_ORIGIN = 'http://127.0.0.1:17321'
 
 /**
  * @param {string} raw - Candidate origin.
@@ -19,11 +20,10 @@ export function parseModelOrigin(raw, label) {
 }
 
 /**
- * Origin written into the installer. An empty setting keeps the production default.
- * @param {NodeJS.ProcessEnv} env - File-owned packaging environment.
+ * Origin written into the installer. The page is the local gateway.
+ * Changing a backend address is a model-gateway.json edit, not a rebuild.
  * @returns {string} Model site origin.
  */
-export function resolvePackagedModelOrigin(env = {}) {
-  const configured = env.DSH_MODEL_ORIGIN?.trim()
-  return parseModelOrigin(configured || PRODUCTION_MODEL_ORIGIN, 'desktop package: DSH_MODEL_ORIGIN')
+export function resolvePackagedModelOrigin() {
+  return PACKAGED_MODEL_ORIGIN
 }

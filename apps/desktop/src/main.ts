@@ -39,6 +39,7 @@ import { pruneCrashReports, RendererConsoleTail, writeCrashReport, type CrashRep
 import { WELCOME_IPC } from './welcome-api.ts'
 import { connectDesktopWelcome, type DesktopWelcomeBackend } from './welcome-backend.ts'
 import { ModelPlatformGate } from './model-space/model-gate.ts'
+import { startPackagedModelSite } from './model-space/model-gateway.ts'
 import { DesktopUpdateJournal } from './update-journal.ts'
 import { DesktopUpdatePreparationError } from './update-error.ts'
 import { DesktopUpdateSchedule, resolveDesktopUpdateScheduleConfig } from './update-schedule.ts'
@@ -1098,6 +1099,7 @@ async function main(): Promise<void> {
     windowsLanguage = locale.id
     refreshApplicationMenu()
     const window = mainWindow ?? createMainWindow()
+    if (!development) await startPackagedModelSite(process.resourcesPath)
     modelGate ??= new ModelPlatformGate(modelPreload, () => enterWorkspace())
     modelGate.attach(window)
     // Model login is the gate. A valid platform cookie continues into the model
