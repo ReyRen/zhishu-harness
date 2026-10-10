@@ -182,19 +182,6 @@ interface ComposedProfile {
 }
 
 /**
- * Load `name` and compose its effective patch stack: bundle layers in
- * `dsh.profile.bundles` order (a base-backed profile gets the base bundle's
- * platform-gated shell rows), the profile's user layer, the home-level user
- * layer (`$DSH_HOME/cordis.patch.yml` — machine-local preferences that apply
- * to every profile, so it outranks the per-profile layer), `--patch` overlays,
- * then the telemetry switch.
- * @param name - the profile name.
- * @param patchFiles - `--patch` overlay paths, in argv order.
- * @param fromDefaultProfile - shipped template for a missing named profile.
- * @param resolvedProfile - application-owned profile and installation.
- * @returns the profile and its patch layers.
- */
-/**
  * Fork Web overlay patches under `<repo>/overlay/<name>/cordis.patch.yml`.
  * They apply only to profiles containing the Web bundle, after shipped bundles.
  * Vitest boots the same launcher and must keep the stock composition.
@@ -216,6 +203,19 @@ function zhishuOverlayPatches(profile: Profile): string[] {
   return files
 }
 
+/**
+ * Load `name` and compose its effective patch stack: bundle layers in
+ * `dsh.profile.bundles` order (a base-backed profile gets the base bundle's
+ * platform-gated shell rows), the profile's user layer, the home-level user
+ * layer (`$DSH_HOME/cordis.patch.yml` — machine-local preferences that apply
+ * to every profile, so it outranks the per-profile layer), fork Web overlays,
+ * `--patch` overlays, then the telemetry switch.
+ * @param name - the profile name.
+ * @param patchFiles - `--patch` overlay paths, in argv order.
+ * @param fromDefaultProfile - shipped template for a missing named profile.
+ * @param resolvedProfile - application-owned profile and installation.
+ * @returns the profile and its patch layers.
+ */
 async function composeProfile(
   name: string,
   patchFiles: readonly string[],

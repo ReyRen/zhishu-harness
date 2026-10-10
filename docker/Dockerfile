@@ -26,7 +26,7 @@ RUN --mount=type=cache,id=zhishu-harness-apt-cache,target=/var/cache/apt,sharing
     make \
     g++ \
     python3 \
-  && npm install --global pnpm@11.7.0
+  && npm install --global pnpm@11.28.5
 
 WORKDIR /opt/dsh
 
@@ -90,7 +90,7 @@ RUN --mount=type=cache,id=zhishu-harness-apt-cache,target=/var/cache/apt,sharing
     ripgrep \
     socat \
     tini \
-  && npm install --global pnpm@11.7.0
+  && npm install --global pnpm@11.28.5
 
 COPY --from=builder /opt/dsh /opt/dsh
 COPY --chmod=0755 docker/container-entrypoint.sh /opt/dsh/deploy/container-entrypoint.sh

@@ -1,7 +1,7 @@
 /** Recorded npm evidence stays intact while authored files and exact edits remain checked. */
 
 import { describe, expect, it } from 'vitest'
-import { exactEditState, isRescopeExcluded } from './rescope-vendor.ts'
+import { exactEditState, isRescopeExcluded, rescopeReferences } from './rescope-vendor.ts'
 
 const ANCHOR = '\n## Sync procedure'
 const INSERTED = `\n15. **rescope**: one log entry.\n${ANCHOR}`
@@ -19,6 +19,40 @@ describe('rescope file selection', () => {
     'packages/example/package.json',
   ])('keeps %s subject to upstream package-name checks', (file) => {
     expect(isRescopeExcluded(file)).toBe(false)
+  })
+})
+
+describe('product identifiers', () => {
+  it.each([
+    'apps/cli/tests/optional-bundle-transitions.e2e.ts',
+    'apps/web/tests/agent-preset-selection.e2e.ts',
+    'apps/web/tests/developer-tools-settings.e2e.ts',
+    'packages/client/ui-agent-preset/src/client/CreatePluginMenuItem.tsx',
+    'packages/client/ui-agent-preset/tests/components.client.spec.tsx',
+    'packages/client/ui-agent-preset/tests/create-plugin-menu-item.client.spec.tsx',
+    'packages/client/ui-agent-preset/tests/section-store.client.spec.ts',
+    'packages/bundle/web-app/cordis.patch.yml',
+    'docs/subsystems/schedule.md',
+    'docs/subsystems/schedule.zh.md',
+    'docs/user/guide/schedule.md',
+    'docs/user/guide/schedule.zh.md',
+    'docs/upgrade-guide/v0.2.0-rc.2/schedule-bundle-retired/guide.md',
+    'docs/upgrade-guide/v0.2.0-rc.2/schedule-bundle-retired/guide.zh.md',
+    'packages/extensions/cordis-host-runner/tests/inspect-registry.spec.ts',
+    'snapshots/session/cordis-inspect-liveness/client-fixture.mjs',
+    'snapshots/session/cordis-inspect-timeout/client-fixture.mjs',
+  ])('preserves preset and event names in %s without exempting other packages', (file) => {
+    const text = "const preset = 'cordis'\nconst event = 'cordis/inspect-query'\nconst schema = 'schemastery'\n"
+    expect(isRescopeExcluded(file)).toBe(false)
+    expect(rescopeReferences(text, file)).toEqual({
+      text: text.replace("'schemastery'", "'@deepseek-ai/schemastery'"), lines: 1,
+    })
+  })
+
+  it('still requires the scoped framework name outside the named product sites', () => {
+    expect(rescopeReferences("import { Context } from 'cordis'\n", 'packages/example/src/index.ts')).toEqual({
+      text: "import { Context } from '@deepseek-ai/cordis'\n", lines: 1,
+    })
   })
 })
 

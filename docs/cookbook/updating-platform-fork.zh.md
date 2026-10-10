@@ -50,6 +50,8 @@ git diff master -- docker packages/api/workspace-controller packages/host/direct
 
 测试应覆盖实际变更；下列命令覆盖平台集成和镜像构建。若合并影响官方新功能，还需加跑对应的定向测试。Windows 本地的符号链接权限可能阻止文档检查，应改在 Linux 或 CI 验证并调查失败，不能把失败当作通过。
 
+使用生产镜像作为 Linux 验证环境时，以 `--init -e NODE_ENV=test` 启动；继承的 `NODE_ENV=production` 会破坏 jsdom 导入和 React 测试 API。部署应用仍使用 `NODE_ENV=production`。复用验证 worktree 时，重新构建前运行 `pnpm run clean`，清理已移除包的旧构建产物。
+
 ```bash
 pnpm install --frozen-lockfile
 pnpm exec vitest run packages/api/workspace-controller/tests/workspace-controller.host.spec.ts packages/host/directory-picker-auto/tests/loader-composition.spec.ts packages/host/directory-picker-browse/tests/service.spec.ts
