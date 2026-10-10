@@ -46,8 +46,11 @@ ARG DSH_CLIENT_COMMIT_HASH
 
 COPY . ./
 
+# COPY can retain empty retired-package directories after ignoring their old lib outputs.
+# Use the official repository cleaner before compiling this fresh image workspace.
 RUN --mount=type=cache,id=zhishu-harness-pnpm,target=/pnpm/store \
-  pnpm install --offline --frozen-lockfile
+  pnpm install --offline --frozen-lockfile \
+  && pnpm run clean
 
 RUN test -n "${DSH_CLIENT_COMMIT_HASH}" \
   && DSH_CLIENT_COMMIT_HASH="${DSH_CLIENT_COMMIT_HASH}" pnpm run build
