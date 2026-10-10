@@ -125,15 +125,64 @@ export class ModelPlatformGate {
     view.webContents.on('did-navigate', follow)
     view.webContents.on('did-navigate-in-page', follow)
     window.contentView.addChildView(view)
-    view.setVisible(false)
     // The caption asks for state as soon as its document loads. That is often before
     // this gate exists, and a later reload drops the in-flight event. Send again
     // whenever the Harness document is actually on screen.
     window.webContents.on('did-finish-load', () => { this.publish() })
-    const fit = (): void => { this.closeMenu(); this.fit() }
+    // While this is set, layout must not attach the cover. Reattaching the child view
+    // makes Windows abort minimize and pop the window back onto the desktop.
+    let away = false
+    let holdMinimizeUntil = 0
+    const fit = (): void => {
+      if (away || window.isDestroyed() || window.isMinimized()) return
+      this.closeMenu()
+      this.fit()
+    }
     window.on('resize', fit)
     window.on('enter-full-screen', fit)
     window.on('leave-full-screen', fit)
+    const fitAgain = (): void => {
+      if (away || window.isMinimized()) return
+      fit()
+      setTimeout(() => { if (!away && !window.isDestroyed() && !window.isMinimized()) fit() }, 100)
+    }
+    const sendToTaskbar = (): void => {
+      if (window.isDestroyed() || window.isMinimized()) return
+      if (away && Date.now() < holdMinimizeUntil) return
+      away = true
+      holdMinimizeUntil = Date.now() + 400
+      this.parkCover()
+      // Calling minimize inside the caption's WM_SYSCOMMAND cancels it. Do it next turn,
+      // after the cover is no longer a child view.
+      setTimeout(() => {
+        if (!window.isDestroyed() && !window.isMinimized()) window.minimize()
+      }, 0)
+    }
+    window.on('restore', () => {
+      // The caption click restores once before the deferred minimize runs. Send it back.
+      // A later restore is the user opening the taskbar button; show the login page then.
+      if (Date.now() < holdMinimizeUntil) {
+        setTimeout(() => {
+          if (!window.isDestroyed() && !window.isMinimized()) window.minimize()
+        }, 0)
+        return
+      }
+      away = false
+      fitAgain()
+    })
+    window.on('show', () => {
+      if (Date.now() < holdMinimizeUntil) return
+      fitAgain()
+    })
+    window.on('minimize', () => {
+      away = true
+      this.parkCover()
+    })
+    if (process.platform === 'win32') {
+      window.hookWindowMessage(0x0112, (wParam) => {
+        if ((wParam.readUInt32LE(0) & 0xFFF0) === 0xF020) sendToTaskbar()
+      })
+    }
     this.fit()
   }
 
@@ -227,12 +276,14 @@ export class ModelPlatformGate {
     return { active: this.authenticated ? this.active : 'business', authenticated: this.authenticated }
   }
 
+  /** The platform view stays up until login finishes, and again whenever business is selected. */
+  private coverWanted(): boolean {
+    return !this.authenticated || this.active === 'business'
+  }
+
   private show(space: ModelSpace): void {
     this.active = space
-    const view = this.view
-    if (view === undefined || view.webContents.isDestroyed()) return
     this.fit()
-    view.setVisible(space === 'business' || !this.authenticated)
     this.publish()
     // The caption document can still be loading, or about to reload into the workspace.
     // Repeat the same state so a listener that attaches late still unhides the switch.
@@ -252,13 +303,28 @@ export class ModelPlatformGate {
     if (view !== undefined && !view.webContents.isDestroyed()) view.webContents.send(MODEL_SPACE_IPC.changed, state)
   }
 
+  /** Take the platform view off the window so minimize can reach the taskbar. */
+  private parkCover(): void {
+    const window = this.window
+    const view = this.view
+    if (window === undefined || window.isDestroyed() || view === undefined || view.webContents.isDestroyed()) return
+    view.setVisible(false)
+    if (window.contentView.children.includes(view)) window.contentView.removeChildView(view)
+  }
+
   private fit(): void {
     const window = this.window
     const view = this.view
     if (window === undefined || window.isDestroyed() || view === undefined || view.webContents.isDestroyed()) return
+    // A minimized window reports an empty client size. Resizing the cover then would
+    // either reveal the conversation page or pull the window back onto the desktop.
+    if (window.isMinimized()) return
     const [width = 0, height = 0] = window.getContentSize()
     const top = process.platform === 'win32' ? WINDOWS_TITLEBAR_HEIGHT : 0
-    view.setBounds({ x: 0, y: top, width: Math.max(0, width), height: Math.max(0, height - top) })
+    if (width < 2 || height <= top) return
+    if (!window.contentView.children.includes(view)) window.contentView.addChildView(view)
+    view.setBounds({ x: 0, y: top, width, height: height - top })
+    view.setVisible(this.coverWanted())
   }
 
   private onAddress(url: string): void {
