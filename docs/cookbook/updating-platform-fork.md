@@ -50,6 +50,8 @@ Resolve each conflict and inspect auto-merged files. In particular, verify the c
 
 Use checks that cover the changed behavior; the following commands cover the platform integration and image build. Add focused official-feature tests when the merge touches their behavior. Documentation checks may need Linux or CI when local Windows symlink permissions prevent them; investigate failures rather than treating them as passes.
 
+When using the production image as a Linux validation environment, run it with `--init -e NODE_ENV=test`; inherited `NODE_ENV=production` breaks jsdom imports and React test APIs. Keep `NODE_ENV=production` for the deployed application. Run `pnpm run clean` before rebuilding a reused validation worktree to remove obsolete package build outputs.
+
 ```bash
 pnpm install --frozen-lockfile
 pnpm exec vitest run packages/api/workspace-controller/tests/workspace-controller.host.spec.ts packages/host/directory-picker-auto/tests/loader-composition.spec.ts packages/host/directory-picker-browse/tests/service.spec.ts

@@ -26,7 +26,7 @@ RUN --mount=type=cache,id=zhishu-harness-apt-cache,target=/var/cache/apt,sharing
     make \
     g++ \
     python3 \
-  && npm install --global pnpm@11.7.0
+  && npm install --global pnpm@11.28.5
 
 WORKDIR /opt/dsh
 
@@ -46,8 +46,11 @@ ARG DSH_CLIENT_COMMIT_HASH
 
 COPY . ./
 
+# COPY can retain empty retired-package directories after ignoring their old lib outputs.
+# Use the official repository cleaner before compiling this fresh image workspace.
 RUN --mount=type=cache,id=zhishu-harness-pnpm,target=/pnpm/store \
-  pnpm install --offline --frozen-lockfile
+  pnpm install --offline --frozen-lockfile \
+  && pnpm run clean
 
 RUN test -n "${DSH_CLIENT_COMMIT_HASH}" \
   && DSH_CLIENT_COMMIT_HASH="${DSH_CLIENT_COMMIT_HASH}" pnpm run build
@@ -90,7 +93,7 @@ RUN --mount=type=cache,id=zhishu-harness-apt-cache,target=/var/cache/apt,sharing
     ripgrep \
     socat \
     tini \
-  && npm install --global pnpm@11.7.0
+  && npm install --global pnpm@11.28.5
 
 COPY --from=builder /opt/dsh /opt/dsh
 COPY --chmod=0755 docker/container-entrypoint.sh /opt/dsh/deploy/container-entrypoint.sh
