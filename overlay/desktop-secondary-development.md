@@ -131,6 +131,32 @@ model 仓库的 `/desktop-entry` 不能要求登录标记。冷启动时 cookie 
 | `ELECTRON_MIRROR` | 同上 | Electron 本体的下载镜像。用法见后面的「重复下载」 |
 | `ELECTRON_BUILDER_BINARIES_MIRROR` | 同上 | electron-builder 所用二进制的下载镜像。内置 Python 仍从 GitHub 下载 |
 
+## 合并官方代码之后
+
+把 `main` 合进当前分支后，本地可能还留着已经搬走或删掉的包。`pnpm run dev:desktop` 和 `git push` 都会先编译工作区。构建按 `packages/*/*` 扫描，目录里只要还有 `lib`，即使没有 `package.json` 也会被当成包打包。旧产物还在引用已经不存在的导出时，编译失败。推送前的 typecheck 走同一套编译，所以 `git push` 会一起失败。
+
+这次合入后，`packages/session/session-title-all-prompts-llm` 只剩旧的 `lib`，仍在导入 `registerSessionTitleLlmProvider`。当前的 `session-title-llm` 已经不再导出它，于是出现 `MISSING_EXPORT`。
+
+`pnpm run dev:desktop` 会按当前源码重编还在仓库里的包，但不会删掉这些旧目录。包被移动或删除时，先在仓库根目录执行：
+
+```powershell
+pnpm run clean
+```
+
+它清掉各包的 `lib`，并删掉没有 `package.json`、只剩 `lib`、`node_modules` 这类产物的旧目录。包没有被移动或删除的小改动，直接 `pnpm run dev:desktop` 即可。
+
+`clean` 不改仓库根上的 `node_modules`。桌面开发启动时会遍历 `node_modules\.pnpm\node_modules` 里的链接。旧目录删掉之后，链接还指着原来的路径，就会报 `ENOENT`。这次是 `dsh-experimental-schedule-bundle` 等链接指向已经不存在的目录。锁文件已经是最新时，单独再执行 `pnpm install` 会显示 Already up to date，这些链接不会重写。
+
+出现这种断链时，在仓库根目录按顺序做：
+
+1. 先退出正在运行的桌面应用。
+2. `pnpm run clean`
+3. 删除根目录的 `node_modules`。不要删本机的 pnpm 缓存。
+4. `pnpm install`
+5. `pnpm run dev:desktop`
+
+依赖还在本机缓存里，一般不用重新从网络下载。只有合并后包被移动或删除时才需要删掉 `node_modules`。平时改壳源码，直接 `pnpm run dev:desktop`。
+
 ## 看安装包里的网络请求
 
 安装包启动时不会自己打开开发工具。`DSH_DESKTOP_OPEN_DEVTOOLS` 只在 `pnpm run dev:desktop` 里生效，而且打开的是会话页 `dsh-app://app/`。业务页的登录和平台接口在盖在上面的那个 view 里，会话页的网络面板看不到。
@@ -204,11 +230,39 @@ pnpm 自己会先打出 `Done in … using pnpm v11.7.0`。接着出现 `PostQue
 
 处理写在 `apps/desktop/scripts/prepare-dsh.ts`：不再把控制台直接交给这个进程，输出改由管道转发。失败记录在 `apps/desktop/.desktop-build/packaging-runs/<一次构建>/events.jsonl`，对应阶段是 `runtime:lockfile`。前面的编译、依赖打包和 Electron 缓存还在，修好后重新执行打包命令会从准备运行时继续。
 
-## 和 dsh-desktop 打包的差别
+## 三种 Harness 的差别
+
+智枢桌面端、`dsh-desktop`、model 里嵌的网页 Harness，对话可以来自同一套产品，执行环境不同。智枢桌面端用的是官方壳，运行时打在安装包里。
+
+### dsh-desktop
 
 `dsh-desktop` 的 `package:dev:win` 只编译智树壳，再交给 electron-builder。它自带 Node 和 pnpm，不编译 `window-frame.dll`，所以没有 Visual C++ 也能打出安装包。它的 `*-setup.exe` 同样是安装包；直接启动的是解压目录里的程序。
 
-官方这条路径还会打进独立的 Python 运行时（numpy、pandas、Office 文档库、LibreOffice）。对话里创建和检查 Word、PPT、Excel，以及用这套库做数据处理，依赖这份运行时。dsh-desktop 没有它，本机另装 Python 也不会自动接上这些技能。
+官方这条路径还会打进独立的 Python 运行时（numpy、pandas、Office 文档库、LibreOffice），放在 `resources/runtime/primary-runtime`。对话里创建和检查 Word、PPT、Excel，以及用这套库做数据处理，依赖这份运行时。`dsh-desktop` 没有它，本机另装 Python 也不会自动接上这些技能。两边的安装包不能互相代替。
+
+### model 里的网页 Harness
+
+`/harnessAgent` 是浏览器里的一层页面。iframe 打开当前主机的 `:3002`。开发时由本机转发，生产由 nginx 整站转到网关 `172.18.29.80:18089`。真正跑智能体的是容器里的 `dsh --profile web`（`docker/container-entrypoint.sh`）。
+
+当前镜像 `docker/Dockerfile` 的运行层有 bash、git、ripgrep 和 Debian 的 `python3`。没有放入 `primary-runtime`，也没有设置 `DSH_PRIMARY_RUNTIME`。所以没有 numpy、pandas，也没有 LibreOffice 和 Office skills。容器可以另加：把 `primary-runtime/` 和 `office-skills/` 放进镜像，并设置 `DSH_PRIMARY_RUNTIME`。现在的网页镜像没有做这一步。
+
+| | 官方桌面端（智枢采用） | dsh-desktop | model 里的网页 Harness |
+|---|---|---|---|
+| 页面在哪 | 本机窗口里的 `dsh-app://app/` | 智树壳自己的窗口 | 浏览器 iframe，经 `:3002` 进容器 |
+| 文件在哪 | 用户这台电脑 | 用户这台电脑 | 容器里的 `/storage-root-jfs/user` |
+| Python | 安装包内的创作环境 | 没有。本机另装 Python 接不上技能 | 系统 `python3`，没有 numpy、pandas |
+| Office | 有 LibreOffice 和 Office 文档库 | 没有 | 没有 |
+
+容器补上 Linux 版的 `primary-runtime/`、`office-skills/` 并设置 `DSH_PRIMARY_RUNTIME` 之后，用 Python 做数据处理，以及创建和检查 Word、PPT、Excel，可以和桌面端对齐。这和安装包用的是同一套构建结果，目标系统不同：桌面是 Windows，容器是 Linux。
+
+补上之后，两边的能力范围仍然不同。网页方案跑在服务器上，不会变成装在用户电脑里的桌面端。
+
+| | 官方桌面端 | 加上运行时之后的网页容器 |
+|---|---|---|
+| 文件在哪 | 用户这台电脑上的目录 | 容器里的 `/storage-root-jfs/user` |
+| 网络从哪出去 | 用户这台电脑 | 容器所在服务器 |
+| 窗口和本机程序 | 能开本机目录、调用本机上的程序 | 只有浏览器里的页面，碰不到用户电脑上的文件和已安装软件 |
+| 和 model 的关系 | 同一个窗口里盖着平台页，登录态在 `persist:zhishu-model` | 平台页面里的一层 iframe，会话在容器里 |
 
 ## 重复下载
 
