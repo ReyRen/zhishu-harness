@@ -100,7 +100,7 @@ export function createElectronBuilderConfig(
   const packaged = resolveDesktopBuildCommit(env)
   return {
     appId,
-    protocols: [{ name: 'DeepSeek Harness', schemes: ['dsh'] }],
+    protocols: [{ name: 'Zhishu Harness', schemes: ['dsh'] }],
     extraMetadata: {
       dshDesktopAppId: appId,
       dshModelOrigin: resolvePackagedModelOrigin(env),
@@ -108,9 +108,9 @@ export function createElectronBuilderConfig(
       ...buildVersion === productVersion ? {} : { version: buildVersion },
       ...packaged === undefined ? {} : { dshBuildCommit: packaged.commit, dshBuildDirty: packaged.dirty },
     },
-    productName: 'DeepSeek Harness',
+    productName: 'Zhishu',
     // Unsigned builds carry their own suffix so a shared file can never pass for a release artifact.
-    artifactName: `deepseek-harness-\${version}-\${os}-\${arch}${unsigned ? '-unsigned' : ''}.\${ext}`,
+    artifactName: `zhishu-\${version}-\${os}-\${arch}${unsigned ? '-unsigned' : ''}.\${ext}`,
     directories: { output: unsigned ? buildPaths.unsignedArtifacts : buildPaths.artifacts },
     asar: true,
     electronDist: buildPaths.electron,
@@ -150,8 +150,8 @@ export function createElectronBuilderConfig(
       { from: fileURLToPath(new URL('../../../overlay', import.meta.url)), to: 'overlay' },
       { from: buildPaths.modelSite, to: 'model-site' },
       { from: fileURLToPath(new URL('../resources/model-gateway.default.json', import.meta.url)), to: 'model-gateway.json' },
-      // Windows tray bitmaps; macOS keeps the Dock and ships no menu bar icon.
-      ...(packagesWindows ? [{ from: fileURLToPath(new URL('../resources/tray-windows.ico', import.meta.url)), to: 'tray.ico' }] : []),
+      // Same artwork as the Explorer icon. macOS keeps the Dock and ships no menu bar icon.
+      ...(packagesWindows ? [{ from: fileURLToPath(new URL('../resources/icon-windows.ico', import.meta.url)), to: 'tray.ico' }] : []),
     ],
     mac: {
       icon: fileURLToPath(new URL('../resources/icon-macos.png', import.meta.url)),
@@ -161,7 +161,7 @@ export function createElectronBuilderConfig(
       identity: macOSSigning?.signingIdentity,
       forceCodeSigning: true,
       hardenedRuntime: true,
-      extendInfo: { NSMicrophoneUsageDescription: 'DeepSeek Harness uses your microphone to transcribe speech into message drafts.' },
+      extendInfo: { NSMicrophoneUsageDescription: 'Zhishu Harness uses your microphone to transcribe speech into message drafts.' },
       entitlements: fileURLToPath(new URL('./macos-entitlements.plist', import.meta.url)),
       entitlementsInherit: fileURLToPath(new URL('./macos-entitlements.plist', import.meta.url)),
       // ASAR-unpacked native runtime files are pre-signed; PAK resources are sealed by their enclosing bundle.

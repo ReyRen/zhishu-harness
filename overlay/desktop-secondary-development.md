@@ -140,7 +140,7 @@ model 仓库的 `/desktop-entry` 不能要求登录标记。冷启动时 cookie 
 在一个终端里启动解压目录。这条命令占住该终端，直到窗口关掉，不是后台任务。图形界面程序用 Ctrl+C 不一定能停掉，关掉窗口即可。
 
 ```powershell
-& "C:\Users\Admin\Documents\code\zhishu-harness\apps\desktop\.desktop-build\targets\win-x64\unsigned-artifacts\win-unpacked\DeepSeek Harness.exe" --remote-debugging-port=9222
+& "C:\Users\Admin\Documents\code\zhishu-harness\apps\desktop\.desktop-build\targets\win-x64\unsigned-artifacts\win-unpacked\Zhishu.exe" --remote-debugging-port=9222
 ```
 
 然后用 Chrome 打开 `chrome://inspect`，勾选 Discover network targets，在 Configure 里加上 `localhost:9222`，再对目标点 inspect。
@@ -164,7 +164,9 @@ model 仓库的 `/desktop-entry` 不能要求登录标记。冷启动时 cookie 
 - `apps/desktop/resources/icon-windows.ico`：安装包和安装后的 exe
 - `apps/desktop/resources/app-icon.png`：Windows 安装包内的 `icon.png`
 
-`apps/desktop/scripts/electron-builder-config.mjs` 的 `win.icon` 指向 ico。`apps/desktop/electron-builder.config.d.mts` 里的 `win` 类型必须声明 `icon`，否则 `tsc` 在打包编译阶段失败。托盘图标仍是原来的鲸鱼图。
+`apps/desktop/scripts/electron-builder-config.mjs` 的 `win.icon` 指向 ico，安装后的 exe 和安装包向导用这份。同一份 ico 也作为 `extraResources` 打成 `resources/tray.ico`，托盘读的是它，不是 `resources/tray-windows.ico`。`apps/desktop/electron-builder.config.d.mts` 里的 `win` 类型必须声明 `icon`，否则 `tsc` 在打包编译阶段失败。
+
+安装包显示名是同一文件里的 `productName`，现为 `Zhishu`。它决定安装后的 `Zhishu.exe`、开始菜单和安装目录名。安装包文件名是 `artifactName`，现为 `zhishu-<版本>-win-x64-unsigned.exe`。窗口标题、托盘提示、关于和菜单文案是 `Zhishu Harness`，Harness 仍保留。壳内文案在 `apps/desktop/src/locale.ts`，会话页标题来自构建时的 `DSH_CLIENT_TITLE`。
 
 ## 打未签名安装包
 
@@ -185,8 +187,8 @@ pnpm run package:desktop:win:x64:unsigned
 
 | 文件 | 作用 |
 |---|---|
-| `deepseek-harness-<版本>-win-x64-unsigned.exe` | NSIS 安装包。双击进入安装向导，装到当前用户 |
-| `win-unpacked/DeepSeek Harness.exe` | 已解压的程序，双击直接启动，不经过安装 |
+| `zhishu-<版本>-win-x64-unsigned.exe` | NSIS 安装包。双击进入安装向导，装到当前用户 |
+| `win-unpacked/Zhishu.exe` | 已解压的程序，双击直接启动，不经过安装 |
 
 文件名里的 `-unsigned` 表示不能当作正式发布包上传。Windows 会提示未签名。
 

@@ -133,8 +133,9 @@ export class ModelPlatformGate {
     // makes Windows abort minimize and pop the window back onto the desktop.
     let away = false
     let holdMinimizeUntil = 0
+    let concealed = false
     const fit = (): void => {
-      if (away || window.isDestroyed() || window.isMinimized()) return
+      if (concealed || away || window.isDestroyed() || !window.isVisible() || window.isMinimized()) return
       this.closeMenu()
       this.fit()
     }
@@ -172,7 +173,13 @@ export class ModelPlatformGate {
     })
     window.on('show', () => {
       if (Date.now() < holdMinimizeUntil) return
+      concealed = false
+      away = false
       fitAgain()
+    })
+    window.on('hide', () => {
+      concealed = true
+      this.parkCover()
     })
     window.on('minimize', () => {
       away = true
@@ -180,7 +187,12 @@ export class ModelPlatformGate {
     })
     if (process.platform === 'win32') {
       window.hookWindowMessage(0x0112, (wParam) => {
-        if ((wParam.readUInt32LE(0) & 0xFFF0) === 0xF020) sendToTaskbar()
+        const command = wParam.readUInt32LE(0) & 0xFFF0
+        // SC_MINIMIZE. A child view makes Windows keep the window on the desktop.
+        if (command === 0xF020) sendToTaskbar()
+        // SC_CLOSE. The shell hides the window and leaves the tray icon. Detach the
+        // cover first, or the child view cancels that hide.
+        if (command === 0xF060) { concealed = true; this.parkCover() }
       })
     }
     this.fit()
@@ -328,6 +340,9 @@ export class ModelPlatformGate {
   }
 
   private onAddress(url: string): void {
+    const window = this.window
+    const view = this.view
+    if (window === undefined || window.isDestroyed() || view === undefined || view.webContents.isDestroyed()) return
     let parsed: URL
     try { parsed = new URL(url) } catch { return }
     if (parsed.origin !== this.origin) return
@@ -335,7 +350,7 @@ export class ModelPlatformGate {
     if (path === '/login' || path === '/register') {
       this.authenticated = false
       this.show('business')
-      this.window?.show()
+      if (!window.isDestroyed() && window.isVisible()) window.show()
       return
     }
     // Identity completion and the cold-start entry stay on this page. Login's own

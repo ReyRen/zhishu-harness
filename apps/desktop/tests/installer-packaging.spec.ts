@@ -47,7 +47,7 @@ describe('installer preparation preserves application dependencies', () => {
       // Only the Windows package carries the tray bitmaps; macOS keeps the Dock.
       const trayIcon = config.extraResources.find(resource => resource.to === 'tray.ico')
       if (platform === 'win32') {
-        expect(readFileSync(trayIcon!.from)).toEqual(readFileSync(new URL('../resources/tray-windows.ico', import.meta.url)))
+        expect(readFileSync(trayIcon!.from)).toEqual(readFileSync(new URL('../resources/icon-windows.ico', import.meta.url)))
       } else {
         expect(trayIcon).toBeUndefined()
       }
@@ -78,7 +78,7 @@ describe('installer preparation preserves application dependencies', () => {
       DSH_DESKTOP_TARGET_ARCH: 'x64',
       DSH_DESKTOP_UNSIGNED: '1',
     }, 'win32', 'x64')
-    expect(config.artifactName).toBe('deepseek-harness-${version}-${os}-${arch}-unsigned.${ext}')
+    expect(config.artifactName).toBe('zhishu-${version}-${os}-${arch}-unsigned.${ext}')
   })
 
   it('packages every preload entry point the shell loads', async () => {
