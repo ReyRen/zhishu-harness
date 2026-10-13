@@ -1,0 +1,12 @@
+# Container-owned Office resources are queried in place, never copied to user storage.
+- insert:
+    - id: workspace-dependencies
+      name: '@deepseek-ai/dsh-tool-workspace-dependencies'
+      config:
+        source: !!js process.env.DSH_PRIMARY_RUNTIME
+
+    - id: skill-office
+      name: '@deepseek-ai/dsh-skill-office'
+      config:
+        assetRoot: !!js process.getBuiltinModule('node:path').resolve(process.env.DSH_PRIMARY_RUNTIME, '..', 'office-skills')
+        node: !!js process.getBuiltinModule('node:path').resolve(process.env.DSH_PRIMARY_RUNTIME, 'dependencies', 'node', 'bin', 'node')

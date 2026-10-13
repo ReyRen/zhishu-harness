@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-本目录将当前 `zhishu-harness` 源码构建为完整原生 Web 镜像，供 `gcs-harness-master` 按用户创建 Swarm Service。镜像保留原生 Web，不使用 Nginx 或运行时 patch，并启用 `main` 上实现的托管默认工作区与目录根策略。
+本目录将当前 `zhishu-harness` 源码构建为完整原生 Web 镜像，供 `gcs-harness-master` 按用户创建 Swarm Service。镜像保留原生 Web，不使用 Nginx，并启用 `main` 上实现的托管默认工作区与目录根策略。
 
 ## 相关项目
 
@@ -26,6 +26,18 @@
 
 目录选择器以 `/storage-root-jfs/user` 为根。它只显示当前用户的挂载目录及其后代，并拒绝跳出根的路径或符号链接。`DSH_WORKSPACE_ROOT`、`DSH_DEFAULT_WORKSPACE` 和 `DSH_DEFAULT_WORKSPACE_TITLE` 配置该策略；生产镜像提供固定默认值，Compose 也显式列出这些值。
 
+## Office 文档创作
+
+构建过程根据上游下载锁准备官方 [primary runtime](../packages/skill/tool-workspace-dependencies/README.zh.md) 和 Office 资源。[cache-primary-runtime.mjs](cache-primary-runtime.mjs) 用 curl 缓存完全相同的官方归档，检查 SHA256，并由上游构建器完成组装和验证；它不使用镜像源或中间服务器。构建参数 `DSH_RESOURCE_DOWNLOAD_TIMEOUT_MS` 的单次下载默认期限为 600000 毫秒，供大体积发布资源使用。`DSH_PRIMARY_RUNTIME=/opt/dsh-runtime/primary-runtime` 指向随包的 Python、Node.js 和 pnpm；Python 包含 numpy、pandas 以及 Word、Excel、PowerPoint 创作库。随包 Python 也位于 `PATH` 最前。
+
+容器在原生 Web profile 中加载 [office.cordis.patch.yml](office.cordis.patch.yml)，提供 `load_workspace_dependencies` 和 `office-docx`、`office-pptx`、`office-xlsx`。skill（技能）使用已安装的 LibreOffice Kit CLI（命令行界面），不使用系统 LibreOffice。镜像安装拉丁与中文字体用于渲染。资源直接从镜像层查询，启动时不下载，也不复制到 JFS；生成文件存入用户工作区。官方 [Office skill 参考](../packages/skill/skill-office/README.zh.md)说明创作、检查和渲染限制。
+
+镜像构建在无网络环境执行 [smoke-office.mjs](smoke-office.mjs)。它在私有临时目录检查实际 Web 技能注册、文档读写与结构、PDF 转换、图像渲染和公式重算。对已构建镜像重复检查时，不挂载用户数据：
+
+```bash
+docker run --rm --init --network none --entrypoint node "$IMAGE" /opt/dsh/docker/smoke-office.mjs
+```
+
 ## 验证单个用户
 
 `docker/compose.yml` 只验证镜像；生产用户 Service 由 Master 创建。
@@ -35,10 +47,12 @@ cd /path/to/zhishu-harness
 cp docker/.env.example docker/.env
 
 # Set DSH_CLIENT_COMMIT_HASH to the complete output of git rev-parse HEAD.
+# Set DSH_USER_ROOT_PATH to an existing validation user's private directory.
 set -a
 . docker/.env
 set +a
 
+test -n "$DSH_USER_ROOT_PATH"
 install -d -m 0700 "$DSH_USER_ROOT_PATH/dsh-home" "$DSH_USER_ROOT_PATH/workspace"
 docker compose --env-file docker/.env -f docker/compose.yml config
 docker compose --env-file docker/.env -f docker/compose.yml up -d

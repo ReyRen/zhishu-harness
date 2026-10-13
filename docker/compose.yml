@@ -7,6 +7,7 @@ services:
       args:
         NODE_VERSION: ${NODE_VERSION:-24-bookworm-slim}
         DSH_CLIENT_COMMIT_HASH: ${DSH_CLIENT_COMMIT_HASH:?set DSH_CLIENT_COMMIT_HASH to git rev-parse HEAD}
+        DSH_RESOURCE_DOWNLOAD_TIMEOUT_MS: ${DSH_RESOURCE_DOWNLOAD_TIMEOUT_MS:-600000}
     image: ${ZHISHU_HARNESS_IMAGE:-zhishu-harness:local}
     environment:
       DSH_HOME: /storage-root-jfs/user/dsh-home
@@ -16,6 +17,8 @@ services:
       DSH_WEB_PORT: 3080
       DSH_INTERNAL_PORT: ${DSH_INTERNAL_PORT:-3081}
       DSH_PUBLIC_AUTHORITY: ${DSH_PUBLIC_AUTHORITY:-dsh-web:3081}
+      DSH_PRIMARY_RUNTIME: /opt/dsh-runtime/primary-runtime
+      PYTHONDONTWRITEBYTECODE: '1'
       NODE_ENV: production
       NODE_OPTIONS: --enable-source-maps
       TZ: ${TZ:-Asia/Shanghai}
