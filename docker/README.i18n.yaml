@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docker/README.md
 /dsh-container-build:
-  en: 53a1f0c465f63126
-  zh: 0368efd0010e6e6d
+  en: 17d3cfe8a32020cb
+  zh: 203d3c7c3a6ff7b8
 /dsh-container-build/related-projects:
   en: b5ec6cb46b1568dc
   zh: cda084620491cfb5
@@ -17,6 +17,9 @@
 /dsh-container-build/user-workspaces:
   en: 0f1087b5d9220262
   zh: 5dc13c3b543c7742
+/dsh-container-build/office-authoring:
+  en: 46f30dc9ef4e6d96
+  zh: 3935eac27052a863
 /dsh-container-build/validate-one-user:
   en: afefc43f676d6c39
   zh: 349e17736e86974f
