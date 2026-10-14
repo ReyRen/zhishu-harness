@@ -6,12 +6,17 @@
 
 ```text
 overlay/
-└── brand/                 Sidebar brand and new-conversation mark
-    ├── cordis.patch.yml   Disable the official brand row and insert this plugin
+├── brand/                 Sidebar brand and new-conversation mark
+│   ├── cordis.patch.yml   Disable the official brand row and insert this plugin
+│   ├── package.json       Declare dsh.client
+│   ├── index.js           Host: serve images
+│   ├── client.js          Browser: occupy the sidebar and hero brand slots
+│   └── assets/            logo.png, logo-mark.png, zhishu-hero.webp, zhishu-hero-loop.webp, zhishu.gif
+└── running-status/        Running mark, “正在思考”, conversation scrollbar
+    ├── cordis.patch.yml   Insert this plugin
     ├── package.json       Declare dsh.client
-    ├── index.js           Host: serve images
-    ├── client.js          Browser: occupy the sidebar and hero brand slots
-    └── assets/            logo.png, logo-mark.png, zhishu-hero.webp, zhishu-hero-loop.webp, zhishu.gif
+    ├── index.js           Host row so the client bundle loads
+    └── client.js          Browser: replace the running status and hide the extra bar
 ```
 
 新增能力时可沿用此目录结构，不要把补丁写进官方的 `cordis.patch.yml`。官方界面如何区分插件，以及无外网部署时应把插件放在哪里，见 [plugin-secondary-development.md](./plugin-secondary-development.md)。

@@ -1,0 +1,21 @@
+{
+  "name": "@zhishu/dsh-overlay-running-status",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Replace the DeepSeek running-status mark and hide the conversation's extra horizontal scrollbar.",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer"
+      ],
+      "platform": "web"
+    }
+  }
+}
