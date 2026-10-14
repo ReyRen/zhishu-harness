@@ -3,6 +3,24 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { MODEL_SPACE_IPC, type ModelSpace, type ModelSpaceState } from './model-space.ts'
 
+contextBridge.exposeInMainWorld('zhishuDesktop', {
+  embedded: true,
+  publishAccount(account: { userAccount?: string; userName?: string }) {
+    ipcRenderer.send(MODEL_SPACE_IPC.account, {
+      userAccount: typeof account?.userAccount === 'string' ? account.userAccount : '',
+      userName: typeof account?.userName === 'string' ? account.userName : '',
+    })
+  },
+})
+
+ipcRenderer.on(MODEL_SPACE_IPC.logout, () => {
+  document.dispatchEvent(new Event('zhishu-desktop-logout'))
+})
+
+ipcRenderer.on(MODEL_SPACE_IPC.businessSidebarToggle, () => {
+  document.dispatchEvent(new Event('zhishu-desktop-sidebar-toggle'))
+})
+
 contextBridge.exposeInMainWorld('dshModelSpace', {
   state: () => ipcRenderer.invoke(MODEL_SPACE_IPC.state) as Promise<ModelSpaceState>,
   switchTo: (space: ModelSpace) => ipcRenderer.invoke(MODEL_SPACE_IPC.switch, space) as Promise<ModelSpaceState>,

@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { app, BrowserWindow, ipcMain, net, session, shell, WebContentsView, type IpcMainInvokeEvent } from 'electron'
 import { MODEL_SITE_ORIGIN } from './model-gateway.ts'
-import { MODEL_SPACE_IPC, type ModelSpace, type ModelSpaceState } from './model-space.ts'
+import { MODEL_SPACE_IPC, type ModelSpace, type ModelSpaceState, type PlatformAccount } from './model-space.ts'
 import { WINDOWS_TITLEBAR_HEIGHT } from '../windows-layout.ts'
 import { workspaceMenuDocument } from './workspace-menu.ts'
 
@@ -49,6 +49,20 @@ export function modelPlatformOrigin(env: NodeJS.ProcessEnv = process.env, packag
 }
 
 /** Pages that stay on the login flow and do not open the Harness workspace yet. */
+/** Accept either the display-info response or the fields the model page reports. */
+function readPlatformAccount(value: unknown): PlatformAccount | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const record = value as { code?: unknown; content?: unknown; userAccount?: unknown; userName?: unknown }
+  if (record.code === 2001 || record.code === '2001' || record.code === 2009 || record.code === '2009') return undefined
+  const source = typeof record.content === 'object' && record.content !== null
+    ? record.content as { userAccount?: unknown; userName?: unknown }
+    : record
+  const userName = typeof source.userName === 'string' ? source.userName.trim() : ''
+  const userAccount = typeof source.userAccount === 'string' ? source.userAccount.trim() : ''
+  if (userName === '' && userAccount === '') return undefined
+  return { userAccount, userName }
+}
+
 function isLoginGatePath(pathname: string): boolean {
   return pathname === '/login'
     || pathname === '/register'
@@ -69,6 +83,7 @@ export class ModelPlatformGate {
   private window: BrowserWindow | undefined
   private active: ModelSpace = 'conversation'
   private authenticated = false
+  private account: PlatformAccount | null = null
   private publishGeneration = 0
   private readonly onAuthenticated: () => Promise<void>
 
@@ -81,6 +96,10 @@ export class ModelPlatformGate {
     ipcMain.removeHandler(MODEL_SPACE_IPC.state)
     ipcMain.removeHandler(MODEL_SPACE_IPC.switch)
     ipcMain.removeHandler(MODEL_SPACE_IPC.menu)
+    ipcMain.removeHandler(MODEL_SPACE_IPC.accountGet)
+    ipcMain.removeHandler(MODEL_SPACE_IPC.logout)
+    ipcMain.removeHandler(MODEL_SPACE_IPC.businessSidebarToggle)
+    ipcMain.removeAllListeners(MODEL_SPACE_IPC.account)
     ipcMain.handle(MODEL_SPACE_IPC.state, (event) => {
       this.assertSender(event)
       return this.state()
@@ -93,6 +112,33 @@ export class ModelPlatformGate {
       if (!this.authenticated) return this.state()
       this.show(space)
       return this.state()
+    })
+    ipcMain.handle(MODEL_SPACE_IPC.accountGet, (event) => {
+      this.assertSender(event)
+      if (event.sender !== this.window?.webContents) throw new Error('desktop model login: unowned renderer')
+      return this.account
+    })
+    ipcMain.handle(MODEL_SPACE_IPC.logout, (event) => {
+      this.assertSender(event)
+      if (event.sender !== this.window?.webContents) throw new Error('desktop model login: unowned renderer')
+      const view = this.view
+      if (view === undefined || view.webContents.isDestroyed()) return
+      view.webContents.send(MODEL_SPACE_IPC.logout)
+    })
+    ipcMain.handle(MODEL_SPACE_IPC.businessSidebarToggle, (event) => {
+      this.assertSender(event)
+      if (event.sender !== this.window?.webContents) throw new Error('desktop model login: unowned renderer')
+      if (this.active !== 'business') return
+      const view = this.view
+      if (view === undefined || view.webContents.isDestroyed()) return
+      view.webContents.send(MODEL_SPACE_IPC.businessSidebarToggle)
+    })
+    ipcMain.on(MODEL_SPACE_IPC.account, (event, payload: unknown) => {
+      if (event.sender !== this.view?.webContents || event.senderFrame !== event.sender.mainFrame) return
+      const account = readPlatformAccount(payload)
+      if (account === undefined) return
+      this.account = account
+      this.publishAccount()
     })
     ipcMain.handle(MODEL_SPACE_IPC.menu, (event, x: unknown, y: unknown, dark: unknown, zh: unknown) => {
       this.assertSender(event)
@@ -128,7 +174,7 @@ export class ModelPlatformGate {
     // The caption asks for state as soon as its document loads. That is often before
     // this gate exists, and a later reload drops the in-flight event. Send again
     // whenever the Harness document is actually on screen.
-    window.webContents.on('did-finish-load', () => { this.publish() })
+    window.webContents.on('did-finish-load', () => { this.publish(); this.publishAccount() })
     // While this is set, layout must not attach the cover. Reattaching the child view
     // makes Windows abort minimize and pop the window back onto the desktop.
     let away = false
@@ -196,6 +242,15 @@ export class ModelPlatformGate {
       })
     }
     this.fit()
+    this.openDevelopmentTools()
+  }
+
+  /** Unpackaged dev and start open this page's tools beside the conversation tools. */
+  private openDevelopmentTools(): void {
+    if (app.isPackaged || process.env.DSH_DESKTOP_OPEN_DEVTOOLS === '0') return
+    const contents = this.view?.webContents
+    if (contents === undefined || contents.isDestroyed()) return
+    contents.openDevTools({ mode: 'detach' })
   }
 
   /**
@@ -349,6 +404,8 @@ export class ModelPlatformGate {
     const path = parsed.pathname
     if (path === '/login' || path === '/register') {
       this.authenticated = false
+      this.account = null
+      this.publishAccount()
       this.show('business')
       if (!window.isDestroyed() && window.isVisible()) window.show()
       return
@@ -362,13 +419,29 @@ export class ModelPlatformGate {
     if (this.authenticated) return
     this.authenticated = true
     this.show('conversation')
+    void this.loadAccount()
     void this.onAuthenticated()
   }
 
-  private async sessionAlive(): Promise<boolean> {
+  /** Ask the platform who is logged in, then tell the conversation page. */
+  private async loadAccount(): Promise<void> {
+    const account = await this.fetchAccount()
+    if (account === undefined) return
+    this.account = account
+    this.publishAccount()
+  }
+
+  private publishAccount(): void {
+    const window = this.window
+    if (window === undefined || window.isDestroyed()) return
+    window.webContents.send(MODEL_SPACE_IPC.accountChanged, this.account)
+  }
+
+  /** @returns the signed-in platform user, or undefined when the cookie is absent or expired. */
+  private async fetchAccount(): Promise<PlatformAccount | undefined> {
     const partition = session.fromPartition(PARTITION)
     const cookies = await partition.cookies.get({ url: this.origin })
-    if (cookies.length === 0) return false
+    if (cookies.length === 0) return undefined
     try {
       const response = await net.fetch(new URL('/DistributedAISystem/UserLoginDisplayInfo', this.origin).href, {
         method: 'POST',
@@ -377,15 +450,17 @@ export class ModelPlatformGate {
           cookie: cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; '),
         },
       })
-      if (!response.ok) return false
+      if (!response.ok) return undefined
       const body: unknown = await response.json()
-      if (typeof body !== 'object' || body === null) return false
-      const record = body as { code?: unknown; content?: { userName?: unknown } }
-      if (record.code === 2001 || record.code === '2001' || record.code === 2009 || record.code === '2009') return false
-      return typeof record.content?.userName === 'string' && record.content.userName !== ''
+      return readPlatformAccount(body)
     } catch {
-      return false
+      return undefined
     }
+  }
+
+  private async sessionAlive(): Promise<boolean> {
+    const account = await this.fetchAccount()
+    return account !== undefined && account.userName !== ''
   }
 
   private assertSender(event: IpcMainInvokeEvent): void {

@@ -3,7 +3,7 @@
 import type { DesktopShortcutInput, ShortcutConfigSnapshot, ShortcutSaveResult } from '@deepseek-ai/dsh-client-shortcuts/protocol'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { DESKTOP_IPC, SCHEME, type DshDesktopProductApi, type DesktopUpdatePresentation } from './ipc.ts'
-import { MODEL_SPACE_IPC, type ModelSpace, type ModelSpaceState } from './model-space/model-space.ts'
+import { MODEL_SPACE_IPC, type ModelSpace, type ModelSpaceState, type PlatformAccount } from './model-space/model-space.ts'
 import { PLATFORM_IPC } from './platform-ipc.ts'
 import { markDocumentPlatform, syncWindowFullscreen } from './preload-platform.ts'
 import { syncNativeTheme } from './preload-theme.ts'
@@ -101,6 +101,15 @@ syncNativeTheme()
 contextBridge.exposeInMainWorld('dshDesktop', location.protocol === `${SCHEME}:` && location.hostname === 'app' && process.isMainFrame ? createProductApi() : { protocolVersion: 1 })
 
 if (location.protocol === `${SCHEME}:` && location.hostname === 'app') {
+  contextBridge.exposeInMainWorld('zhishuPlatform', {
+    account: () => ipcRenderer.invoke(MODEL_SPACE_IPC.accountGet) as Promise<PlatformAccount | null>,
+    onAccount(listener: (account: PlatformAccount | null) => void) {
+      const handler = (_event: Electron.IpcRendererEvent, account: PlatformAccount | null): void => { listener(account) }
+      ipcRenderer.on(MODEL_SPACE_IPC.accountChanged, handler)
+      return () => { ipcRenderer.off(MODEL_SPACE_IPC.accountChanged, handler) }
+    },
+    logout: () => ipcRenderer.invoke(MODEL_SPACE_IPC.logout) as Promise<void>,
+  })
   contextBridge.exposeInMainWorld('dshModelSpace', {
     state: () => ipcRenderer.invoke(MODEL_SPACE_IPC.state) as Promise<ModelSpaceState>,
     switchTo: (space: ModelSpace) => ipcRenderer.invoke(MODEL_SPACE_IPC.switch, space) as Promise<ModelSpaceState>,
@@ -114,4 +123,47 @@ if (location.protocol === `${SCHEME}:` && location.hostname === 'app') {
     read: () => ipcRenderer.invoke(DESKTOP_IPC.localeBootstrap),
     onChange: (locale: string) => { ipcRenderer.send(DESKTOP_IPC.localeChanged, locale) },
   })
+  // The caption collapse button stays on this page. In the business space it
+  // must fold the platform sidebar instead of the conversation sidebar under it.
+  // The collapsed new-session control is also pinned in this strip, so hide it
+  // and pull the caption menu back while the platform page is showing.
+  // The root is absent until the HTML parser creates it.
+  let activeSpace: ModelSpace = 'conversation'
+  const installBusinessCaption = (): void => {
+    const root = document.documentElement as HTMLElement | null
+    if (root === null || root.querySelector('style[data-zhishu-business-caption]') !== null) return
+    const businessCaption = document.createElement('style')
+    businessCaption.dataset.zhishuBusinessCaption = ''
+    businessCaption.textContent = `html[data-zhishu-business] button[class*="_newSession"]{display:none!important}
+html[data-windows-titlebar][data-zhishu-business]{--dsh-windows-menu-start:48px!important}`
+    root.append(businessCaption)
+    root.toggleAttribute('data-zhishu-business', activeSpace === 'business')
+  }
+  if ((document.documentElement as HTMLElement | null) === null) window.addEventListener('DOMContentLoaded', installBusinessCaption, { once: true })
+  else installBusinessCaption()
+  const applySpace = (space: ModelSpace): void => {
+    activeSpace = space
+    const root = document.documentElement as HTMLElement | null
+    if (root !== null) root.toggleAttribute('data-zhishu-business', space === 'business')
+  }
+  ipcRenderer.on(MODEL_SPACE_IPC.changed, (_event, state: ModelSpaceState) => {
+    if (state?.active === 'conversation' || state?.active === 'business') applySpace(state.active)
+  })
+  window.addEventListener('click', (event) => {
+    if (activeSpace !== 'business' || !isCaptionSidebarToggle(event.target)) return
+    event.preventDefault()
+    event.stopPropagation()
+    void ipcRenderer.invoke(MODEL_SPACE_IPC.businessSidebarToggle)
+  }, true)
+}
+
+/** The Windows caption collapse control is the fixed button at the left of the title strip. */
+function isCaptionSidebarToggle(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false
+  const button = target.closest('button')
+  if (button === null || getComputedStyle(button).position !== 'fixed') return false
+  const rect = button.getBoundingClientRect()
+  const titlebar = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--dsh-windows-titlebar-height'))
+  const band = Number.isFinite(titlebar) ? titlebar : 40
+  return rect.left >= 0 && rect.left < 40 && rect.bottom <= band + 8
 }

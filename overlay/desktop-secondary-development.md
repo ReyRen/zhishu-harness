@@ -28,6 +28,10 @@
 
 退出确认被取消，或官方侧还没进入会话就需要把窗口露出来时，用 `presentLogin()` 再盖上 `/login`。
 
+会话页左下角是平台账号，不是 DeepSeek 账号。官方那一行 `ui-settings-account` 保持关闭。`overlay/platform-account` 占住原来的 `settings.launcher`：头像和账号名来自平台登录，弹出层里是「设置」和「退出登录」。设置仍打开 Harness 自己的设置。退出登录通知壳，由业务页执行原来的退出并回到 `/login`。
+
+业务页只在桌面壳里改。model 预加载注入 `window.zhishuDesktop.embedded`。有这个标记时藏起蓝顶栏和侧栏自己的收起按钮，侧栏左下角放平台账号菜单（用户信息、修改密码、值班电话、用户手册、其他平台、全屏、退出登录），标签栏保留。窗口左上角的折叠按钮按当前空间切换：会话时收会话侧栏，业务时通知业务页收它自己的侧栏。会话侧栏收起后钉在标题栏上的「新会话」按钮，切到业务时藏起，菜单回到折叠按钮旁边。`Header.vue` 仍负责拉取用户信息和相关登录副作用，对话框挂到 `body`。浏览器直接打开 model 没有这个标记，顶栏、侧栏和收起按钮保持原样。
+
 ### 工作空间切换
 
 只有 Windows 标题栏有切换。按钮在「编辑」右侧，由 `preload-menu.ts` 画在对话页上，未登录时隐藏。下拉层是另一个 `WebContentsView`（`workspace-menu.ts`），这样平台页盖住窗口时菜单仍在最上面。macOS 没有这套网页标题栏，也就没有这个按钮。
@@ -124,7 +128,7 @@ model 仓库的 `/desktop-entry` 不能要求登录标记。冷启动时 cookie 
 | 变量 | 在哪设 | 作用 |
 |---|---|---|
 | `DSH_MODEL_ORIGIN` | 启动 `pnpm run dev:desktop` 的终端 | 未打包时改平台页地址。不设则用 `http://127.0.0.1:8888` |
-| `DSH_DESKTOP_OPEN_DEVTOOLS` | 同上。不设时开发脚本当作 `1` | 设为 `0` 时，本地开发不自动打开会话页的开发工具。安装包不看这个变量，业务页也不会因此打开 |
+| `DSH_DESKTOP_OPEN_DEVTOOLS` | 同上。不设时开发脚本当作 `1` | 设为 `0` 时，本地开发不自动打开会话页和业务页的开发工具。安装包不看这个变量 |
 | `DSH_MODEL_DELIVERY` | 执行打包命令的终端 | `full`（默认）构建 model、flow、prompt。`lite` 只构建 model 的 `build:delivery:lite` |
 | `DSH_DESKTOP_SKIP_MODEL_BUILD` | 同上 | 设为 `1` 时不重新构建，只拷贝已经打好的 dist |
 | `DSH_MODEL_ROOT` | 同上 | model 仓库路径。不设则用与 `zhishu-harness` 同级的 `model` |
@@ -159,7 +163,7 @@ pnpm run clean
 
 ## 看安装包里的网络请求
 
-安装包启动时不会自己打开开发工具。`DSH_DESKTOP_OPEN_DEVTOOLS` 只在 `pnpm run dev:desktop` 里生效，而且打开的是会话页 `dsh-app://app/`。业务页的登录和平台接口在盖在上面的那个 view 里，会话页的网络面板看不到。
+安装包启动时不会自己打开开发工具。`pnpm run dev:desktop` 和 `pnpm run start:desktop` 会给会话页和业务页各开一个独立窗口。登录和平台接口在业务页那个窗口里，会话页的网络面板看不到这些请求。
 
 要看刚打出来的程序，先完全退出已经安装的「DeepSeek Harness」，包括托盘。这个应用有单实例锁，安装版还在跑时，下面的命令只会把安装版窗口唤到前面，调试端口不会生效。
 

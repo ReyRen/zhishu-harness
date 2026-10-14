@@ -12,8 +12,9 @@ overlay/
 │   ├── index.js           Host: serve images
 │   ├── client.js          Browser: occupy the sidebar and hero brand slots
 │   └── assets/            logo.png, logo-mark.png, zhishu-hero.webp, zhishu-hero-loop.webp, zhishu.gif
-└── hide-official-account/ Disable the official DeepSeek account menu. Desktop login uses the model site
-    └── cordis.patch.yml   Disable ui-settings-account only
+├── hide-official-account/ Disable the official DeepSeek account menu. Desktop login uses the model site
+│   └── cordis.patch.yml   Disable ui-settings-account only
+└── platform-account/      会话页侧栏的平台账号。设置和退出登录放在这个菜单里
 ```
 
 新增能力时可沿用此目录结构，不要把补丁写进官方的 `cordis.patch.yml`。官方界面如何区分插件，以及无外网部署时应把插件放在哪里，见 [plugin-secondary-development.md](./plugin-secondary-development.md)。桌面壳登录、工作空间和 Windows 打包见 [desktop-secondary-development.md](./desktop-secondary-development.md)。

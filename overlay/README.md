@@ -12,8 +12,9 @@ overlay/
 │   ├── index.js           Host: serve images
 │   ├── client.js          Browser: occupy the sidebar and hero brand slots
 │   └── assets/            logo.png, logo-mark.png, zhishu-hero.webp, zhishu-hero-loop.webp, zhishu.gif
-└── hide-official-account/ Disable the official DeepSeek account menu. Desktop login uses the model site
-    └── cordis.patch.yml   Disable ui-settings-account only
+├── hide-official-account/ Disable the official DeepSeek account menu. Desktop login uses the model site
+│   └── cordis.patch.yml   Disable ui-settings-account only
+└── platform-account/      Platform user on the conversation sidebar. Settings and sign-out live in that menu
 ```
 
 Copy this directory structure for another capability. Keep its patch outside the official `cordis.patch.yml`. For how the official UI distinguishes plugins and where to put them in offline deployments, see [plugin-secondary-development.md](./plugin-secondary-development.md) (Chinese). Desktop login, workspaces, and Windows packaging are in [desktop-secondary-development.md](./desktop-secondary-development.md) (Chinese).

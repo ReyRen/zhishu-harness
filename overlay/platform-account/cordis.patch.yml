@@ -1,0 +1,5 @@
+# The official settings.launcher row is DeepSeek account login. hide-official-account
+# turns that row off. This plugin occupies the same slot with the platform user.
+- insert:
+    - id: zhishu-platform-account
+      name: ./index.js

@@ -1,0 +1,23 @@
+{
+  "name": "@zhishu/dsh-overlay-platform-account",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Platform account menu in the Harness sidebar. Replaces the disabled DeepSeek account row.",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-settings-general"
+      ],
+      "platform": "web"
+    }
+  }
+}
