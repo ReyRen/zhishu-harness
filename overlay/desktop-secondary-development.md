@@ -277,6 +277,7 @@ pnpm 自己会先打出 `Done in … using pnpm v11.7.0`。接着出现 `PostQue
 ```powershell
 $env:ELECTRON_MIRROR = 'https://npmmirror.com/mirrors/electron/'
 $env:ELECTRON_BUILDER_BINARIES_MIRROR = 'https://npmmirror.com/mirrors/electron-builder-binaries/'
+$env:DSH_DESKTOP_SKIP_MODEL_BUILD = '1'
 pnpm run package:desktop:win:x64:unsigned
 ```
 
