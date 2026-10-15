@@ -464,6 +464,13 @@ export async function packageTarget(
     '--pack-destination',
     buildPaths.packedDsh,
   ], buildEnv, REPOSITORY_ROOT)
+  await execute([
+    '--dir',
+    'third-party/dshmarket',
+    'pack',
+    '--pack-destination',
+    buildPaths.packedDsh,
+  ], buildEnv, REPOSITORY_ROOT)
   await execute(['run', 'release:pack', '--family', 'vendor', '--out', buildPaths.packedVendor, ...packArguments], buildEnv, REPOSITORY_ROOT)
   rmSync(buildPaths.packedLandlock, { recursive: true, force: true })
   mkdirSync(buildPaths.packedLandlock, { recursive: true })

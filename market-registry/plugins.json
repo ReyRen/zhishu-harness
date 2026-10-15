@@ -1,0 +1,40 @@
+{
+  "updated": "2026-10-15",
+  "count": 2,
+  "categories": {
+    "theme": {
+      "zh": "主题",
+      "en": "Theme"
+    }
+  },
+  "plugins": [
+    {
+      "name": "dsh-dream-skin",
+      "owner": "RevolutionLA",
+      "url": "https://github.com/RevolutionLA/dsh-dream-skin",
+      "category": "theme",
+      "description": {
+        "zh": "DeepSeek Harness 换肤插件：8 套清透冷调主题、弥散光壁纸、每套皮肤的智能背景、强调色，以及可分享的主题包。",
+        "en": "Dream Skin for DeepSeek Harness: 8 cool translucent themes, diffused-light wallpapers, per-skin backgrounds, accent colors, and shareable theme packs."
+      },
+      "npm": "dsh-dream-skin",
+      "version": "10.15.0",
+      "install": "dsh plugin --profile web add dsh-dream-skin",
+      "added": "2026-10-15"
+    },
+    {
+      "name": "open-sea-skin",
+      "owner": "d-dev0101",
+      "url": "https://github.com/d-dev0101/open-sea-skin",
+      "category": "theme",
+      "description": {
+        "zh": "实时 WebGPU 海洋皮肤，可快捷调节波浪、日光、玻璃不透明度与自动昼夜循环。",
+        "en": "Realtime WebGPU ocean skin with quick controls for waves, daylight, glass opacity, and an automatic day cycle."
+      },
+      "npm": "open-sea-skin",
+      "version": "1.2.5",
+      "install": "dsh plugin --profile web add open-sea-skin",
+      "added": "2026-08-17"
+    }
+  ]
+}
