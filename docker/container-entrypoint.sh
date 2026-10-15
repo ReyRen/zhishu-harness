@@ -6,6 +6,12 @@ internal_port="${DSH_INTERNAL_PORT:-3081}"
 public_authority="${DSH_PUBLIC_AUTHORITY:?DSH_PUBLIC_AUTHORITY is required}"
 workspace_root="${DSH_WORKSPACE_ROOT:-/storage-root-jfs/user}"
 default_workspace="${DSH_DEFAULT_WORKSPACE:-${workspace_root}/workspace}"
+primary_runtime="${DSH_PRIMARY_RUNTIME:?DSH_PRIMARY_RUNTIME is required}"
+
+test -f "${primary_runtime}/runtime.json"
+test -x "${primary_runtime}/dependencies/python/bin/python3"
+test -x "${primary_runtime}/dependencies/node/bin/node"
+test -f "${primary_runtime}/../office-skills/scripts/check_office.py"
 
 install -d -m 0700 "${DSH_HOME}" "${default_workspace}"
 cd "${default_workspace}"
@@ -14,6 +20,7 @@ socat "TCP-LISTEN:${internal_port},fork,reuseaddr,bind=0.0.0.0" "TCP:127.0.0.1:$
 
 exec node /opt/dsh/apps/cli/lib/bin.js \
   --profile web \
+  --patch /opt/dsh/docker/office.cordis.patch.yml \
   --host 127.0.0.1 \
   --port "${web_port}" \
   --trusted-host "${public_authority}" \

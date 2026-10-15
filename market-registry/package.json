@@ -1,0 +1,8 @@
+{
+  "name": "zhishu-market-registry",
+  "private": true,
+  "description": "Local Verdaccio and catalog for the preinstalled plugin market. Not part of the dsh workspace.",
+  "dependencies": {
+    "verdaccio": "6.10.5"
+  }
+}

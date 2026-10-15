@@ -181,15 +181,16 @@ interface ComposedProfile {
   overlays: PatchOptions[]
 }
 
+/** Overlay directory whose insert uses the same Cordis id as the market bundle. */
+const PREINSTALLED_MARKET_OVERLAY = 'dsh-market'
+/** Package name of that bundle. A profile copy inserts the id itself. */
+const PREINSTALLED_MARKET_PACKAGE = 'dshmarket'
+
 /**
- * Fork overlay patches under `<repo>/overlay/<name>/cordis.patch.yml`.
- * Each directory is one secondary-development plugin. They apply only to
- * profiles containing the Web bundle, after the shipped bundles, so an overlay
- * can disable an upstream row without editing it.
- * A packaged desktop app sets `DSH_ZHISHU_OVERLAY` to the copy beside its asar.
- * Vitest boots the same launcher and must keep the stock composition.
- * @param profile - loaded profile whose bundle layers select the Web surface.
- * @returns absolute patch paths, in directory-name order.
+ * Overlay directory for this process. A packaged desktop app sets
+ * `DSH_ZHISHU_OVERLAY` to the copy beside its asar; otherwise the repository
+ * `overlay/` directory is used. The first existing directory wins.
+ * @returns the absolute overlay directory, or `undefined` when neither exists.
  */
 function zhishuOverlayDirectory(): string | undefined {
   const configured = process.env.DSH_ZHISHU_OVERLAY?.trim()
@@ -201,14 +202,27 @@ function zhishuOverlayDirectory(): string | undefined {
   })
 }
 
+/**
+ * Fork overlay patches under `<repo>/overlay/<name>/cordis.patch.yml`.
+ * Each directory is one secondary-development plugin. They apply only to
+ * profiles containing the Web bundle, after the shipped bundles, so an overlay
+ * can disable an upstream row without editing it.
+ * Vitest boots the same launcher and must keep the stock composition.
+ * @param profile - loaded profile whose bundle layers select the Web surface.
+ * @returns absolute patch paths, in directory-name order.
+ */
 function zhishuOverlayPatches(profile: Profile): string[] {
   if (process.env.VITEST !== undefined
     || !profile.layers.some(layer => layer.packageName === '@deepseek-ai/dsh-web-app')) return []
   const dir = zhishuOverlayDirectory()
   if (dir === undefined) return []
+  const profileOwnsMarket = profile.layers.some(layer => layer.packageName === PREINSTALLED_MARKET_PACKAGE)
   const files: string[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue
+    // The profile bundle's own patch already inserts id dsh-market. Loading
+    // this overlay as well would register that id twice.
+    if (profileOwnsMarket && entry.name === PREINSTALLED_MARKET_OVERLAY) continue
     const patch = join(dir, entry.name, 'cordis.patch.yml')
     if (existsSync(patch)) files.push(patch)
   }

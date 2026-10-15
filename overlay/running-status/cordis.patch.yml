@@ -1,0 +1,5 @@
+# Browser-only overlay. No official row to disable: the running status has no
+# slot, so the client rewrites the live row after it renders.
+- insert:
+    - id: zhishu-running-status
+      name: ./index.js

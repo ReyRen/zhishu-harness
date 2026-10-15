@@ -1,0 +1,21 @@
+# Private npm for the plugin market. No uplink: only tarballs published
+# into this registry can be installed.
+storage: ./storage
+auth:
+  htpasswd:
+    file: ./htpasswd
+    max_users: 1000
+uplinks: {}
+packages:
+  "**":
+    access: $all
+    publish: $all
+    unpublish: $all
+log:
+  type: stdout
+  format: pretty
+  level: warn
+listen: 127.0.0.1:4873
+security:
+  api:
+    legacy: true
