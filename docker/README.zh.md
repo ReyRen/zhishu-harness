@@ -30,7 +30,7 @@
 
 构建过程根据上游下载锁准备官方 [primary runtime](../packages/skill/tool-workspace-dependencies/README.zh.md) 和 Office 资源。[cache-primary-runtime.mjs](cache-primary-runtime.mjs) 用 curl 缓存完全相同的官方归档，检查 SHA256，并由上游构建器完成组装和验证；它不使用镜像源或中间服务器。构建参数 `DSH_RESOURCE_DOWNLOAD_TIMEOUT_MS` 的单次下载默认期限为 600000 毫秒，供大体积发布资源使用。`DSH_PRIMARY_RUNTIME=/opt/dsh-runtime/primary-runtime` 指向随包的 Python、Node.js 和 pnpm；Python 包含 numpy、pandas 以及 Word、Excel、PowerPoint 创作库。随包 Python 也位于 `PATH` 最前。
 
-容器在原生 Web profile 中加载 [office.cordis.patch.yml](office.cordis.patch.yml)，提供 `load_workspace_dependencies` 和 `office-docx`、`office-pptx`、`office-xlsx`。skill（技能）使用已安装的 LibreOffice Kit CLI（命令行界面），不使用系统 LibreOffice。镜像安装拉丁与中文字体用于渲染。资源直接从镜像层查询，启动时不下载，也不复制到 JFS；生成文件存入用户工作区。官方 [Office skill 参考](../packages/skill/skill-office/README.zh.md)说明创作、检查和渲染限制。
+容器在原生 Web profile 中加载 [office.cordis.patch.yml](office.cordis.patch.yml)，提供 `load_workspace_dependencies` 和官方 Office skill（技能）：`office`、`office-docx`、`office-pptx`、`office-xlsx`、`office-render`、`office-recalculate`、`office-export-pdf`。操作类 skill 使用已安装的 LibreOffice Kit CLI（命令行界面），不使用系统 LibreOffice。镜像安装拉丁与中文字体用于渲染。资源直接从镜像层查询，启动时不下载，也不复制到 JFS；生成文件存入用户工作区。官方 [Office skill 参考](../packages/skill/skill-office/README.zh.md)说明创作、校验和渲染限制。
 
 镜像构建在无网络环境执行 [smoke-office.mjs](smoke-office.mjs)。它在私有临时目录检查实际 Web 技能注册、文档读写与结构、PDF 转换、图像渲染和公式重算。对已构建镜像重复检查时，不挂载用户数据：
 

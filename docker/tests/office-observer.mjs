@@ -15,7 +15,9 @@ export function apply(ctx) {
       const definition = ctx.tools.get('load_workspace_dependencies')
       if (!definition) throw new Error('Web did not register load_workspace_dependencies')
       const runtime = await definition.execute({})
-      const skills = await Promise.all(['office-docx', 'office-pptx', 'office-xlsx'].map(async (name) => {
+      const names = ['office', 'office-docx', 'office-pptx', 'office-xlsx',
+        'office-render', 'office-recalculate', 'office-export-pdf']
+      const skills = await Promise.all(names.map(async (name) => {
         const skill = await ctx.skills.get(name)
         if (!skill) throw new Error(`Web did not register ${name}`)
         return { name, provider: skill.provider, resourceBase: skill.resourceBase, content: skill.content }

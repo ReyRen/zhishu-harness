@@ -12,7 +12,7 @@ overlay/
 │   ├── index.js           Host: serve images
 │   ├── client.js          Browser: occupy the sidebar and hero brand slots
 │   └── assets/            logo.png, logo-mark.png, zhishu-hero.webp, zhishu-hero-loop.webp, zhishu.gif
-└── running-status/        Running mark, “正在思考”, conversation scrollbar
+└── running-status/        Running mark, “Thinking”, conversation scrollbar
     ├── cordis.patch.yml   Insert this plugin
     ├── package.json       Declare dsh.client
     ├── index.js           Host row so the client bundle loads

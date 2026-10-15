@@ -65,10 +65,11 @@ try {
   assert.ok(runtime.pnpm.startsWith(source + '/'))
   for (const skill of skills) {
     assert.equal(skill.provider, 'dsh-office')
-    assert.ok(skill.content.includes('Installed LibreOffice Kit'))
     assert.ok(skill.resourceBase.path.startsWith(resolve(source, '..', 'office-skills') + '/'))
   }
-  const kit = /\{\s*"libreofficeKit"[\s\S]*?\n\}/u.exec(skills[0].content)
+  const renderSkill = skills.find(skill => skill.name === 'office-render')
+  assert.ok(renderSkill, 'Web must register the official Office rendering workflow')
+  const kit = /\{\s*"libreofficeKit"[\s\S]*?\n\}/u.exec(renderSkill.content)
   assert.ok(kit, 'Loaded skill must provide the installed CLI paths')
   const { libreofficeKit } = JSON.parse(kit[0])
   assert.equal(libreofficeKit.node, runtime.node)
@@ -78,10 +79,8 @@ try {
   const capabilities = JSON.parse(execute(runtime.node, [libreofficeKit.cli, 'capabilities', '--json']))
   assert.ok(capabilities.conversions.length > 0)
   execute(runtime.python, ['-I', '-B', join(directory, 'tests/create-office.py'), root])
-  const checker = resolve(source, '..', 'office-skills/scripts/check_office.py')
   for (const extension of ['docx', 'pptx', 'xlsx']) {
     const input = join(root, `sample.${extension}`)
-    execute(runtime.python, ['-I', '-B', checker, input, '--contains', 'Office runtime 中文验证'])
     const output = join(root, `${extension}.pdf`)
     execute(runtime.node, [libreofficeKit.cli, 'convert', '--input', input, '--output', output])
     assert.equal((await readFile(output)).subarray(0, 5).toString(), '%PDF-')

@@ -130,17 +130,17 @@ describe('connection client apply', () => {
     expect(handle.isLoopback).toBe(true)
   })
 
-  it('treats a non-loopback page as the settings operator', async () => {
+  it('classifies a non-loopback page independently of Host preferences', async () => {
     ;(globalThis as Win).location = { hostname: '192.0.2.20' }
-    expect((await mount()).isLoopback).toBe(true)
+    expect((await mount()).isLoopback).toBe(false)
   })
 
-  it('treats a directly installed non-loopback Host as the settings operator', async () => {
+  it('classifies a directly installed non-loopback Host independently of Host preferences', async () => {
     const ctx = new Context()
     try {
       installConnection(ctx, { location: { hostname: '192.0.2.20' } })
       const handle = ctx.get('connection') as ConnectionHandle | undefined
-      expect(handle?.isLoopback).toBe(true)
+      expect(handle?.isLoopback).toBe(false)
     } finally {
       await ctx.fiber.dispose()
     }
