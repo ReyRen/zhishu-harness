@@ -188,14 +188,23 @@ interface ComposedProfile {
  * @param profile - loaded profile whose bundle layers select the Web surface.
  * @returns absolute patch paths, in directory-name order.
  */
+/** Overlay directory whose insert uses the same Cordis id as the market bundle. */
+const PREINSTALLED_MARKET_OVERLAY = 'dsh-market'
+/** Package name of that bundle. A profile copy inserts the id itself. */
+const PREINSTALLED_MARKET_PACKAGE = 'dshmarket'
+
 function zhishuOverlayPatches(profile: Profile): string[] {
   if (process.env.VITEST !== undefined
     || !profile.layers.some(layer => layer.packageName === '@deepseek-ai/dsh-web-app')) return []
   const dir = fileURLToPath(new URL('../../../overlay', import.meta.url))
   if (!existsSync(dir)) return []
+  const profileOwnsMarket = profile.layers.some(layer => layer.packageName === PREINSTALLED_MARKET_PACKAGE)
   const files: string[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue
+    // The profile bundle's own patch already inserts id dsh-market. Loading
+    // this overlay as well would register that id twice.
+    if (profileOwnsMarket && entry.name === PREINSTALLED_MARKET_OVERLAY) continue
     const patch = join(dir, entry.name, 'cordis.patch.yml')
     if (existsSync(patch)) files.push(patch)
   }

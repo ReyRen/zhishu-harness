@@ -4,6 +4,8 @@
 docker/.env
 node_modules
 **/node_modules
+market-registry/storage
+market-registry/htpasswd
 .pnpm-store
 **/.pnpm-store
 **/lib

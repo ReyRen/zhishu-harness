@@ -7,6 +7,9 @@ packages:
   - native/system/packages/*
   # Product assemblies over the package tier; apps/cli owns the `dsh` bin.
   - apps/*
+  # Community plugin market vendored for local `pnpm dsh web` and the image.
+  # Not a release member: the package name is not @deepseek-ai/*.
+  - third-party/*
   # Private package owning repository-level benchmark dependencies.
   - benchmarks
   - website
