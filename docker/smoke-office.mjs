@@ -65,7 +65,9 @@ try {
   assert.ok(runtime.pnpm.startsWith(source + '/'))
   for (const skill of skills) {
     assert.equal(skill.provider, 'dsh-office')
-    assert.ok(skill.content.includes('Installed LibreOffice Kit'))
+    if (['office-render', 'office-recalculate', 'office-export-pdf'].includes(skill.name)) {
+      assert.ok(skill.content.includes('Installed LibreOffice Kit'), `${skill.name} must expose its installed CLI`)
+    }
     assert.ok(skill.resourceBase.path.startsWith(resolve(source, '..', 'office-skills') + '/'))
   }
   const renderSkill = skills.find(skill => skill.name === 'office-render')

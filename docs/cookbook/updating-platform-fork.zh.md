@@ -141,6 +141,6 @@ curl --fail --silent http://127.0.0.1:18088/healthz
 
 逐个确认目标用户容器 running、healthy、精确镜像及 Worker 规格正确，JFS bind 指向 `/storage-root-jfs/user-<userID>`。测试完整 launch/iframe/terminate 链路。Master 的浏览器会话存于内存，重启后须重新 launch，历史数据仍在 JFS。
 
-单用户 rollout 失败会尝试自动回滚。清理或恢复失败则停下检查，不能手工再启动一个写入者。回退发布时恢复两份 Master 配置，再通过 Worker 逐个切回保留的旧镜像并验证健康。一次性迁移回退时，先停普通容器，再把旧 Service 扩回一份。
+单用户 rollout 失败会尝试恢复旧进程，但不会逆转持久化格式迁移。涉及格式变化的发布前，停止写入并一致备份 DSH 状态。旧运行时可能拒绝新数据，此时停下请用户决定格式恢复方式，不覆盖历史。清理或恢复失败则停下检查，不能手工再启动一个写入者。回退发布时恢复两份 Master 配置，再通过 Worker 逐个切回保留的旧镜像并验证健康。一次性迁移回退时，先停普通容器，再把旧 Service 扩回一份。
 
 新版本稳定后，才按明确 ID 清理停止的回滚容器、旧任务容器和无引用旧镜像。保留运行中的用户容器及 `/storage-root-jfs/user-<userID>`。不执行广泛 Docker prune、数据卷删除或 compose down -v。
