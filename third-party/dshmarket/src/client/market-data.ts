@@ -180,6 +180,14 @@ export interface GistExportResult {
   gistUrl: string
 }
 
+/** Validate a Gist export reply before storing it in the client UI. */
+export function isGistExportResult(value: unknown): value is GistExportResult {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    && 'ok' in value && typeof value.ok === 'boolean'
+    && 'gistId' in value && typeof value.gistId === 'string'
+    && 'gistUrl' in value && typeof value.gistUrl === 'string'
+}
+
 /**
  * A `link:` the desktop host wrote for one of its generations (#497). The
  * test the server applies (`isGenerationLink` in sources.ts), repeated here

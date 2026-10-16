@@ -57,7 +57,7 @@ import { Agent, EnvHttpProxyAgent, fetch as undiciFetch } from 'undici'
  * them carries a dispatcher this module created.
  */
 export function releaseHostUndiciDispatcher(
-  global: Record<symbol, unknown> = globalThis as unknown as Record<symbol, unknown>,
+  global: Record<symbol, unknown> = globalThis as Record<symbol, unknown>,
   ownAgent: abstract new (...args: never[]) => unknown = Agent,
 ): void {
   const symbol = Symbol.for('undici.globalDispatcher.2')
@@ -139,7 +139,7 @@ export async function marketFetch(
   const { http, https } = proxyFromEnv()
   if (http === null && https === null) {
     directAgent ??= new Agent()
-    return await undiciFetch(url, { ...init, dispatcher: directAgent }) as unknown as Response
+    return await undiciFetch(url, { ...init, dispatcher: directAgent }) as Response
   }
   // Pass the resolved proxies explicitly. EnvHttpProxyAgent itself reads
   // only http(s)_proxy out of the environment, so a proxy that lives in
@@ -149,5 +149,5 @@ export async function marketFetch(
     httpProxy: http ?? undefined,
     httpsProxy: https ?? undefined,
   })
-  return await undiciFetch(url, { ...init, dispatcher: proxyAgent }) as unknown as Response
+  return await undiciFetch(url, { ...init, dispatcher: proxyAgent }) as Response
 }

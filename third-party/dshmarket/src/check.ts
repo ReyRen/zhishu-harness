@@ -312,7 +312,7 @@ function packageRoot(specifier: string): string | null {
  */
 function profilePackageInstalled(profileDirectory: string, name: string): boolean {
   try {
-    const profile = JSON.parse(readFileSync(join(profileDirectory, 'package.json'), 'utf8')) as unknown
+    const profile: unknown = JSON.parse(readFileSync(join(profileDirectory, 'package.json'), 'utf8'))
     if (isRecord(profile) && profile.name === name
       && profile.exports !== undefined && profile.exports !== null) return true
   } catch { /* not a self-referencing profile package */ }
@@ -726,6 +726,7 @@ export function satisfiesRange(
 // --- composition (mirrors dsh-app-boot applyEntryPatches) ---
 
 interface EntryNode {
+  [key: string]: unknown
   id: string
   name?: string
   layer?: string
@@ -914,7 +915,7 @@ export function composeLayers(layers: LayerInput[]): Composed {
       }
       for (const [key, value] of Object.entries(overridesOf)) {
         if (key === 'id') continue
-        ;(target as unknown as Record<string, unknown>)[key] = value
+        target[key] = value
       }
     }
   }

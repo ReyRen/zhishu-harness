@@ -1271,7 +1271,7 @@ export function mountMarketRoutes(
   function captureUpdateManifest(): ManifestCapture {
     const file = join(activeProfileDir, 'package.json')
     try {
-      const value = JSON.parse(readFileSync(file, 'utf8')) as unknown
+      const value: unknown = JSON.parse(readFileSync(file, 'utf8'))
       if (typeof value !== 'object' || value === null || Array.isArray(value)) {
         return { ok: false, detail: 'the profile package.json root is not an object' }
       }
@@ -1858,7 +1858,7 @@ export function mountMarketRoutes(
     const handler = legacyHandlers.get(path)
     if (handler === undefined) throw new Error(`legacy route is unavailable: ${path}`)
     const chunks = body === undefined ? [] : [Buffer.from(JSON.stringify(body))]
-    const replay = Readable.from(chunks) as unknown as IncomingMessage
+    const replay = Readable.from(chunks) as IncomingMessage
     Object.assign(replay, {
       method,
       url,
@@ -1873,10 +1873,10 @@ export function mountMarketRoutes(
         if (chunk !== undefined) text += Buffer.isBuffer(chunk) ? chunk.toString('utf8') : chunk
         return this
       },
-    } as unknown as ServerResponse
+    } as ServerResponse
     await handler(replay, captured)
     let payload: unknown = null
-    try { payload = text === '' ? null : JSON.parse(text) as unknown } catch { payload = { error: text } }
+    try { payload = text === '' ? null : JSON.parse(text) } catch { payload = { error: text } }
     return { status, payload }
   }
 

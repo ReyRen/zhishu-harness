@@ -55,7 +55,7 @@ RUN --mount=type=cache,id=zhishu-harness-pnpm,target=/pnpm/store \
   pnpm install --offline --frozen-lockfile \
   && pnpm run clean
 
-RUN node --test docker/tests/cache-primary-runtime.test.mjs
+RUN node --test docker/tests/cache-primary-runtime.test.mjs docker/tests/sandbox-policy.test.mjs
 
 RUN test -n "${DSH_CLIENT_COMMIT_HASH}" \
   && DSH_CLIENT_COMMIT_HASH="${DSH_CLIENT_COMMIT_HASH}" pnpm run build
@@ -102,6 +102,7 @@ RUN --mount=type=cache,id=zhishu-harness-apt-cache,target=/var/cache/apt,sharing
   && apt-get update \
   && apt-get install --yes --no-install-recommends \
     bash \
+    bubblewrap \
     ca-certificates \
     curl \
     fontconfig \
@@ -122,6 +123,7 @@ RUN --mount=type=cache,id=zhishu-harness-apt-cache,target=/var/cache/apt,sharing
 COPY --from=builder /opt/dsh /opt/dsh
 COPY --from=builder /opt/dsh-runtime /opt/dsh-runtime
 COPY --chmod=0755 docker/container-entrypoint.sh /opt/dsh/deploy/container-entrypoint.sh
+COPY --chmod=0755 docker/bwrap /usr/local/bin/bwrap
 
 RUN --network=none node /opt/dsh/docker/smoke-office.mjs
 

@@ -158,6 +158,15 @@ DSHM_REGISTRY_URL=https://your-mirror.example/plugins.json dsh web
 dsh plugin --profile web add @liustack/modlens
 ```
 
+## Platform source checks
+
+The embedded source uses typed Host contracts and validates Gist export replies before updating UI state. The platform test configuration covers these local checks without the external project's omitted network-test fixtures.
+
+```bash
+pnpm --dir third-party/dshmarket run typecheck
+pnpm --dir third-party/dshmarket run test:platform
+```
+
 ## License
 
 MIT · [dshmarket.com](https://dshmarket.com)

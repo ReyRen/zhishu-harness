@@ -264,7 +264,7 @@ async function fetchJson(url: string): Promise<unknown> {
     signal: AbortSignal.timeout(10_000),
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json() as unknown
+  return res.json()
 }
 
 /**

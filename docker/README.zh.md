@@ -2,15 +2,15 @@
 
 [English](README.md) | 中文
 
-本目录将当前 `zhishu-harness` 源码构建为完整原生 Web 镜像，供 `gcs-harness-master` 按用户创建 Swarm Service。镜像保留原生 Web，不使用 Nginx，并启用 `main` 上实现的托管默认工作区与目录根策略。
+本目录将 `zhishu-harness` 构建为完整原生 Web 镜像。Master 验证用户并选择 Worker；Worker 通过本机 Engine API 为用户创建普通 Docker 容器。镜像保留原生 Web，不使用 Nginx，并启用 `main` 中的受管默认工作区和用户目录限制。
 
 ## 相关项目
 
 | 项目 | 职责 |
 | --- | --- |
 | [zhishu-harness](https://github.com/ReyRen/zhishu-harness) | 本仓库；跟踪 DSH 上游并构建原生 Web 镜像 |
-| [gcs-harness-master](https://github.com/ReyRen/gcs-harness-master) | 平台认证后创建、更新、删除和路由每用户 Swarm Service |
-| [gcs-harness-worker](https://github.com/ReyRen/gcs-harness-worker) | 在 Overlay 网络中代理 Master 到用户 DSH Service 的流量 |
+| [gcs-harness-master](https://github.com/ReyRen/gcs-harness-master) | 验证用户、选择 Worker，并路由每位用户的 iframe |
+| [gcs-harness-worker](https://github.com/ReyRen/gcs-harness-worker) | 管理受限用户容器，并代理其私有 bridge 地址 |
 
 ## 更新上游
 
@@ -30,9 +30,9 @@
 
 构建过程根据上游下载锁准备官方 [primary runtime](../packages/skill/tool-workspace-dependencies/README.zh.md) 和 Office 资源。[cache-primary-runtime.mjs](cache-primary-runtime.mjs) 用 curl 缓存完全相同的官方归档，检查 SHA256，并由上游构建器完成组装和验证；它不使用镜像源或中间服务器。构建参数 `DSH_RESOURCE_DOWNLOAD_TIMEOUT_MS` 的单次下载默认期限为 600000 毫秒，供大体积发布资源使用。`DSH_PRIMARY_RUNTIME=/opt/dsh-runtime/primary-runtime` 指向随包的 Python、Node.js 和 pnpm；Python 包含 numpy、pandas 以及 Word、Excel、PowerPoint 创作库。随包 Python 也位于 `PATH` 最前。
 
-容器在原生 Web profile 中加载 [office.cordis.patch.yml](office.cordis.patch.yml)，提供 `load_workspace_dependencies` 和 `office-docx`、`office-pptx`、`office-xlsx`。skill（技能）使用已安装的 LibreOffice Kit CLI（命令行界面），不使用系统 LibreOffice。镜像安装拉丁与中文字体用于渲染。资源直接从镜像层查询，启动时不下载，也不复制到 JFS；生成文件存入用户工作区。官方 [Office skill 参考](../packages/skill/skill-office/README.zh.md)说明创作、检查和渲染限制。
+容器加载 [office.cordis.patch.yml](office.cordis.patch.yml)，提供 `load_workspace_dependencies` 和七项 skills：`office`、`office-docx`、`office-pptx`、`office-xlsx`、`office-render`、`office-recalculate`、`office-export-pdf`。skills 使用随包 LibreOffice Kit CLI，不使用系统 LibreOffice。资源留在镜像中；生成文件存入用户工作区。[Office 参考](../packages/skill/skill-office/README.zh.md)说明其限制。
 
-镜像构建在无网络环境执行 [smoke-office.mjs](smoke-office.mjs)。它在私有临时目录检查实际 Web 技能注册、文档读写与结构、PDF 转换、图像渲染和公式重算。对已构建镜像重复检查时，不挂载用户数据：
+镜像构建在无网络环境执行 [smoke-office.mjs](smoke-office.mjs)，在私有临时目录检查实际 Web 技能注册、文档创作、PDF 转换、图像渲染和公式重算。不挂载用户数据时，可重复检查：
 
 ```bash
 docker run --rm --init --network none --entrypoint node "$IMAGE" /opt/dsh/docker/smoke-office.mjs
@@ -40,7 +40,7 @@ docker run --rm --init --network none --entrypoint node "$IMAGE" /opt/dsh/docker
 
 ## 验证单个用户
 
-`docker/compose.yml` 只验证镜像；生产用户 Service 由 Master 创建。
+`docker/compose.yml` 用于验证一个普通容器；生产容器由 Worker 管理。先在该 Worker 执行 `bash docker/security/install.sh` 安装独立策略。Worker 必须已创建禁用容器互访的 `gcs-dsh-users` bridge 网络。
 
 ```bash
 cd /path/to/zhishu-harness
@@ -64,4 +64,10 @@ docker compose --env-file docker/.env -f docker/compose.yml up -d
 docker compose --env-file docker/.env -f docker/compose.yml down
 ```
 
-Master 从配置的身份服务取得 `userID`，并把 Worker 路径 `/storage-root-jfs/user-<userID>` 挂载到 `/storage-root-jfs/user`。DSH 只开放 Overlay 端口 `3081`，不发布每用户宿主机端口。生产 Service 与 Compose 使用一秒健康检查间隔，使 HTTP 就绪后尽快开始路由。
+Master 从身份服务取得 `userID`；Worker 将 `/storage-root-jfs/user-<userID>` 挂载到 `/storage-root-jfs/user`。DSH 监听私有端口 `3081`，不发布宿主机端口。Worker 使用 host 网络代理经过检查的容器 IP；用户容器不能通过该 bridge 互访。
+
+## 命令沙箱
+
+[bwrap](bwrap) 在官方 bubblewrap 沙箱前进入子 user namespace。[独立 seccomp 策略](security/seccomp-bwrap.json) 来自 Moby v24.0.6（见[许可](security/LICENSE.Moby)），仅增加经测试的 namespace clone 标志和挂载准备调用。[独立 AppArmor 策略](security/apparmor-bwrap) 允许这些准备操作，同时禁止敏感 proc/sys 路径。Worker 在创建用户容器前，会在不挂载用户目录的环境中预检镜像。
+
+用户容器移除全部外层 capabilities，保留 no-new-privileges，不挂载 Docker socket、不共享宿主机 PID namespace，也不开启 privileged。嵌套 procfs 要求为这些容器关闭 Docker 的挂载式系统路径遮蔽，改由 AppArmor 显式拒绝敏感路径。这不等同于 Docker 默认保护：user namespaces 会暴露更多共享内核代码。策略已在当前 x86-64、Docker 24、Linux 5.4 环境验证；其他环境须另行验证。安装策略不会修改整个 Docker daemon 的默认配置。

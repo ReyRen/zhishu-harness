@@ -79,6 +79,47 @@ describe('npm install layout verifier', () => {
     })
   })
 
+  it('versions bundled third-party plugin peers with each synthetic host release', () => {
+    const index: RegistryIndex = new Map([
+      ['@deepseek-ai/dsh', new Map([['0.2.1-alpha.4', {
+        name: '@deepseek-ai/dsh', version: '0.2.1-alpha.4', dependencies: { dshmarket: '1.66.22' },
+      }]])],
+    ])
+    const withMarket = new Map(index)
+    withMarket.set('dshmarket', new Map([['1.66.22', {
+      name: 'dshmarket', version: '1.66.22',
+      peerDependencies: { '@deepseek-ai/dsh-settings': '0.2.1-alpha.4', '@deepseek-ai/cordis': '~4.0.1' },
+    }]]))
+    const dual = buildDualDshRegistry(withMarket, '0.2.1-alpha.4')
+    for (const version of ['0.1.0', '0.2.0']) {
+      expect(dual.get('@deepseek-ai/dsh')?.get(version)?.dependencies).toEqual({ dshmarket: `^${version}` })
+      expect(dual.get('dshmarket')?.get(version)?.peerDependencies).toEqual({
+        '@deepseek-ai/dsh-settings': `^${version}`, '@deepseek-ai/cordis': '~4.0.1',
+      })
+    }
+    const ambiguous: RegistryIndex = new Map(withMarket).set('dshmarket', new Map([
+      ['1.0.0', { name: 'dshmarket', version: '1.0.0' }],
+      ['2.0.0', { name: 'dshmarket', version: '2.0.0' }],
+    ]))
+    expect(() => buildDualDshRegistry(ambiguous, '0.2.1-alpha.4')).toThrow('exactly one bundled workspace version')
+  })
+
+  it('rejects a bundled third-party plugin peer that crosses release versions', () => {
+    const layout = validLayout()
+    const packages = {
+      ...layout.packages,
+      'node_modules/dsh-previous/node_modules/dshmarket': {
+        version: '0.1.0', peerDependencies: { '@deepseek-ai/dsh-child': '^0.1.0' },
+      },
+      'node_modules/dshmarket': { version: '0.2.0' },
+    }
+    Reflect.deleteProperty(packages, 'node_modules/dsh-previous/node_modules/@deepseek-ai/dsh-child')
+    expect(() => assertDualDshInstallLayout({ ...layout, packages })).toThrow(
+      'node_modules/dsh-previous/node_modules/dshmarket: peerDependencies '
+      + '@deepseek-ai/dsh-child resolves to node_modules/@deepseek-ai/dsh-child@0.2.0, expected 0.1.0',
+    )
+  })
+
   it.each([
     ['react', 'node_modules/react'],
     ['react-dom', 'node_modules/react-dom'],

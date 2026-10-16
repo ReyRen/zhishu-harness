@@ -27,6 +27,7 @@
     "build:client": "tsdown && node scripts/normalize-client-banner.mjs",
     "check": "npm run typecheck && npm run build && node scripts/restart-smoke.mjs",
     "test": "vitest run",
+    "test:platform": "vitest run --config vitest.platform.config.ts",
     "test:compat": "vitest run --config vitest.compat.config.ts",
     "validate:registry": "node scripts/validate-registry.mjs",
     "snapshot": "mkdir -p data && curl -sf https://awesome-dsh-plugin.com/plugins.json -o data/registry-snapshot.json && curl -sf https://awesome-dsh-plugin.com/readmes.json -o data/readmes-snapshot.json",

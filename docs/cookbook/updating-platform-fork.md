@@ -1,25 +1,25 @@
-# Update upstream and release the DSH platform image
+# Update upstream and publish the platform image
 
 English | [中文](updating-platform-fork.zh.md)
 
-This procedure updates `ReyRen/zhishu-harness`, builds its per-user DSH image, and rolls that image through the GCS Harness Swarm deployment. Run Git commands from the `zhishu-harness` repository root and shell examples in Bash. The standalone Web acceptance deployment on `172.18.36.225` is separate and is not updated by this procedure.
+Use this procedure for `ReyRen/zhishu-harness` and the GCS deployment. Commands run in the repository root unless a host is specified. The independent Web environment on `172.18.36.225` is outside this procedure.
 
-## Branch and conflict rules
+## Branch and merge rules
 
-- `upstream/master` is the official `deepseek-ai/deepseek-harness` branch. Treat it as read-only; never open a platform pull request against the official repository.
-- `origin/master` mirrors the official branch exactly. Fast-forward it only; never add platform commits or build production images from it.
-- `origin/main` contains the platform development. Merge `master` into a temporary branch based on `main`, then open a pull request **in `ReyRen/zhishu-harness` with base `main`**. Do not push the temporary branch directly to `main`.
-- Review semantic overlap even if Git reports no textual conflict. If an official change replaces or conflicts with a platform modification, use the official behavior and remove the obsolete platform source, configuration, tests, and documentation. Preserve independent platform behavior only when it still works with the official code.
-- The platform deliberately lets an authenticated non-loopback Web page persist settings to its own Host. Check this contract and its browser regression test on every upstream merge; if new official behavior truly conflicts with it, stop and request a decision instead of silently disabling settings again.
-- Never use `git push --force`, a blanket “ours/theirs” resolution, `git reset --hard`, or a ZIP overlay to complete an upstream update. Stop if ancestry or the working tree is unclear.
+- Official `deepseek-ai/deepseek-harness:master` is read-only. Never push or open a PR there.
+- Fork `master` only fast-forwards official commits. Fork `main` contains platform development and is the only production image source.
+- Merge on a temporary branch outside Mutagen's synchronized directory. Review textual and semantic conflicts individually. Official behavior replaces incompatible platform designs; retain compatible per-user workspaces, JFS boundaries, native Web, Desktop and market features.
+- Authenticated non-loopback browsers must be able to persist settings to their own Host. Official remote-access support now implements this; do not fake loopback identity. If future upstream behavior truly conflicts, stop for a user decision.
+- No force pushes, hard resets, whole-file ours/theirs resolutions or ZIP overlays. Unknown changes, failed tests or unavailable hosts block release.
 
-## 1. Check the repository and synchronize `master`
+## 1. Fetch and fast-forward fork master
 
-Start with a clean working tree and verify that `origin` is the fork and `upstream` is the official repository. The fork's `master` must be an ancestor of the official `master`; divergence needs investigation instead of a force push.
+Confirm a clean worktree and exact remote targets. Disable the official push URL as an additional guard.
 
 ```bash
 git status --short --branch
 git remote -v
+git remote set-url --push upstream DISABLED
 git fetch origin main master
 git fetch upstream master
 git merge-base --is-ancestor origin/master upstream/master
@@ -30,32 +30,29 @@ test "$(git rev-parse HEAD)" = "$(git rev-parse upstream/master)"
 git push origin master
 ```
 
-The push target is **only `ReyRen/zhishu-harness:master`**. Record both commit IDs before continuing. Do not publish a PR from this branch to `deepseek-ai/deepseek-harness`.
+If there are no new official commits, do not change state or send routine notifications. Record the official and fork-main commit IDs when an update exists.
 
-## 2. Merge official code into a platform branch
+## 2. Integrate and validate outside Mutagen
 
-Create the branch from the current fork `main`. Run this and the next section in a **separate Git worktree outside the Mutagen synchronization root** so unmerged code does not reach the Worker; keep the primary checkout at `E:\Projects\zhishu-harness-platform\zhishu-harness` on `main`. The merge is paused before its commit so overlapping files can be inspected. In a conflict, stage 2 is the platform side and stage 3 is the official side; inspect both instead of accepting either side for the whole file.
+Keep the synchronized checkout on main. In a separate worktree, create a fresh branch from current origin/main and merge master without committing first.
 
 ```bash
 git switch -c sync-upstream-YYYY-MM-DD origin/main
-git merge --no-ff --no-commit master
-git status --short
+git merge --no-ff --no-commit origin/master
 git diff --name-only --diff-filter=U
-git diff master -- docker packages/api/workspace-controller packages/host/directory-picker-auto packages/host/directory-picker-browse
+git diff origin/master -- docker packages/api/workspace-controller packages/host/directory-picker-auto packages/host/directory-picker-browse
 ```
 
-Resolve each conflict and inspect auto-merged files. In particular, verify the complete native Web profile, automatic default Workspace, user directory root, Docker build, and lockfile still agree with the new official code. If official behavior supersedes one of these additions, remove that addition rather than preserving an incompatible patch. Stage the resolved files, run `git diff --cached --check`, and commit the merge. Never commit an unresolved index.
+Review automatic merges too: default workspace creation, user-root boundaries, authenticated settings, full Web and plugin proxy paths, runtime/Office skills, lockfiles and Desktop packaging. Remove obsolete adaptations when official code replaces them. The optional official experimental market remains disabled by default; do not remove the installed third-party market merely because both packages exist.
 
-## 3. Validate and merge a pull request into `main`
-
-Use checks that cover the changed behavior; the following commands cover the platform integration and image build. Add focused official-feature tests when the merge touches their behavior. Documentation checks may need Linux or CI when local Windows symlink permissions prevent them; investigate failures rather than treating them as passes.
-
-When using the production image as a Linux validation environment, run it with `--init -e NODE_ENV=test`; inherited `NODE_ENV=production` breaks jsdom imports and React test APIs. Keep `NODE_ENV=production` for the deployed application. Run `pnpm run clean` before rebuilding a reused validation worktree to remove obsolete package build outputs.
+Follow the repository's pre-push and documentation skills. Select tests for the actual diff; do not disable failing checks. Re-record paired-document metadata after editing both languages.
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm exec vitest run packages/api/workspace-controller/tests/workspace-controller.host.spec.ts packages/host/directory-picker-auto/tests/loader-composition.spec.ts packages/host/directory-picker-browse/tests/service.spec.ts
+node --test docker/tests/cache-primary-runtime.test.mjs docker/tests/sandbox-policy.test.mjs
 pnpm run verify-package-dependencies
+pnpm run verify-npm-install-layout
 pnpm run build
 pnpm run test:docs
 pnpm run doc-sync
@@ -65,22 +62,23 @@ git commit -m "Merge official DSH into platform main"
 git push -u origin sync-upstream-YYYY-MM-DD
 ```
 
-Use the actual branch name in the push command. Create a GitHub PR at `ReyRen/zhishu-harness`, confirm **base `main` and head `sync-upstream-YYYY-MM-DD`**, review the changed platform files and checks, then merge it there. A green conflict indicator alone is not sufficient. Do not create this PR in the official repository.
+When using a production image as a Linux test environment, set `NODE_ENV=test` and unset inherited DSH home/workspace/runtime variables. Use `pnpm run clean` when reusing a worktree that contains outputs from removed packages.
 
-After GitHub reports the PR merged, update the Worker and primary local checkout in the order in section 4. Do not switch the primary checkout while its Mutagen session is active.
+Build a separately tagged verification image and test actual bubblewrap command execution, Web login/settings/plugin loading and Office rendering before merging. Such an image is not a production main image. Open a PR **only to ReyRen/zhishu-harness:main**. Merge only after conflicts are resolved and critical checks pass. If fork checks require official-only runners or credentials, verify that exact cause and provide equivalent Linux evidence; do not excuse real code failures.
 
-## 4. Confirm the Worker build source
+## 3. Update the canonical build checkout
 
-The current DSH Worker is `172.18.36.230`, with source at `/storage-md0/renyuan/zhishu-harness-platform/zhishu-harness`. Mutagen synchronizes source in both directions but **does not propagate `.git`**, `node_modules`, `.dsh-build`, or a small set of Git symlinks represented differently on Windows and Linux. Update Git metadata independently on both endpoints; do not rely on Mutagen to transfer references or the index. Build only after the Worker's `main` equals the merged fork `main` and its working tree is clean.
+Worker source: `172.18.36.230:/storage-md0/renyuan/zhishu-harness-platform/zhishu-harness`. Windows source: `E:\Projects\zhishu-harness-platform\zhishu-harness`. Mutagen excludes Git metadata, dependencies, generated outputs and known cross-OS symlink differences; each Git checkout must be advanced separately.
 
-First pause the `zhishu-harness-platform` session on Windows and confirm both existing working trees are clean. If pausing fails, the Worker cannot reach the fork, or unexpected local changes are present, stop the release; do not reset or overwrite files. Once paused, fast-forward Git on the **Worker first**:
+Pause synchronization and confirm both checkouts are clean. Fast-forward the Worker first, then Windows; never reset unexplained changes.
 
 ```bash
 mutagen sync pause zhishu-harness-platform
 ```
 
+On the Worker, then on Windows:
+
 ```bash
-cd /storage-md0/renyuan/zhishu-harness-platform/zhishu-harness
 git fetch origin main master
 git switch master
 git merge --ff-only origin/master
@@ -90,53 +88,60 @@ test -z "$(git status --porcelain)"
 test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
 ```
 
-Then fast-forward `main` in the primary Windows checkout, resume synchronization, and wait for a complete cycle. `mutagen sync list --long` must show no conflicts or transition problems, and both working trees and HEADs must match and be clean. Do not delete the old image or start building before these checks pass.
+Resume and wait for reconciliation. Both HEADs must match merged main, with clean worktrees and no Mutagen conflicts or transfer failures.
 
 ```bash
-cd /e/Projects/zhishu-harness-platform/zhishu-harness
-git fetch origin main master
-git switch master
-git merge --ff-only origin/master
-git switch main
-git merge --ff-only origin/main
-git status --short --branch
 mutagen sync resume zhishu-harness-platform
 mutagen sync flush zhishu-harness-platform
 mutagen sync list zhishu-harness-platform --long
 ```
 
-## 5. Build the image on the Worker
+## 4. Build and smoke-test on the Worker
 
-The image contains the native Web UI and publishes no per-user host port. It uses `/storage-root-jfs/user` inside the container; Swarm mounts each user's existing `/storage-root-jfs/user-<userID>` directory there. Never remove or recreate those user directories during a release.
+Production builds use only clean merged main on `172.18.36.230`.
 
 ```bash
 COMMIT="$(git rev-parse HEAD)"
 IMAGE="zhishu-harness:main-${COMMIT:0:7}"
-docker build --network host \
-  --build-arg "DSH_CLIENT_COMMIT_HASH=$COMMIT" \
-  --file docker/Dockerfile \
-  --tag "$IMAGE" \
-  .
+docker build --network host --build-arg "DSH_CLIENT_COMMIT_HASH=$COMMIT" --file docker/Dockerfile --tag "$IMAGE" .
 IMAGE_ID="$(docker image inspect --format '{{.Id}}' "$IMAGE")"
 printf '%s %s\n' "$IMAGE" "$IMAGE_ID"
 ```
 
-On a slow package mirror, the Dockerfile accepts `DEBIAN_MIRROR` and `DEBIAN_SECURITY_MIRROR` build arguments. Before changing Master, start one disposable container with `DSH_PUBLIC_AUTHORITY=localhost:3081` and check that port `3081` responds; an unauthenticated request to `/` returns HTTP 401. Stop the disposable container afterward. All Swarm nodes labeled `dsh=true,jfs=true` must have this exact Image ID locally; distribute the built image if more than one Worker is eligible.
+The image includes native Web, bundled primary runtime and seven Office skills. Debian mirror build arguments are available for network issues; temporary build-host workarounds must not become permanent dependencies.
 
-## 6. Switch Master and existing user Services
+Install `docker/security/install.sh` on each target Worker before using the image. It installs a named AppArmor policy and scoped seccomp file, not a global Docker configuration change. It refuses to overwrite different policy contents: policy changes require review and a new profile name before rolling containers.
 
-On Swarm Manager `172.18.29.80`, inspect `systemctl cat gcs-harness-master` to confirm the runtime config path. The current service reads `/root/go/src/gcs-harness-master/dist/linux-amd64/master.json`; `/etc/gcs-harness-master/master.json` is a maintained copy. Back up both, set `dsh.localImageID` in both to the new `sha256:...` Image ID, keep ownership and permissions, and verify the files match before restarting Master. Do not place the Master API token or any DSH launch token in this guide or a Git commit.
+Users run as ordinary Docker containers managed by Worker, not Swarm Services. They drop all outer capabilities, retain no-new-privileges, and use scoped bubblewrap policies without privileged or host SYS_ADMIN. Removing Docker's mount-based system-path masks is required for nested procfs; AppArmor denies sensitive paths instead. This is not identical to Docker's default protection and still shares the host kernel. The qualified target is x86-64 Docker 24 / Linux 5.4; other targets need independent validation.
+
+Smoke-test without real user data first. Verify actual sandbox enforcement, non-loopback authenticated settings, bundled Office imports/rendering/recalculation, default workspace and plugin assets. Put the identical image ID on every configured Worker; Worker never pulls user images.
+
+## 5. Roll out through Master and Worker
+
+Related code: [Master](https://github.com/ReyRen/gcs-harness-master), [Worker](https://github.com/ReyRen/gcs-harness-worker). Master runs under systemd. Swarm only deploys trusted Worker Global Services; Worker uses host networking and manages users on an isolated local bridge. Use real node URLs, not routing mesh. Worker control port `18081` is restricted to Master/local administration and requires its private Token.
+
+On `172.18.29.80`, inspect the systemd unit. Back up both configuration copies, preserve ownership and modes, and update `dsh.localImageID` in both to the verified image. Current paths are:
+
+- `/root/go/src/gcs-harness-master/dist/linux-amd64/master.json` (running configuration).
+- `/etc/gcs-harness-master/master.json` (maintained copy).
 
 ```bash
 systemctl cat gcs-harness-master
-jq -r '.dsh.localImageID' /root/go/src/gcs-harness-master/dist/linux-amd64/master.json
 systemctl restart gcs-harness-master
 systemctl is-active gcs-harness-master
 curl --fail --silent http://127.0.0.1:18088/healthz
 ```
 
-Run the restart commands only **after** both config files contain the new Image ID. New user launches then use the new image. To migrate already-running users, list the `dsh-u-` Services and update them **one at a time** with `docker service update --image "$IMAGE_ID" --no-resolve-image --detach=false <service-name>`. Verify each update has completed and its Worker container is healthy before proceeding to the next user. This restarts that user's DSH process briefly but retains its bind-mounted history and Workspace data.
+Do not restart until both copies agree. The configured workers list contains explicit node addresses. The Master must remain a single instance; any unreachable configured Worker blocks scheduling to avoid a second JFS writer. Drain users before removing a Worker from configuration.
 
-## 7. Verify, rollback, and clean up
+Query each Worker's `GET /internal/v1/state` with `X-GCS-Worker-Token` loaded privately from the shared token file. For each existing user, sequentially POST `/internal/v1/containers/{userID}/rollout` with `{"imageID":"sha256:..."}`. The Worker stops and retains the old container, starts the replacement, waits for healthy and verifies its internal login credential; a failed replacement is stopped before the old container restarts. Stop release on the first failure. Never log credentials or send Worker/DSH tokens to the frontend.
 
-Confirm Master health, every intended Service at `1/1`, the configured Image ID, and healthy Worker containers. If a release fails, restore the backed-up Master config, restart Master, and roll affected Services back to the previous Image ID while the old image remains on every eligible Worker. Keep the old image until the new rollout and observation period pass; then inspect its exact stopped container IDs before removing those containers and the old image. Do not use `docker service rm`, `docker compose down -v`, or volume cleanup as part of an image update. The JFS user directories are not disposable build artifacts.
+For the one-time migration from old user Swarm Services, stop Master briefly to prevent new launches. Scale each old user Service to zero and verify its tasks have stopped **before** starting the ordinary container on the same JFS path. Keep stopped old specifications/images for rollback. Never delete a running user Service or start both generations against the same storage.
+
+## 6. Verify, recover and clean up
+
+Verify every intended user container is running, healthy, using the exact image and matching Worker specification; confirm the JFS bind points to `/storage-root-jfs/user-<userID>`. Test the full launch/iframe/terminate path. Master stores browser sessions in memory, so restarting it requires a new launch; historical data remains on JFS.
+
+A failed per-user rollout attempts process rollback automatically; it does not reverse persisted-format migrations. Before a release that changes persistence, stop writers and back up DSH state consistently. An old runtime can reject newer data; stop for a format-aware recovery decision instead of overwriting history. If cleanup or rollback fails, stop and inspect; do not manually start another writer. To revert a release, restore both Master configs, roll users back sequentially through Worker to the retained old image, and verify health again. During the one-time migration, stop the ordinary container before scaling its old Service back up.
+
+Only after the new version is stable, remove explicitly identified stopped rollback containers, old stopped task containers and unreferenced old images. Preserve live user containers and `/storage-root-jfs/user-<userID>`. Do not run broad Docker prune, volume deletion or compose down -v.

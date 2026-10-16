@@ -30,7 +30,7 @@ export type TagComponent = (props: { tone?: TagTone; className?: string; childre
 function optionalComponent<T>(name: string): T | null {
   let value: unknown
   try {
-    value = (primitives as unknown as Record<string, unknown>)[name]
+    value = (primitives as Record<string, unknown>)[name]
   } catch {
     // A module shim can be a strict proxy that THROWS on an unknown export
     // rather than answering undefined (vitest's own module mock does exactly

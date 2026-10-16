@@ -20,47 +20,31 @@ services:
       DSH_PRIMARY_RUNTIME: /opt/dsh-runtime/primary-runtime
       PYTHONDONTWRITEBYTECODE: '1'
       NODE_ENV: production
-      NODE_OPTIONS: --enable-source-maps
       TZ: ${TZ:-Asia/Shanghai}
     volumes:
       - type: bind
         source: ${DSH_USER_ROOT_PATH:?set DSH_USER_ROOT_PATH to /storage-root-jfs/user-<userID>}
         target: /storage-root-jfs/user
-    networks:
-      - gcs-dsh-internal
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+      - apparmor=gcs-harness-bwrap
+      - seccomp=./security/seccomp-bwrap.json
+      - systempaths=unconfined
+    mem_limit: ${DSH_MEMORY_LIMIT:-2g}
+    cpus: ${DSH_CPU_LIMIT:-2}
+    pids_limit: 1024
+    networks: [gcs-dsh-users]
+    restart: unless-stopped
     healthcheck:
-      test:
-        - CMD-SHELL
-        - curl --silent --output /dev/null --max-time 0.5 "http://127.0.0.1:$${DSH_INTERNAL_PORT}/"
+      test: [CMD-SHELL, 'curl --silent --output /dev/null --max-time 0.5 "http://127.0.0.1:$${DSH_INTERNAL_PORT}/"']
       interval: 1s
       timeout: 1s
       retries: 10
       start_period: 10s
     stop_grace_period: 30s
-    deploy:
-      mode: replicated
-      replicas: 1
-      endpoint_mode: dnsrr
-      placement:
-        constraints:
-          - node.labels.dsh==true
-          - node.labels.jfs==true
-      restart_policy:
-        condition: any
-        delay: 5s
-        max_attempts: 3
-        window: 60s
-      update_config:
-        parallelism: 1
-        order: stop-first
-        failure_action: rollback
-        monitor: 30s
-      rollback_config:
-        parallelism: 1
-        order: stop-first
-        monitor: 30s
 
 networks:
-  gcs-dsh-internal:
-    name: ${GCS_DSH_NETWORK:-gcs-dsh-internal}
+  gcs-dsh-users:
+    name: ${GCS_DSH_NETWORK:-gcs-dsh-users}
     external: true

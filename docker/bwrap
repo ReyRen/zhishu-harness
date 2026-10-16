@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Namespace setup capabilities stay inside this child user namespace.
+exec /usr/bin/bwrap --unshare-user "$@"

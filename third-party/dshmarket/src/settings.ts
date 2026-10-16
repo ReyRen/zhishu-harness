@@ -146,7 +146,7 @@ export const MarketSettings: z<MarketSettings> = z.object({
 function canRegister(service: SettingsService, ctx: Context): boolean {
   if (typeof (service as { register?: unknown }).register === 'function') return true
   namespaceState = 'unsupported-by-host'
-  const logger = (ctx as unknown as { logger?: (name: string) => { warn(message: string): void } }).logger
+  const logger = (ctx as { logger?: (name: string) => { warn(message: string): void } }).logger
   try {
     logger?.('dsh-market').warn(
       'this host\'s settings service has no register() (dsh 0.1.7 derives settings from a plugin Config schema); '
@@ -159,7 +159,7 @@ function canRegister(service: SettingsService, ctx: Context): boolean {
 /** Serve the Desktop card without claiming settings-controlled restart. */
 export function installDesktopMarketSettings(ctx: Context): void {
   ctx.inject(['settings'], (scopedCtx: Context) => {
-    const scoped = scopedCtx as unknown as Context & { settings: SettingsService }
+    const scoped = scopedCtx as Context & { settings: SettingsService }
     if (!canRegister(scoped.settings, scoped)) return
     // The host dispatches cards only for registered namespaces. An empty
     // schema offers no fields; old stored allowRestart values stay untouched
@@ -197,7 +197,7 @@ export function installMarketSettings(ctx: Context, resolved: { allowRestart?: b
   // `inject` is the graceful-degradation boundary: on a host with no
   // settings service the callback never runs and the composed entry stands.
   ctx.inject(['settings'], (scopedCtx: Context) => {
-    const scoped = scopedCtx as unknown as Context & { settings: SettingsService }
+    const scoped = scopedCtx as Context & { settings: SettingsService }
     if (!canRegister(scoped.settings, scoped)) return
     const scope = scoped.settings.register(MARKET_SETTINGS_NS, MarketSettings, { base: entry })
     namespaceState = 'registered'
