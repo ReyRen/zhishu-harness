@@ -56,7 +56,7 @@
 
 插件市场同样预装，但源码不放在 `overlay/`。`third-party/dshmarket` 是社区 dshmarket 1.66.22 的源码和已编译的 `host/`，`apps/cli` 用 `workspace:*` 依赖它。`overlay/dsh-market/cordis.patch.yml` 只插入这一行，并设置 `allowRestart: false`。因此版本跟着安装包或镜像走，不进用户 profile，插件页「已安装」里不会出现。用户若再从插件页安装同名包，`zhishuOverlayPatches()` 会跳过这条插入，避免同一个 id 出现两次。这份包不发布到私有源；本地 `pnpm dsh web` 直接调试仓库里的副本。
 
-市场里列出的其他插件默认仍是公网目录。私有源在 `market-registry/`，说明见 [README.zh.md](../market-registry/README.zh.md)。`pnpm market:registry` 启动没有公网代理的 Verdaccio 和本地目录；`pnpm dsh:private` 把市场指到这两处。目前目录里是从社区拷入的 `dsh-dream-skin` 和 `open-sea-skin`。桌面安装包会带上同一份源，并在本机自己启动；开发时的 `pnpm run dev:desktop` 仍要先执行 `pnpm market:registry`。
+市场里列出的其他插件默认仍是公网目录。私有源在 `market-registry/`，说明见 [README.zh.md](../market-registry/README.zh.md)。`pnpm market:registry` 启动没有公网代理的 Verdaccio 和本地目录；`pnpm dsh:private` 把市场指到这两处。目前目录里是从社区拷入的 `open-sea-skin`。桌面安装包会带上同一份源，并在本机自己启动；开发时的 `pnpm run dev:desktop` 仍要先执行 `pnpm market:registry`。
 
 `overlay/` 只在没有 `VITEST` 环境变量时加载，官方测试仍走原组合。
 

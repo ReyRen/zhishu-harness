@@ -189,7 +189,7 @@ pnpm run clean
 
 ## 插件市场私有源
 
-安装包带上 `market-registry/` 里的目录和两个皮肤包。打包前 `prepare:market-registry` 把 Verdaccio 装进 `resources/market-registry`（真实文件，没有指向仓库的链接）。装好的程序启动 Host 之前，在本机 `127.0.0.1:4873` 启动这份源，并在 `127.0.0.1:4874` 提供 `plugins.json`。Host 进程被设成使用这两个地址，同时关掉 pnpm 的 peer 自动安装，避免它到私有源里找 `react` 和 `cordis`。
+安装包带上 `market-registry/` 里的目录和其中的皮肤包。打包前 `prepare:market-registry` 把 Verdaccio 装进 `resources/market-registry`（真实文件，没有指向仓库的链接）。装好的程序启动 Host 之前，在本机 `127.0.0.1:4873` 启动这份源，并在 `127.0.0.1:4874` 提供 `plugins.json`。Host 进程被设成使用这两个地址，同时关掉 pnpm 的 peer 自动安装，避免它到私有源里找 `react` 和 `cordis`。
 
 已发布的包写在应用用户目录，不写进安装目录。安装包更新后，新的 tarball 会在下次启动时补进这个目录。`127.0.0.1` 上如果已经有同一份源在听，安装包会沿用它，不会再起一个。
 

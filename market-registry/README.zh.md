@@ -8,7 +8,6 @@
 
 | 包 | 版本 | 来源 |
 | --- | --- | --- |
-| `dsh-dream-skin` | 10.15.0 | 社区 npm，tarball 在 `tarballs/` |
 | `open-sea-skin` | 1.2.5 | 社区 npm，tarball 在 `tarballs/` |
 
 `plugins.json` 是市场列表。`tarballs/` 是对应的安装包。启动时如果 `storage/` 里还没有这个版本，会把 tarball 发布进 Verdaccio。
@@ -36,7 +35,7 @@ pnpm dsh:private
 
 普通 `pnpm dsh web` 仍使用公网目录。`DSHM_REGISTRY_URL` 和 `DSHM_NPM_MIRROR` 以 `DSH_` 开头，不能写进项目 `.env`，只能放在启动进程的环境里。
 
-`dsh-dream-skin` 声明了宿主才有的 peer（`react`、`cordis`、若干 `@deepseek-ai/dsh-client-*`）。`pnpm dsh:private` 会关掉 pnpm 的 peer 自动安装，避免它去私有源里找这些包。
+`pnpm dsh:private` 会关掉 pnpm 的 peer 自动安装。社区插件如果声明了宿主才有的 peer（`react`、`cordis`、若干 `@deepseek-ai/dsh-client-*`），这样就不会去私有源里找这些包。
 
 ## 再拷一个社区插件
 
