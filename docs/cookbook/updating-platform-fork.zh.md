@@ -118,7 +118,7 @@ printf '%s %s\n' "$IMAGE" "$IMAGE_ID"
 
 ## 5. 通过 Master 和 Worker 发布
 
-相关代码：[Master](https://github.com/ReyRen/gcs-harness-master)、[Worker](https://github.com/ReyRen/gcs-harness-worker)。Master 使用 systemd。Swarm 仅部署受信任 Worker Global Service；Worker 使用 host 网络，在隔离的本地 bridge 上管理用户。必须用节点真实 URL，不能用 routing mesh。Worker 控制端口 `18081` 限 Master/本机管理访问，并要求私有内部 Token。
+相关代码：[Master](https://github.com/ReyRen/gcs-harness-master)、[Worker](https://github.com/ReyRen/gcs-harness-worker)。Master 使用 systemd。Swarm 仅部署受信任 Worker Global Service；Worker 使用 host 网络，在隔离的本地 bridge 上管理用户。必须用节点真实 URL，不能用 routing mesh。Worker 控制端口 `18082` 限 Master/本机管理访问，并要求私有内部 Token。
 
 在 `172.18.29.80` 检查 systemd unit，备份两份配置，保留属主和权限，把两份 `dsh.localImageID` 均更新为已验证镜像。当前路径：
 

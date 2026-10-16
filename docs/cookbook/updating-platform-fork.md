@@ -118,7 +118,7 @@ Smoke-test without real user data first. Verify actual sandbox enforcement, non-
 
 ## 5. Roll out through Master and Worker
 
-Related code: [Master](https://github.com/ReyRen/gcs-harness-master), [Worker](https://github.com/ReyRen/gcs-harness-worker). Master runs under systemd. Swarm only deploys trusted Worker Global Services; Worker uses host networking and manages users on an isolated local bridge. Use real node URLs, not routing mesh. Worker control port `18081` is restricted to Master/local administration and requires its private Token.
+Related code: [Master](https://github.com/ReyRen/gcs-harness-master), [Worker](https://github.com/ReyRen/gcs-harness-worker). Master runs under systemd. Swarm only deploys trusted Worker Global Services; Worker uses host networking and manages users on an isolated local bridge. Use real node URLs, not routing mesh. Worker control port `18082` is restricted to Master/local administration and requires its private Token.
 
 On `172.18.29.80`, inspect the systemd unit. Back up both configuration copies, preserve ownership and modes, and update `dsh.localImageID` in both to the verified image. Current paths are:
 
