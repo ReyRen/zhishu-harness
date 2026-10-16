@@ -153,7 +153,10 @@ export async function startModelGateway(options: {
 }): Promise<{ origin: string; close(): Promise<void> }> {
   const config = readGatewayConfig(options.configPath)
   const site = await listen(MODEL_SITE_PORT, (request, response) => {
-    void handleSite(options.siteDir, config, request, response).catch(() => { if (!response.headersSent) response.writeHead(502).end() })
+    try { handleSite(options.siteDir, config, request, response) } catch (error) {
+      if (!response.headersSent) response.writeHead(502).end()
+      else response.destroy(error instanceof Error ? error : undefined)
+    }
   })
   site.on('upgrade', (request, socket, head) => {
     const url = new URL(request.url ?? '/', MODEL_SITE_ORIGIN)
@@ -198,7 +201,7 @@ function readRoute(value: unknown): GatewayRoute {
   }
 }
 
-async function handleSite(siteDir: string, config: GatewayConfig, request: IncomingMessage, response: ServerResponse): Promise<void> {
+function handleSite(siteDir: string, config: GatewayConfig, request: IncomingMessage, response: ServerResponse): void {
   const url = new URL(request.url ?? '/', MODEL_SITE_ORIGIN)
   const bareMount = url.pathname === '/flow' || url.pathname === '/prompt' ? url.pathname.slice(1) : undefined
   if (bareMount !== undefined && existsSync(join(siteDir, bareMount, 'index.html'))) {

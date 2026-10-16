@@ -5,7 +5,7 @@ import { MODEL_SPACE_IPC, type ModelSpace, type ModelSpaceState } from './model-
 
 contextBridge.exposeInMainWorld('zhishuDesktop', {
   embedded: true,
-  publishAccount(account: { userAccount?: string; userName?: string }) {
+  publishAccount(account?: { userAccount?: string; userName?: string } | null) {
     ipcRenderer.send(MODEL_SPACE_IPC.account, {
       userAccount: typeof account?.userAccount === 'string' ? account.userAccount : '',
       userName: typeof account?.userName === 'string' ? account.userName : '',

@@ -108,6 +108,8 @@ let ownsRegistry = false
 let catalog: Server | undefined
 let retired = false
 
+function isRetired(): boolean { return retired }
+
 /**
  * Start Verdaccio and the catalog when this process owns them. A source already
  * listening on the loopback ports is left running and reused.
@@ -144,7 +146,7 @@ async function runPackagedPluginMarket(root: string, userData: string, node: str
   if (!existsSync(htpasswd)) writeFileSync(htpasswd, '')
   const config = join(state, 'verdaccio.yaml')
   writeFileSync(config, verdaccioConfig(storage, htpasswd))
-  if (retired) return
+  if (isRetired()) return
   if (!await probe(`${PLUGIN_MARKET_REGISTRY}/-/ping`)) {
     const bin = join(root, 'node_modules', 'verdaccio', 'bin', 'verdaccio')
     const child = spawn(node, [bin, '--config', config], {
@@ -160,8 +162,8 @@ async function runPackagedPluginMarket(root: string, userData: string, node: str
       tail.push(chunk.toString('utf8'))
       if (tail.join('').length > 4_000) tail.shift()
     }
-    child.stdout?.on('data', remember)
-    child.stderr?.on('data', remember)
+    child.stdout.on('data', remember)
+    child.stderr.on('data', remember)
     child.once('exit', (code, signal) => {
       if (!ownsRegistry || registry !== child) return
       console.error(`desktop plugin market: verdaccio exited ${String(code ?? signal)}`)
@@ -173,7 +175,7 @@ async function runPackagedPluginMarket(root: string, userData: string, node: str
       throw new Error(`${error instanceof Error ? error.message : String(error)}${detail === '' ? '' : `\n${detail}`}`)
     }
   }
-  if (retired) return
+  if (isRetired()) return
   if (!await probe(PLUGIN_MARKET_CATALOG)) catalog = await listenCatalog(readFileSync(join(root, 'plugins.json')))
 }
 

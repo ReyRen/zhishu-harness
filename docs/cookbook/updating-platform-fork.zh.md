@@ -1,25 +1,25 @@
-# 更新上游并发布 DSH 平台镜像
+# 更新上游并发布平台镜像
 
 [English](updating-platform-fork.md) | 中文
 
-本文档说明如何更新 `ReyRen/zhishu-harness`、构建每用户 DSH 镜像，并在 GCS Harness Swarm 部署中滚动切换镜像。Git 命令在 `zhishu-harness` 仓库根目录执行，Shell 示例使用 Bash。`172.18.36.225` 上独立的完整 Web 验收环境不在本流程内。
+本流程用于 `ReyRen/zhishu-harness` 与 GCS 部署。未特别注明时，命令在仓库根目录执行。`172.18.36.225` 的独立 Web 环境不在此流程内。
 
-## 分支与冲突规则
+## 分支与合并规则
 
-- `upstream/master` 是官方 `deepseek-ai/deepseek-harness` 分支。只读取官方仓库，绝不向官方仓库提交平台 PR。
-- `origin/master` 与官方分支完全一致。它只能快进，不加入平台提交，也不用于构建生产镜像。
-- `origin/main` 承载平台二开。从 `main` 创建临时分支并合入 `master`，然后**只向 `ReyRen/zhishu-harness` 的 `main` 提 PR**。不要把临时分支直接推入 `main`。
-- 即使 Git 没有报告文本冲突，也要检查语义交叉修改。如果官方更新替代或冲突于平台改造，以官方行为为准，并清理过时的平台源码、配置、测试和文档。独立且仍与官方代码兼容的平台能力才保留。
-- 平台明确允许已认证的非 loopback Web 页面将设置持久化到自己的 Host。每次合并上游都要核对这项约定及其浏览器回归测试；如果官方新行为确实与之冲突，应暂停并请用户决策，不能再次静默禁用设置。
-- 不使用 `git push --force`、整文件“ours/theirs”解决、`git reset --hard` 或 ZIP 覆盖来完成上游更新。提交关系或工作树状态不清楚时先停下核对。
+- 官方 `deepseek-ai/deepseek-harness:master` 只读，绝不向官方推送或提 PR。
+- Fork 的 `master` 仅快进官方提交；`main` 是二开分支，也是唯一的生产镜像来源。
+- 在 Mutagen 同步目录外建临时分支，逐处分析文本和语义冲突。官方行为替代不兼容二开；保留兼容的每用户工作区、JFS 边界、原生 Web、桌面端和市场能力。
+- 已认证的非 loopback 浏览器必须能够向自身 Host 持久化设置。官方远程访问机制现在已支持此能力，不再伪造 loopback 身份。若以后真正冲突，暂停并请用户决策。
+- 不强推、不硬重置、不整文件接受 ours/theirs、不用 ZIP 覆盖。未知改动、测试失败、主机不可用时停止发布。
 
-## 1. 检查仓库并同步 `master`
+## 1. 拉取并快进 Fork master
 
-先确保工作树干净，并确认 `origin` 指向自己的 Fork、`upstream` 指向官方仓库。Fork 的 `master` 必须是官方 `master` 的祖先；若发生分叉，应调查原因，不能强推。
+确认工作树干净、远程目标正确。额外禁用官方远程的推送 URL。
 
 ```bash
 git status --short --branch
 git remote -v
+git remote set-url --push upstream DISABLED
 git fetch origin main master
 git fetch upstream master
 git merge-base --is-ancestor origin/master upstream/master
@@ -30,31 +30,27 @@ test "$(git rev-parse HEAD)" = "$(git rev-parse upstream/master)"
 git push origin master
 ```
 
-这里的推送目标**只有 `ReyRen/zhishu-harness:master`**。继续之前记录两个提交 ID。不要从该分支向 `deepseek-ai/deepseek-harness` 提 PR。
+官方没有新提交时，不修改状态，也不发送例行通知。有更新时记录官方及 Fork main 的提交 ID。
 
-## 2. 将官方代码合入平台工作分支
+## 2. 在 Mutagen 之外整合验证
 
-从 Fork 的最新 `main` 建分支。为避免未合并的代码通过 Mutagen 进入 Worker，本节和下一节应在**同步目录之外的独立 Git worktree** 中执行；保持 `E:\Projects\zhishu-harness-platform\zhishu-harness` 的主检出停在 `main`。合并先停在提交之前，以便检查双方都改过的文件。冲突时，暂存区第 2 阶段是平台版本、第 3 阶段是官方版本；应逐处比较，不能整文件接受任意一侧。
+同步目录保持 main。在独立 worktree 中从最新 origin/main 建分支，先合并但不提交。
 
 ```bash
 git switch -c sync-upstream-YYYY-MM-DD origin/main
-git merge --no-ff --no-commit master
-git status --short
+git merge --no-ff --no-commit origin/master
 git diff --name-only --diff-filter=U
-git diff master -- docker packages/api/workspace-controller packages/host/directory-picker-auto packages/host/directory-picker-browse
+git diff origin/master -- docker packages/api/workspace-controller packages/host/directory-picker-auto packages/host/directory-picker-browse
 ```
 
-逐个解决冲突，并检查自动合并的文件。尤其要确认完整原生 Web 配置、自动默认工作区、用户目录根限制、Docker 构建与锁文件仍适配新版官方代码。如果官方行为已取代其中某项二开，应删除那项二开，而不是保留不兼容补丁。把已解决文件加入暂存区，运行 `git diff --cached --check`，然后提交合并；不能提交尚未解决的暂存区。
+自动合并也要审查：默认工作区、用户目录边界、已认证设置、完整 Web 和插件代理路径、运行时及 Office skills、锁文件、桌面打包。官方已替代的适配应删除。官方实验性市场仍默认关闭，不因两个包并存就删除已安装的第三方市场。
 
-## 3. 验证并通过 PR 合入 `main`
-
-测试应覆盖实际变更；下列命令覆盖平台集成和镜像构建。若合并影响官方新功能，还需加跑对应的定向测试。Windows 本地的符号链接权限可能阻止文档检查，应改在 Linux 或 CI 验证并调查失败，不能把失败当作通过。
-
-使用生产镜像作为 Linux 验证环境时，以 `--init -e NODE_ENV=test` 启动；继承的 `NODE_ENV=production` 会破坏 jsdom 导入和 React 测试 API。部署应用仍使用 `NODE_ENV=production`。复用验证 worktree 时，重新构建前运行 `pnpm run clean`，清理已移除包的旧构建产物。
+遵循仓库提交前检查及文档技能，按实际变更选择测试，不能关闭失败检查。双语文档改动后重新记录配对元数据。
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm exec vitest run packages/api/workspace-controller/tests/workspace-controller.host.spec.ts packages/host/directory-picker-auto/tests/loader-composition.spec.ts packages/host/directory-picker-browse/tests/service.spec.ts
+node --test docker/tests/cache-primary-runtime.test.mjs docker/tests/sandbox-policy.test.mjs
 pnpm run verify-package-dependencies
 pnpm run build
 pnpm run test:docs
@@ -65,22 +61,23 @@ git commit -m "Merge official DSH into platform main"
 git push -u origin sync-upstream-YYYY-MM-DD
 ```
 
-推送时用实际分支名。在 GitHub 的 `ReyRen/zhishu-harness` 创建 PR，确认**目标为 `main`、来源为 `sync-upstream-YYYY-MM-DD`**，审查平台文件变更和检查结果后在本仓库合并。仅显示“无冲突”并不够。不要向官方仓库创建这个 PR。
+使用生产镜像进行 Linux 验证时设置 `NODE_ENV=test`，清除继承的 DSH home/workspace/runtime 环境变量。复用含已移除包产物的 worktree 时执行 `pnpm run clean`。
 
-GitHub 显示 PR 已合并后，按第 4 节的顺序更新 Worker 和本地主检出；不要先在仍运行的 Mutagen 会话内切换主检出的分支。
+合并前构建独立标签的验证镜像，实际测试 bubblewrap 命令、Web 登录/设置/插件及 Office 渲染；验证镜像不算生产 main 镜像。**仅向 ReyRen/zhishu-harness:main 提 PR**。无未解决冲突且关键检查通过后才合并。若 fork 检查需要官方专用 runner 或凭据，核实具体原因并提供等效 Linux 证据，不能将真实代码失败当作通过。
 
-## 4. 确认 Worker 构建来源
+## 3. 更新正式构建检出
 
-目前的 DSH Worker 为 `172.18.36.230`，源码目录是 `/storage-md0/renyuan/zhishu-harness-platform/zhishu-harness`。Mutagen 双向同步源码，但**不传播 `.git`**、`node_modules`、`.dsh-build` 和 Windows/Linux 表示方式不同的少量 Git 符号链接；两端的 Git 元数据必须分别更新，不能再依赖 Mutagen 传递 Git 引用或索引。只有 Worker 的 `main` 等于 Fork 中已合并的 `main`、工作树干净后才能构建。
+Worker 源码：`172.18.36.230:/storage-md0/renyuan/zhishu-harness-platform/zhishu-harness`。Windows 源码：`E:\Projects\zhishu-harness-platform\zhishu-harness`。Mutagen 排除 Git 元数据、依赖、生成产物和已知跨系统符号链接差异；两端 Git 必须分别快进。
 
-先在 Windows 上暂停 `zhishu-harness-platform` 同步会话，并确认两端原有工作树干净。若暂停失败、Worker 无法访问 Fork，或发现无法解释的本地改动，应停止发布，不要重置或覆盖文件。暂停成功后，**先在 Worker** 快进 Git：
+暂停同步并确认两端干净。先更新 Worker，再更新 Windows，不重置无法解释的改动。
 
 ```bash
 mutagen sync pause zhishu-harness-platform
 ```
 
+依次在 Worker、Windows 执行：
+
 ```bash
-cd /storage-md0/renyuan/zhishu-harness-platform/zhishu-harness
 git fetch origin main master
 git switch master
 git merge --ff-only origin/master
@@ -90,53 +87,60 @@ test -z "$(git status --porcelain)"
 test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
 ```
 
-然后在 Windows 主检出快进 `main`，最后恢复同步并等待一次完整核对；`mutagen sync list --long` 不得出现冲突或转移错误，两端 `HEAD` 与工作树必须一致且干净。未完成这些检查前，不要删除旧镜像或开始构建。
+恢复同步并等待核对。两端 HEAD 都须等于合并后的 main，工作树干净，Mutagen 无冲突或传输失败。
 
 ```bash
-cd /e/Projects/zhishu-harness-platform/zhishu-harness
-git fetch origin main master
-git switch master
-git merge --ff-only origin/master
-git switch main
-git merge --ff-only origin/main
-git status --short --branch
 mutagen sync resume zhishu-harness-platform
 mutagen sync flush zhishu-harness-platform
 mutagen sync list zhishu-harness-platform --long
 ```
 
-## 5. 在 Worker 上构建镜像
+## 4. 在 Worker 构建并烟测
 
-镜像包含原生 Web，但不发布每用户宿主机端口。容器内使用 `/storage-root-jfs/user`；Swarm 将现有的 `/storage-root-jfs/user-<userID>` 挂载到该路径。发布过程中绝不删除或重新创建这些用户目录。
+生产镜像只能从 `172.18.36.230` 上干净、已合并的 main 构建。
 
 ```bash
 COMMIT="$(git rev-parse HEAD)"
 IMAGE="zhishu-harness:main-${COMMIT:0:7}"
-docker build --network host \
-  --build-arg "DSH_CLIENT_COMMIT_HASH=$COMMIT" \
-  --file docker/Dockerfile \
-  --tag "$IMAGE" \
-  .
+docker build --network host --build-arg "DSH_CLIENT_COMMIT_HASH=$COMMIT" --file docker/Dockerfile --tag "$IMAGE" .
 IMAGE_ID="$(docker image inspect --format '{{.Id}}' "$IMAGE")"
 printf '%s %s\n' "$IMAGE" "$IMAGE_ID"
 ```
 
-软件源较慢时，Dockerfile 可接收 `DEBIAN_MIRROR` 与 `DEBIAN_SECURITY_MIRROR` 构建参数。修改 Master 前，先用 `DSH_PUBLIC_AUTHORITY=localhost:3081` 启动一次性测试容器，并确认 `3081` 端口响应；未认证访问 `/` 返回 HTTP 401。随后停止测试容器。所有标记为 `dsh=true,jfs=true` 的 Swarm 节点必须在本地拥有完全相同的 Image ID；若有多个合格 Worker，需分发已构建镜像。
+镜像包含原生 Web、打包的 primary runtime 和七项 Office skills。网络异常可用 Debian 镜像源构建参数，临时构建中转不能成为长期依赖。
 
-## 6. 切换 Master 和现有用户 Service
+使用镜像前在每个 Worker 安装 `docker/security/install.sh`，它安装独立命名 AppArmor 策略和限定 seccomp 文件，不改 Docker 全局配置。不同内容不能直接覆盖现有策略：策略变更须审查并使用新 profile 名称，再逐用户更新。
 
-在 Swarm Manager `172.18.29.80` 上，先用 `systemctl cat gcs-harness-master` 确认运行配置路径。目前服务读取 `/root/go/src/gcs-harness-master/dist/linux-amd64/master.json`，`/etc/gcs-harness-master/master.json` 是维护中的副本。先备份两份文件，再把两份文件的 `dsh.localImageID` 都改为新的 `sha256:...` Image ID，保留属主和权限，确认文件一致后重启 Master。Master API Token 和 DSH 启动 Token 均不能写入本指南或 Git 提交。
+用户是 Worker 管理的普通 Docker 容器，不是 Swarm Service。移除外层全部 capabilities、保留 no-new-privileges，采用限定的 bubblewrap 策略，不开 privileged、不加宿主机 SYS_ADMIN。嵌套 procfs 要求关闭这些容器的 Docker mount-based system-path masks，改由 AppArmor 拒绝敏感路径；这与 Docker 默认防护并非完全等价，仍共享宿主机内核。当前验证目标为 x86-64 Docker 24 / Linux 5.4，其他环境须单独验证。
+
+先在无真实用户数据环境烟测，验证沙箱实际约束、非 loopback 已认证设置、Office 导入/渲染/重算、默认工作区和插件资源。所有配置 Worker 必须具备同一 Image ID，Worker 不拉取用户镜像。
+
+## 5. 通过 Master 和 Worker 发布
+
+相关代码：[Master](https://github.com/ReyRen/gcs-harness-master)、[Worker](https://github.com/ReyRen/gcs-harness-worker)。Master 使用 systemd。Swarm 仅部署受信任 Worker Global Service；Worker 使用 host 网络，在隔离的本地 bridge 上管理用户。必须用节点真实 URL，不能用 routing mesh。Worker 控制端口 `18081` 限 Master/本机管理访问，并要求私有内部 Token。
+
+在 `172.18.29.80` 检查 systemd unit，备份两份配置，保留属主和权限，把两份 `dsh.localImageID` 均更新为已验证镜像。当前路径：
+
+- `/root/go/src/gcs-harness-master/dist/linux-amd64/master.json`：运行配置。
+- `/etc/gcs-harness-master/master.json`：维护副本。
 
 ```bash
 systemctl cat gcs-harness-master
-jq -r '.dsh.localImageID' /root/go/src/gcs-harness-master/dist/linux-amd64/master.json
 systemctl restart gcs-harness-master
 systemctl is-active gcs-harness-master
 curl --fail --silent http://127.0.0.1:18088/healthz
 ```
 
-只有两份配置都填入新 Image ID 后才能运行重启命令。此后新用户 `launch` 会使用新镜像。若要迁移已运行用户，先列出 `dsh-u-` Service，再**逐个**执行 `docker service update --image "$IMAGE_ID" --no-resolve-image --detach=false <service-name>`。每个服务更新完成、Worker 容器健康后再更新下一位用户。操作会短暂重启该用户的 DSH 进程，但挂载的历史会话和工作区数据不变。
+两份配置一致后才能重启。workers 列表显式填写节点地址。Master 只支持单实例；任一配置 Worker 不可达就拒绝调度，防止第二个 JFS 写入者。删除节点配置前必须排空用户。
 
-## 7. 验证、回滚与清理
+私下从共享 Token 文件读取 `X-GCS-Worker-Token`，查询各 Worker 的 `GET /internal/v1/state`。逐个用户 POST `/internal/v1/containers/{userID}/rollout`，请求体为 `{"imageID":"sha256:..."}`。Worker 停止并保留旧容器，启动新容器，等待 healthy 并验证内部登录凭据；新版本失败先停新容器，再重启旧容器。首个失败就停止发布。不要记录凭据或将 Worker/DSH Token 返回前端。
 
-确认 Master 健康、目标 Service 均为 `1/1`、配置的 Image ID 正确且 Worker 容器健康。如果发布失败，恢复备份的 Master 配置并重启 Master；只要所有合格 Worker 仍保留旧镜像，即可将受影响 Service 更新回旧 Image ID。新镜像完成滚动更新并经过观察后，再核对旧镜像引用的已停止容器具体 ID，删除这些容器和旧镜像。镜像更新过程中不执行 `docker service rm`、`docker compose down -v` 或数据卷清理。JFS 用户目录不是可丢弃的构建产物。
+从旧用户 Swarm Service 进行一次性迁移时，短暂停止 Master 防止新 launch。每个旧用户 Service 先缩容为零，确认任务已停止，**然后**才能在同一 JFS 路径启动普通容器。保留停止的旧规格和镜像以便回滚。不删除运行中的用户 Service，不允许两代进程同时写同一目录。
+
+## 6. 验证、恢复及清理
+
+逐个确认目标用户容器 running、healthy、精确镜像及 Worker 规格正确，JFS bind 指向 `/storage-root-jfs/user-<userID>`。测试完整 launch/iframe/terminate 链路。Master 的浏览器会话存于内存，重启后须重新 launch，历史数据仍在 JFS。
+
+单用户 rollout 失败会尝试自动回滚。清理或恢复失败则停下检查，不能手工再启动一个写入者。回退发布时恢复两份 Master 配置，再通过 Worker 逐个切回保留的旧镜像并验证健康。一次性迁移回退时，先停普通容器，再把旧 Service 扩回一份。
+
+新版本稳定后，才按明确 ID 清理停止的回滚容器、旧任务容器和无引用旧镜像。保留运行中的用户容器及 `/storage-root-jfs/user-<userID>`。不执行广泛 Docker prune、数据卷删除或 compose down -v。

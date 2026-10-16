@@ -12,16 +12,16 @@ overlay/
 │   ├── index.js           Host: serve images
 │   ├── client.js          Browser: occupy the sidebar and hero brand slots
 │   └── assets/            logo.png, logo-mark.png, zhishu-hero.webp, zhishu-hero-loop.webp, zhishu.gif
-├── hide-official-account/ 仅桌面：关掉官方 DeepSeek 账号菜单。容器化网页不加载
-│   └── cordis.patch.yml   只关闭 ui-settings-account
-├── platform-account/      仅桌面：会话页侧栏的平台账号。设置和退出登录放在这个菜单里
-├── running-status/        Running mark, “正在思考”, conversation scrollbar
+├── hide-official-account/ Desktop only: disable the official DeepSeek account menu. Container web does not load this
+│   └── cordis.patch.yml   Disable ui-settings-account only
+├── platform-account/      Desktop only: platform user on the conversation sidebar. Settings and sign-out live in that menu
+├── running-status/        Running mark, “Thinking”, conversation scrollbar
 │   ├── cordis.patch.yml   Insert this plugin
 │   ├── package.json       Declare dsh.client
 │   ├── index.js           Host row so the client bundle loads
 │   └── client.js          Browser: replace the running status and hide the extra bar
-└── dsh-market/            预装插件市场（只负责插入）
-    └── cordis.patch.yml   插入 `dshmarket`，并关闭自行重启
+└── dsh-market/            Preinstalled plugin market (insert only)
+    └── cordis.patch.yml   Insert `dshmarket` with restart disabled
 ```
 
 `dsh-market` 里没有市场实现。实现在 `third-party/dshmarket`（社区 dshmarket 1.66.22，编译结果在 `host/`），并由 `apps/cli` 依赖带进安装目录，所以本地 `pnpm dsh web` 直接用这份源码。它不写入用户 profile，左侧「已安装」里看不到。如果用户之后又在插件页安装了同名包，启动时会跳过这条插入，避免 Cordis id `dsh-market` 注册两次。

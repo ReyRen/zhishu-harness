@@ -2,7 +2,7 @@
 import { ipcRenderer } from 'electron'
 import { DESKTOP_IPC, SCHEME } from './ipc.ts'
 import { resolveDesktopLocale } from './locale.ts'
-import { MODEL_SPACE_IPC, type ModelSpaceState } from './model-space/model-space.ts'
+import { MODEL_SPACE_IPC, readModelSpaceState, type ModelSpaceState } from './model-space/model-space.ts'
 
 /**
  * Mount the Windows caption menubar without moving focus out of the active editor.
@@ -144,9 +144,9 @@ function installWorkspaceSwitch(): { host: HTMLElement; update(): void; dispose(
   button.append(label, chevron)
   host.append(button)
   let active: ModelSpaceState['active'] = 'conversation'
-  const apply = (state: ModelSpaceState): void => {
-    if (state == null || typeof state.authenticated !== 'boolean'
-      || (state.active !== 'conversation' && state.active !== 'business')) return
+  const apply = (value: unknown): void => {
+    const state = readModelSpaceState(value)
+    if (state === undefined) return
     active = state.active
     host.hidden = !state.authenticated
     // Inline display wins over the stylesheet rule that hides [hidden], including
@@ -159,10 +159,10 @@ function installWorkspaceSwitch(): { host: HTMLElement; update(): void; dispose(
     label.textContent = active === 'business' ? (zh ? '业务' : 'Business') : (zh ? '会话' : 'Conversation')
     button.setAttribute('aria-label', zh ? '切换工作空间' : 'Switch workspace')
   }
-  const onState = (_event: Electron.IpcRendererEvent, state: ModelSpaceState): void => { apply(state) }
+  const onState = (_event: Electron.IpcRendererEvent, state: unknown): void => { apply(state) }
   ipcRenderer.on(MODEL_SPACE_IPC.changed, onState)
   const pull = (): void => {
-    void ipcRenderer.invoke(MODEL_SPACE_IPC.state).then((state: ModelSpaceState) => { apply(state) }).catch(() => undefined)
+    void ipcRenderer.invoke(MODEL_SPACE_IPC.state).then((state: unknown) => { apply(state) }).catch(() => undefined)
   }
   pull()
   // The first ask often runs before the gate exists, and the login event can land

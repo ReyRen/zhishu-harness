@@ -3,7 +3,7 @@
 import type { DesktopShortcutInput, ShortcutConfigSnapshot, ShortcutSaveResult } from '@deepseek-ai/dsh-client-shortcuts/protocol'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { DESKTOP_IPC, SCHEME, type DshDesktopProductApi, type DesktopUpdatePresentation } from './ipc.ts'
-import { MODEL_SPACE_IPC, type ModelSpace, type ModelSpaceState, type PlatformAccount } from './model-space/model-space.ts'
+import { MODEL_SPACE_IPC, readModelSpaceState, type ModelSpace, type ModelSpaceState, type PlatformAccount } from './model-space/model-space.ts'
 import { PLATFORM_IPC } from './platform-ipc.ts'
 import { markDocumentPlatform, syncWindowFullscreen } from './preload-platform.ts'
 import { syncNativeTheme } from './preload-theme.ts'
@@ -114,7 +114,10 @@ if (location.protocol === `${SCHEME}:` && location.hostname === 'app') {
     state: () => ipcRenderer.invoke(MODEL_SPACE_IPC.state) as Promise<ModelSpaceState>,
     switchTo: (space: ModelSpace) => ipcRenderer.invoke(MODEL_SPACE_IPC.switch, space) as Promise<ModelSpaceState>,
     onStateChanged(listener: (state: ModelSpaceState) => void) {
-      const handler = (_event: Electron.IpcRendererEvent, state: ModelSpaceState): void => { listener(state) }
+      const handler = (_event: Electron.IpcRendererEvent, value: unknown): void => {
+        const state = readModelSpaceState(value)
+        if (state !== undefined) listener(state)
+      }
       ipcRenderer.on(MODEL_SPACE_IPC.changed, handler)
       return () => { ipcRenderer.off(MODEL_SPACE_IPC.changed, handler) }
     },
@@ -146,8 +149,9 @@ html[data-windows-titlebar][data-zhishu-business]{--dsh-windows-menu-start:48px!
     const root = document.documentElement as HTMLElement | null
     if (root !== null) root.toggleAttribute('data-zhishu-business', space === 'business')
   }
-  ipcRenderer.on(MODEL_SPACE_IPC.changed, (_event, state: ModelSpaceState) => {
-    if (state?.active === 'conversation' || state?.active === 'business') applySpace(state.active)
+  ipcRenderer.on(MODEL_SPACE_IPC.changed, (_event, value: unknown) => {
+    const state = readModelSpaceState(value)
+    if (state !== undefined) applySpace(state.active)
   })
   window.addEventListener('click', (event) => {
     if (activeSpace !== 'business' || !isCaptionSidebarToggle(event.target)) return

@@ -2,30 +2,27 @@
 # section, a hash of its English and Chinese blocks outside code blocks and generated regions.
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/cookbook/updating-platform-fork.md
-/update-upstream-and-release-the-dsh-platform-image:
-  en: 37f064b05f21cbff
-  zh: a183652cc32e1458
-/update-upstream-and-release-the-dsh-platform-image/branch-and-conflict-rules:
-  en: 91ae1f17bde07373
-  zh: 9a1d540c34a585f7
-/update-upstream-and-release-the-dsh-platform-image/1-check-the-repository-and-synchronize-master:
-  en: 4ee993948647cb54
-  zh: aacb5d172e157bd7
-/update-upstream-and-release-the-dsh-platform-image/2-merge-official-code-into-a-platform-branch:
-  en: 93c2ee7bb94f93d4
-  zh: 15b02daab3b7b959
-/update-upstream-and-release-the-dsh-platform-image/3-validate-and-merge-a-pull-request-into-main:
-  en: 10678e12eb62bc99
-  zh: 84361dfd8b8d1151
-/update-upstream-and-release-the-dsh-platform-image/4-confirm-the-worker-build-source:
-  en: 53fbf109ce83b7ce
-  zh: e361140e25441095
-/update-upstream-and-release-the-dsh-platform-image/5-build-the-image-on-the-worker:
-  en: c8a6300648f47461
-  zh: 0180a8d591549631
-/update-upstream-and-release-the-dsh-platform-image/6-switch-master-and-existing-user-services:
-  en: e85914b14b0a5338
-  zh: 5f2b3e0d67aa21bb
-/update-upstream-and-release-the-dsh-platform-image/7-verify-rollback-and-clean-up:
-  en: d344fdc6f336da7a
-  zh: 43968bcbdc3e7130
+/update-upstream-and-publish-the-platform-image:
+  en: a6cc1e2e88760f1d
+  zh: 4aff44d564ccc018
+/update-upstream-and-publish-the-platform-image/branch-and-merge-rules:
+  en: 52576fa687077279
+  zh: bfdf98a4268e0a2f
+/update-upstream-and-publish-the-platform-image/1-fetch-and-fast-forward-fork-master:
+  en: 71f11882c8ab3ec6
+  zh: 1d6e99ee58844556
+/update-upstream-and-publish-the-platform-image/2-integrate-and-validate-outside-mutagen:
+  en: e7960a63d600130d
+  zh: 520e977d0c18575d
+/update-upstream-and-publish-the-platform-image/3-update-the-canonical-build-checkout:
+  en: 9efe769ae8849922
+  zh: c71079d9880961cc
+/update-upstream-and-publish-the-platform-image/4-build-and-smoke-test-on-the-worker:
+  en: b8ee42fc381f0253
+  zh: 4d770b2063476457
+/update-upstream-and-publish-the-platform-image/5-roll-out-through-master-and-worker:
+  en: 9e5e0fdb92f1d05c
+  zh: fa4ef9c1e89e1253
+/update-upstream-and-publish-the-platform-image/6-verify-recover-and-clean-up:
+  en: 80a4457de8522b69
+  zh: 909a19f3e8e1f63d

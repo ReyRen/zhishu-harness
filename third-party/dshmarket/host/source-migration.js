@@ -2,7 +2,7 @@
  * Safe discovery for legacy Git -> verified npm source migrations (#461).
  *
  * This intentionally does less than the normal catalog matcher. A migration
- * changes package name/publisher and build provenance, so only repository
+ * changes package name/publisher and build source, so only repository
  * evidence carried by the installed Git spec may authorize it:
  *
  * - bare github:owner/repo matches only the catalog root for that repo;

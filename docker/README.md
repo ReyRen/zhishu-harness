@@ -2,15 +2,15 @@
 
 English | [中文](README.zh.md)
 
-This directory builds the current `zhishu-harness` source into the complete native Web image used by `gcs-harness-master` for per-user Swarm Services. The image keeps the native Web UI, uses no Nginx, and enables the managed default Workspace and directory-root policies implemented on `main`.
+This directory builds `zhishu-harness` into the complete native Web image. Master authenticates and selects a Worker; Worker creates each user's ordinary Docker container through the local Engine API. The image keeps the native Web UI, uses no Nginx, and enables the managed default Workspace and user-directory restrictions on `main`.
 
 ## Related projects
 
 | Project | Responsibility |
 | --- | --- |
 | [zhishu-harness](https://github.com/ReyRen/zhishu-harness) | This repository; tracks DSH upstream and builds the native Web image |
-| [gcs-harness-master](https://github.com/ReyRen/gcs-harness-master) | Creates, updates, removes, and routes per-user Swarm Services after platform authentication |
-| [gcs-harness-worker](https://github.com/ReyRen/gcs-harness-worker) | Proxies Master traffic to user DSH Services on the Overlay network |
+| [gcs-harness-master](https://github.com/ReyRen/gcs-harness-master) | Authenticates, selects Workers, and routes each user's iframe |
+| [gcs-harness-worker](https://github.com/ReyRen/gcs-harness-worker) | Manages restricted user containers and proxies their private bridge addresses |
 
 ## Update from upstream
 
@@ -30,9 +30,9 @@ The directory picker is rooted at `/storage-root-jfs/user`. It shows only the cu
 
 The build prepares the official [primary runtime](../packages/skill/tool-workspace-dependencies/README.md) and Office resources from the upstream download lock. [cache-primary-runtime.mjs](cache-primary-runtime.mjs) uses curl to cache those exact official archives, checks SHA256, and leaves assembly and validation to the upstream builder; it uses no mirror or intermediary server. `DSH_RESOURCE_DOWNLOAD_TIMEOUT_MS` is a build argument with a 600000 ms per-download default for large release assets. `DSH_PRIMARY_RUNTIME=/opt/dsh-runtime/primary-runtime` selects the bundled Python, Node.js and pnpm; Python includes numpy, pandas and the Word, Excel and PowerPoint authoring libraries. The bundled Python is also first on `PATH`.
 
-The container loads [office.cordis.patch.yml](office.cordis.patch.yml) with the native Web profile to expose `load_workspace_dependencies` and `office-docx`, `office-pptx` and `office-xlsx`. Skills use the installed LibreOffice Kit CLI, not system LibreOffice. Latin and Chinese fonts are installed for rendering. Resources are queried directly in the image layer without startup downloads or copies into JFS; generated files belong in the user's Workspace. The official [Office skill reference](../packages/skill/skill-office/README.md) documents authoring, checks and rendering limits.
+The container loads [office.cordis.patch.yml](office.cordis.patch.yml), exposing `load_workspace_dependencies` and seven skills: `office`, `office-docx`, `office-pptx`, `office-xlsx`, `office-render`, `office-recalculate`, and `office-export-pdf`. Skills use the bundled LibreOffice Kit CLI, not system LibreOffice. Resources stay in the image; generated files belong in the user's Workspace. The [Office reference](../packages/skill/skill-office/README.md) describes their limits.
 
-The image build runs [smoke-office.mjs](smoke-office.mjs) without network access. It checks built Web skill registration, document read/write and structural checks, PDF conversion, image rendering and formula recalculation in a private temporary directory. To repeat it against a built image without mounting user data:
+The image build runs [smoke-office.mjs](smoke-office.mjs) without network access. It checks built Web skill registration, document authoring, PDF conversion, image rendering and formula recalculation in a private temporary directory. To repeat it without mounting user data:
 
 ```bash
 docker run --rm --init --network none --entrypoint node "$IMAGE" /opt/dsh/docker/smoke-office.mjs
@@ -40,7 +40,7 @@ docker run --rm --init --network none --entrypoint node "$IMAGE" /opt/dsh/docker
 
 ## Validate one user
 
-`docker/compose.yml` validates the image only; Master creates production user Services.
+`docker/compose.yml` validates one ordinary container; Worker manages production containers. First install the scoped policy on this Worker with `bash docker/security/install.sh`. The Worker must have created the `gcs-dsh-users` bridge with inter-container communication disabled.
 
 ```bash
 cd /path/to/zhishu-harness
@@ -64,4 +64,10 @@ Stop validation with:
 docker compose --env-file docker/.env -f docker/compose.yml down
 ```
 
-Master obtains `userID` from the configured identity service and mounts Worker path `/storage-root-jfs/user-<userID>` at `/storage-root-jfs/user`. DSH exposes only Overlay port `3081` and publishes no per-user host port. Production Services and Compose use a one-second health interval so routing begins soon after HTTP readiness.
+Master obtains `userID` from the identity service; Worker mounts `/storage-root-jfs/user-<userID>` at `/storage-root-jfs/user`. DSH listens on private port `3081` and publishes no host port. Worker uses host networking to proxy inspected container IPs; user containers cannot communicate with each other through their bridge.
+
+## Command sandbox
+
+[bwrap](bwrap) enters a child user namespace before the official bubblewrap sandbox. The scoped [seccomp policy](security/seccomp-bwrap.json) derives from Moby v24.0.6 (see [license](security/LICENSE.Moby)); its only added allowances are the tested namespace-clone flags and mount setup calls. The [named AppArmor policy](security/apparmor-bwrap) permits that setup while denying sensitive proc/sys paths. Worker preflights each image without user mounts before creating a user container.
+
+User containers drop all outer capabilities, retain no-new-privileges, and receive no Docker socket, host PID namespace or privileged mode. Nested procfs requires disabling Docker's mount-based system-path masks for these containers; AppArmor supplies explicit path denials instead. This is not equivalent to Docker's default protection: user namespaces expose additional shared-kernel code. The policy is qualified on this x86-64 Docker 24 / Linux 5.4 deployment; validate other environments separately. Installing it does not change daemon-wide defaults.

@@ -1,0 +1,61 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write third-party/dshmarket/README.md
+/:
+  en: 624ad315933800eb
+  zh: 624ad315933800eb
+/dsh-market:
+  en: 490fac41027883ac
+  zh: c5a11041d8264690
+/dsh-market/install:
+  en: 35d642b15d01318f
+  zh: 163024d0da550743
+/dsh-market/what-you-get:
+  en: 353c7dde5af10ced
+  zh: 6a304b0266d95643
+/dsh-market/speed:
+  en: 4c23cb31973bd333
+  zh: 6e6f9a8c9a639d7c
+/dsh-market/security:
+  en: 2ca0df83b0b8fb33
+  zh: f0972250eeacd7f5
+/dsh-market/submit-your-plugin:
+  en: 2121c32468c2afde
+  zh: ed96107eba0229f8
+/dsh-market/roadmap-feedback:
+  en: d39d6f1702296f33
+  zh: fc0bc56095c2b510
+/dsh-market/data-source:
+  en: 94628a2959a98474
+  zh: 9e0b5aca8dc371da
+/dsh-market/friends:
+  en: cbee3c46e5dea850
+  zh: 0d96049873f263b7
+/dsh-market/friends/dsh-desktop-dataelement:
+  en: 849524df127cbe20
+  zh: 38d240644fdc9022
+/dsh-market/friends/deepseek-harness-desktop-hairyf:
+  en: 25ecae90acc5f847
+  zh: 52a2298ccd512dc0
+/dsh-market/friends/deepseek-harness-desktop-anywhere-labs:
+  en: d7cf72d04172ee8b
+  zh: 4d7f90cfc79ab48b
+/dsh-market/friends/dsh-app:
+  en: 773c065fbd63801b
+  zh: 2bbb8c7b848a42ba
+/dsh-market/friends/local-dsh:
+  en: 156de51ed114f825
+  zh: 74efd4910378f3fa
+/dsh-market/friends/dsh-desktop-mochinek0:
+  en: 624a018489fe8a9a
+  zh: 63b95e59a86fccb0
+/dsh-market/friends/dsh-get:
+  en: 3c3e6fb216bb451d
+  zh: 2dccea7abdd181eb
+/dsh-market/friends/modlens:
+  en: bd4f6c2ec2f27ccf
+  zh: 8d75ceb103536797
+/dsh-market/license:
+  en: d0ff4d1ec2e07dcb
+  zh: c6aea70f0b4391c8

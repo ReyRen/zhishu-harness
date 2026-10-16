@@ -1,7 +1,7 @@
 /** Desktop-only omissions from already installed production npm packages. */
 
 /**
- * Identify build and diagnostic files omitted from the immutable Desktop runtime.
+ * Identify build, diagnostic and other-platform files omitted from the immutable Desktop runtime.
  * Unrecognized assets and target runtime binaries are retained. Paths name the copied
  * node_modules tree, including nested package containers.
  * @param path - Path relative to the production node_modules directory.
@@ -16,8 +16,8 @@ export function desktopRuntimeFileExclusion(
   if (parts.some(part => ['.bin', '.pnpm', '.modules.yaml', '.pnpm-workspace-state-v1.json'].includes(part))) {
     return 'package-manager metadata'
   }
-  const file = parts.at(-1) ?? ''
-  // electron-builder ASAR omits zero-byte files; keep placeholders out of the sealed inventory.
+  const file = parts.at(-1)!
+  // electron-builder ASAR omits zero-byte files; exclude placeholders before sealing.
   if (file === '.gitkeep') return 'empty placeholder'
   if (/\.(?:[cm]?[jt]s|css)\.map$/u.test(file)) return 'source map'
   if (/\.d\.[cm]?ts$/u.test(file)) return 'TypeScript declaration'
@@ -36,6 +36,10 @@ export function desktopRuntimeFileExclusion(
     return 'fs-ext build configuration'
   }
   if (name === '@mixmark-io/domino' && (entry === 'test' || entry.startsWith('test/'))) return 'Domino test fixtures'
+  if (name === '@mixmark-io/domino' && (entry === '.yarn' || entry.startsWith('.yarn/'))) return 'Domino development tooling'
+  if (name === 'node-pty' && target.platform !== 'win32' && /^third_party\/conpty(?:\/|$)/u.test(entry)) {
+    return 'node-pty Windows ConPTY sources'
+  }
   if (name === 'node-pty' && entry.startsWith('prebuilds/')) {
     const platform = packageParts[nameParts + 1]
     if (platform !== undefined && platform !== `${target.platform}-${target.arch}`) return 'node-pty other platform'

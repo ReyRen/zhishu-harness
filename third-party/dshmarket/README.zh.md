@@ -72,7 +72,7 @@ dsh plugin --profile web add dshmarket
   - id: dsh-market
     name: dshmarket
     config:
-      allowRestart: false   # 不要和 `name:` 并排写在顶层
+      allowRestart: false   # NOT at the top level beside `name:`
   ```
 
   **dsh 0.1.7 及更新版本上没有这个开关可关**：宿主改为从插件自己的 Config schema 派生设置，不再为插件注册的设置命名空间提供服务，市场在那里没有可用的控件。用下面的 profile patch，它在所有宿主上都有效。
@@ -85,7 +85,7 @@ dsh plugin --profile web add dshmarket
     name: dshmarket
     config:
       buildEnv:
-        CC: /usr/bin/gcc-11     # 也可以是 CXX、NODE_OPTIONS 等
+        CC: /usr/bin/gcc-11     # or CXX, NODE_OPTIONS, ...
         CXX: /usr/bin/g++-11
   ```
 

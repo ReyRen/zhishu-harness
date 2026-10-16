@@ -1,5 +1,7 @@
 # 插件市场私有源
 
+[English](README.md) | 中文
+
 本地或内网的插件目录和安装包。插件市场本身不在这里，它随 `zhishu-harness` 安装包启动。这里只放用户可以从市场安装的社区插件。
 
 没有公网代理。Verdaccio 里没有的包，安装会失败，不会退回 `registry.npmjs.org`。
