@@ -52,6 +52,7 @@ pnpm install --frozen-lockfile
 pnpm exec vitest run packages/api/workspace-controller/tests/workspace-controller.host.spec.ts packages/host/directory-picker-auto/tests/loader-composition.spec.ts packages/host/directory-picker-browse/tests/service.spec.ts
 node --test docker/tests/cache-primary-runtime.test.mjs docker/tests/sandbox-policy.test.mjs
 pnpm run verify-package-dependencies
+pnpm run verify-npm-install-layout
 pnpm run build
 pnpm run test:docs
 pnpm run doc-sync

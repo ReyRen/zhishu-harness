@@ -16,6 +16,7 @@ const WORKSPACE_MANIFEST_GLOBS = [
   'apps/*/package.json',
   'packages/*/*/package.json',
   'vendor/*/package.json',
+  'third-party/*/package.json',
   'native/system/package.json',
   'native/system/packages/*/package.json',
 ]
@@ -131,12 +132,14 @@ export function parseBenchmarkOptions(args: readonly string[]): BenchmarkOptions
 }
 
 function workspaceManifestPath(path: string): boolean {
-  return /^(?:apps\/[^/]+|packages\/[^/]+\/[^/]+|vendor\/[^/]+|native\/system(?:\/packages\/[^/]+)?)\/package\.json$/.test(path)
+  const pattern =
+    /^(?:apps\/[^/]+|packages\/[^/]+\/[^/]+|vendor\/[^/]+|third-party\/[^/]+|native\/system(?:\/packages\/[^/]+)?)\/package\.json$/
+  return pattern.test(path)
 }
 
 function workspaceManifestPaths(root: string, ref: string | undefined): string[] {
   if (ref === undefined) return globSync(WORKSPACE_MANIFEST_GLOBS, { cwd: root }).sort()
-  return execFileSync('git', ['ls-tree', '-r', '--name-only', ref, '--', 'apps', 'packages', 'vendor', 'native'], {
+  return execFileSync('git', ['ls-tree', '-r', '--name-only', ref, '--', 'apps', 'packages', 'vendor', 'third-party', 'native'], {
     cwd: root,
     encoding: 'utf8',
   }).split('\n').filter(workspaceManifestPath).sort()
@@ -407,7 +410,10 @@ async function runNpm(
   })
   if (result.timedOut) return result
   if (result.status !== 0) {
-    throw new Error(`npm install exited ${String(result.status)} after ${result.durationMs.toFixed(0)} ms\n${result.output.trim()}`)
+    const log = globSync('.npm-cache/_logs/*-debug-0.log', { cwd }).sort().at(-1)
+    const details = log === undefined ? '' : readFileSync(join(cwd, log), 'utf8')
+      .split('\n').filter(line => /\b(?:error|stack)\b/.test(line)).slice(-30).join('\n')
+    throw new Error(`npm install exited ${String(result.status)} after ${result.durationMs.toFixed(0)} ms\n${result.output.trim()}\n${details}`)
   }
   return result
 }

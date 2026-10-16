@@ -15,6 +15,8 @@ const CORDIS_PACKAGE = '@deepseek-ai/cordis'
 const NESTED_DSH_ALIAS = 'dsh-previous'
 const NESTED_DSH_PATH = `node_modules/${NESTED_DSH_ALIAS}`
 const DEPENDENCY_FIELDS = ['dependencies', 'optionalDependencies', 'peerDependencies'] as const
+// Bundled workspace plugins have DSH peers and must follow each synthetic host release.
+const BUNDLED_DSH_PLUGINS = new Set(['dshmarket'])
 
 /**
  * Resolution work accepted from the dual-release graph, in
@@ -68,7 +70,7 @@ export interface DshInstallLayoutSummary {
 }
 
 function isDshPackage(name: string): boolean {
-  return name === DSH_PACKAGE || name.startsWith(`${DSH_PACKAGE}-`)
+  return name === DSH_PACKAGE || name.startsWith(`${DSH_PACKAGE}-`) || BUNDLED_DSH_PLUGINS.has(name)
 }
 
 function cloneForVersion(manifest: object, version: string): MutableRegistryManifest {
@@ -88,7 +90,7 @@ function cloneForVersion(manifest: object, version: string): MutableRegistryMani
  * Replace the working release with two incompatible, internally consistent DSH releases.
  * @param index - Registry metadata containing the working release.
  * @param sourceVersion - Workspace version copied into each synthetic release.
- * @returns Registry metadata containing both synthetic DSH releases and unchanged external packages.
+ * @returns Both synthetic DSH releases, their bundled plugins, and unchanged external packages.
  */
 export function buildDualDshRegistry(index: RegistryIndex, sourceVersion: string): RegistryIndex {
   const output = new Map(index)
@@ -98,7 +100,10 @@ export function buildDualDshRegistry(index: RegistryIndex, sourceVersion: string
       output.set(name, versions)
       continue
     }
-    const source = versions.get(sourceVersion)
+    if (BUNDLED_DSH_PLUGINS.has(name) && versions.size !== 1) {
+      throw new Error(`${name} must have exactly one bundled workspace version`)
+    }
+    const source = BUNDLED_DSH_PLUGINS.has(name) ? versions.values().next().value : versions.get(sourceVersion)
     if (source === undefined) throw new Error(`${name} has no workspace version ${sourceVersion}`)
     dshPackages++
     output.set(name, new Map(SYNTHETIC_DSH_VERSIONS.map(version => [

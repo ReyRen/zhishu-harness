@@ -1,4 +1,5 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -71,13 +72,15 @@ describe('npm resolution benchmark', () => {
     writeJson(root, 'apps/cli/package.json', {
       name: '@deepseek-ai/dsh',
       version: '0.1.0',
-      dependencies: { '@deepseek-ai/dsh-child': 'workspace:^', external: '^2.0.0' },
+      dependencies: { '@deepseek-ai/dsh-child': 'workspace:^', external: '^2.0.0', market: 'workspace:*' },
       devDependencies: { ignored: 'workspace:^' },
     })
     writeJson(root, 'packages/core/child/package.json', {
       name: '@deepseek-ai/dsh-child',
       version: '0.1.0',
     })
+    writeJson(root, 'third-party/market/package.json', { name: 'market', version: '1.0.0' })
+    writeJson(root, 'third-party/market/fixture/package.json', { name: 'not-a-workspace', version: '9.0.0' })
 
     const index = buildRegistryIndex(root)
 
@@ -85,8 +88,34 @@ describe('npm resolution benchmark', () => {
     expect(index.get('@deepseek-ai/dsh')?.get('0.1.0')).toEqual({
       name: '@deepseek-ai/dsh',
       version: '0.1.0',
-      dependencies: { '@deepseek-ai/dsh-child': '^0.1.0', external: '^2.0.0' },
+      dependencies: { '@deepseek-ai/dsh-child': '^0.1.0', external: '^2.0.0', market: '1.0.0' },
     })
+    expect(index.get('market')?.get('1.0.0')).toEqual({ name: 'market', version: '1.0.0' })
+    expect(index.has('not-a-workspace')).toBe(false)
+  })
+
+  it('reads third-party workspace manifests from the requested Git tree', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-npm-registry-ref-'))
+    roots.push(root)
+    const git = (...args: string[]): string => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim()
+    git('init')
+    writeJson(root, 'third-party/market/package.json', { name: 'market', version: '1.0.0' })
+    writeJson(root, 'third-party/market/fixture/package.json', { name: 'not-a-workspace', version: '9.0.0' })
+    git('add', '.')
+    const tree = git('write-tree')
+    writeJson(root, 'third-party/market/package.json', { name: 'market', version: '2.0.0' })
+    const index = buildRegistryIndex(root, tree)
+    expect(index.get('market')?.get('1.0.0')).toEqual({ name: 'market', version: '1.0.0' })
+    expect(index.get('market')?.has('2.0.0')).toBe(false)
+    expect(index.has('not-a-workspace')).toBe(false)
+  })
+
+  it('reports npm debug diagnostics before disposing a failed registry fixture', async () => {
+    const index: RegistryIndex = new Map([['@deepseek-ai/dsh', new Map([['0.1.0', {
+      name: '@deepseek-ai/dsh', version: '0.1.0', dependencies: { missing: 'workspace:*' },
+    }]])]])
+    await expect(resolveNpmPackageLock(index, { '@deepseek-ai/dsh': '0.1.0' }, 10_000))
+      .rejects.toThrow(/Unsupported URL Type|EUNSUPPORTEDPROTOCOL/)
   })
 
   it('runs npm against the local registry without requesting an archive', async () => {
