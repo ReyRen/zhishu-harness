@@ -48,7 +48,7 @@
 | 窗口、登录门、两个空间谁盖住谁、安装包里的平台地址 | `apps/desktop` | 在平台里再做一套桌面壳 |
 | 登录页、补录、`/desktop-entry`、业务功能 | model 仓库 | 在 Harness 里复制这些页面 |
 
-官方测试设置了 `VITEST` 时不加载 overlay。没有 Web 界面的 profile 也不加载。桌面端带 Web 运行时，会加载。
+官方测试设置了 `VITEST` 时不加载 overlay。没有 Web 界面的 profile 也不加载。桌面端带 Web 运行时，会加载。账号相关的 `hide-official-account` 和 `platform-account` 只在 profile 名为 `desktop` 时加载。容器化网页用 profile `web`，左下角仍是官方设置入口，官方账号菜单也保留。
 
 相关代码在 `apps/desktop/src/model-space/`：
 
@@ -185,7 +185,7 @@ pnpm run clean
 
 ## 对话界面的 overlay
 
-`apps/cli/src/profile-boot.ts` 加载 `overlay/*/cordis.patch.yml`。本地开发沿用 CLI 产物旁的仓库目录。打包时 `electron-builder` 把仓库 `overlay/` 放到安装包的 `resources/overlay`（在 asar 外面，图片才能被读到）。桌面壳启动 Host 前把这个目录写入 `DSH_ZHISHU_OVERLAY`。因此安装后的对话界面包含 `brand` 和 `hide-official-account`。改完 overlay 后需要重新打包才会进安装包。
+`apps/cli/src/profile-boot.ts` 加载 `overlay/*/cordis.patch.yml`。本地开发沿用 CLI 产物旁的仓库目录。打包时 `electron-builder` 把仓库 `overlay/` 放到安装包的 `resources/overlay`（在 asar 外面，图片才能被读到）。桌面壳启动 Host 前把这个目录写入 `DSH_ZHISHU_OVERLAY`。安装后的对话界面包含 `brand`；`hide-official-account` 和 `platform-account` 只跟着 profile `desktop` 生效，同一份 overlay 目录给容器里的 profile `web` 用时不会关掉官方设置。改完 overlay 后需要重新打包才会进安装包。
 
 ## 插件市场私有源
 

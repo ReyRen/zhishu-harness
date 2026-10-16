@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-本目录存放二次开发增量。每个子目录是独立插件。启动 Web profile（包括桌面的 Web 运行时）时，`apps/cli` 会在官方组合包之后加载其中的 `cordis.patch.yml`。无 Web 的 headless 和 SDK profile 不加载这些插件。除非官方界面没有对应 slot，否则不要改 `packages/` 中的源码。
+本目录存放二次开发增量。每个子目录是独立插件。启动 Web profile（包括桌面的 Web 运行时）时，`apps/cli` 会在官方组合包之后加载其中的 `cordis.patch.yml`。无 Web 的 headless 和 SDK profile 不加载这些插件。`hide-official-account` 和 `platform-account` 只在 profile `desktop` 上加载；容器化网页（profile `web`）保留官方设置入口和账号菜单。除非官方界面没有对应 slot，否则不要改 `packages/` 中的源码。
 
 ```text
 overlay/
@@ -12,9 +12,9 @@ overlay/
 │   ├── index.js           Host: serve images
 │   ├── client.js          Browser: occupy the sidebar and hero brand slots
 │   └── assets/            logo.png, logo-mark.png, zhishu-hero.webp, zhishu-hero-loop.webp, zhishu.gif
-├── hide-official-account/ Disable the official DeepSeek account menu. Desktop login uses the model site
-│   └── cordis.patch.yml   Disable ui-settings-account only
-├── platform-account/      会话页侧栏的平台账号。设置和退出登录放在这个菜单里
+├── hide-official-account/ 仅桌面：关掉官方 DeepSeek 账号菜单。容器化网页不加载
+│   └── cordis.patch.yml   只关闭 ui-settings-account
+├── platform-account/      仅桌面：会话页侧栏的平台账号。设置和退出登录放在这个菜单里
 ├── running-status/        Running mark, “正在思考”, conversation scrollbar
 │   ├── cordis.patch.yml   Insert this plugin
 │   ├── package.json       Declare dsh.client
