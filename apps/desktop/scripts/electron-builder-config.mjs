@@ -149,6 +149,9 @@ export function createElectronBuilderConfig(
       { from: fileURLToPath(new URL('../../../overlay', import.meta.url)), to: 'overlay' },
       { from: buildPaths.modelSite, to: 'model-site' },
       { from: fileURLToPath(new URL('../resources/model-gateway.default.json', import.meta.url)), to: 'model-gateway.json' },
+      { from: buildPaths.marketRegistry, to: 'market-registry', filter: ['**/*'] },
+      // electron-builder excludes a source directory's root node_modules from FileSets.
+      { from: join(buildPaths.marketRegistry, 'node_modules'), to: 'market-registry/node_modules', filter: ['**/*'] },
       // Same artwork as the Explorer icon. macOS keeps the Dock and ships no menu bar icon.
       ...(packagesWindows ? [{ from: fileURLToPath(new URL('../resources/icon-windows.ico', import.meta.url)), to: 'tray.ico' }] : []),
     ],

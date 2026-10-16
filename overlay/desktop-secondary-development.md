@@ -187,6 +187,14 @@ pnpm run clean
 
 `apps/cli/src/profile-boot.ts` 加载 `overlay/*/cordis.patch.yml`。本地开发沿用 CLI 产物旁的仓库目录。打包时 `electron-builder` 把仓库 `overlay/` 放到安装包的 `resources/overlay`（在 asar 外面，图片才能被读到）。桌面壳启动 Host 前把这个目录写入 `DSH_ZHISHU_OVERLAY`。因此安装后的对话界面包含 `brand` 和 `hide-official-account`。改完 overlay 后需要重新打包才会进安装包。
 
+## 插件市场私有源
+
+安装包带上 `market-registry/` 里的目录和两个皮肤包。打包前 `prepare:market-registry` 把 Verdaccio 装进 `resources/market-registry`（真实文件，没有指向仓库的链接）。装好的程序启动 Host 之前，在本机 `127.0.0.1:4873` 启动这份源，并在 `127.0.0.1:4874` 提供 `plugins.json`。Host 进程被设成使用这两个地址，同时关掉 pnpm 的 peer 自动安装，避免它到私有源里找 `react` 和 `cordis`。
+
+已发布的包写在应用用户目录，不写进安装目录。安装包更新后，新的 tarball 会在下次启动时补进这个目录。`127.0.0.1` 上如果已经有同一份源在听，安装包会沿用它，不会再起一个。
+
+`pnpm run dev:desktop` 不启动 Verdaccio。开发时先在另一个终端执行 `pnpm market:registry`。不要在跑 `pnpm` 的终端里设置 `npm_config_auto_install_peers=false`，那两个变量只属于 Host 进程。改了 `plugins.json` 或 `tarballs/` 之后要重新打包才会进安装包。
+
 ## Windows 图标
 
 资源管理器里的程序图标使用 dsh-desktop 的 `build/icon.ico`，副本在：
@@ -267,6 +275,60 @@ pnpm 自己会先打出 `Done in … using pnpm v11.7.0`。接着出现 `PostQue
 | 网络从哪出去 | 用户这台电脑 | 容器所在服务器 |
 | 窗口和本机程序 | 能开本机目录、调用本机上的程序 | 只有浏览器里的页面，碰不到用户电脑上的文件和已安装软件 |
 | 和 model 的关系 | 同一个窗口里盖着平台页，登录态在 `persist:zhishu-model` | 平台页面里的一层 iframe，会话在容器里 |
+
+## 本机数据放在哪
+
+本地 `pnpm dsh web`、`pnpm dsh:private`、解压目录里的 `Zhishu.exe`，以及 `pnpm dev:desktop`，会话并不各写一份。前三种在没设置 `DSH_HOME` 时共用用户主目录下的 `.dsh`。开发桌面单独用仓库里的一套目录，看不到正式数据。
+
+`dsh:private` 只是给 `dsh web` 加上本机插件源地址，数据目录不变。
+
+| 启动方式 | 数据根 `DSH_HOME` | profile | 会话和工作区列表 |
+|---|---|---|---|
+| `pnpm dsh web`、`pnpm dsh:private` | `%USERPROFILE%\.dsh` | `profiles\web` | 这份 home 里的 `sessions`、`storages` |
+| 解压版或安装后的 `Zhishu.exe` | 同样是 `%USERPROFILE%\.dsh` | `profiles\desktop` | 同一套 `sessions` 和 `storages` |
+| `pnpm dev:desktop` | `apps/desktop/.desktop-build/development/home`（启动前已设置 `DSH_HOME` 时用那个值） | 这个开发 home 里的 `profiles\desktop` | 这个开发 home 里的 `sessions` |
+
+因此网页版和正式桌面能看到同一批会话。开发桌面看不到它们。插件和模型配置按 profile 分开：网页在 `profiles\web\cordis.patch.yml`，桌面在 `profiles\desktop\cordis.patch.yml`。
+
+### 会话和工作区
+
+会话日志在 `$DSH_HOME\sessions`。先按当时的工作目录分一层，目录名把盘符和斜杠换成 `-`，两端再加 `--`。例如工作区 `C:\Users\Admin\Documents\code` 对应 `--C-Users-Admin-Documents-code--`。每个会话再占下面一个子目录，里面是 JSONL 日志。没有工作目录的会话进 `_no-cwd`。
+
+左侧工作区列表不是这些文件夹。列表、顺序、归档和置顶写在 `$DSH_HOME\storages\workspace.json`。会话列表上的标题和摘要缓存在 `storages\session_projcache`。从界面去掉一个工作区只删这条登记，不删磁盘上的项目文件夹，也不删 `sessions` 里的日志。
+
+### `.dsh` 里各目录
+
+未设置 `DSH_HOME` 时，Windows 上就是 `%USERPROFILE%\.dsh`。
+
+```text
+.dsh\
+  sessions\                 全部会话 JSONL。网页和正式桌面共用
+  storages\                 结构化状态
+    workspace.json          工作区列表
+    session_projcache\      会话列表缓存
+    cost-meter\             费用统计
+    mcp_connector.json      MCP 连接授权
+  profiles\
+    web\                    网页版：已装插件、cordis.patch.yml、pnpm-lock.yaml
+    desktop\                桌面版：同上。模型提供方和默认模型也在这份 cordis.patch.yml
+    node_modules\           安装插件时的依赖
+  attachments\v1\           消息里的图片和文件。有附件之后才会出现
+  cache\                    附件等缓存
+  dsh-runtimes\             首次用到时展开的内置 Python、Node、pnpm
+  dsh-market\               插件市场自己的状态，例如快照和屏蔽列表
+  logs\                     启动日志
+  .credentials.yaml         模型页写入的密钥
+  .anonymous-user-id        这一份 home 的匿名标识
+```
+
+每个 profile 目录里常见的是 `package.json`（装了哪些插件）、`cordis.patch.yml`（模型、主题、开关）、`pnpm-lock.yaml` 和 `node_modules`。清安装残留时删锁文件和 `node_modules`，留下 `cordis.patch.yml`，模型配置还在。
+
+另外两处不在 `.dsh` 里：
+
+- `~\.agents`：用户全局 `AGENTS.md` 和 `skills`。网页和桌面只要用同一个 home，都会读它。
+- 桌面壳自己的数据在 `%APPDATA%\@deepseek-ai\dsh-desktop`，跟程序显示名「智枢」不是同一个文件夹。这里有 Chromium 缓存、快捷键、`desktop\settings.json`，以及打包后本地插件源的可写数据 `market-registry`。模型网关地址在安装目录的 `resources\model-gateway.json`。`pnpm dev:desktop` 的壳数据在 `apps/desktop/.desktop-build/development/electron-user-data`，不写上面的 Roaming 目录。
+
+容器里的网页 Harness 不使用用户电脑上的 `.dsh`。它的文件在容器内，见上一节。
 
 ## 重复下载
 

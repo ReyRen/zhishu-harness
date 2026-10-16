@@ -47,9 +47,8 @@ pnpm dsh:private
 npm pack <包名>@<版本> --registry https://registry.npmjs.org/ --pack-destination market-registry/tarballs
 ```
 
-3. 在 `start.mjs` 的 `mirrored` 列表里加上 `{ name, version }`。
-4. 在 `plugins.json` 里加一条。`npm` 填包名，`url` 填上面的 GitHub 地址，`count` 改成条目数。
-5. 重启 `pnpm market:registry`，再重启 `pnpm dsh:private`。市场每次打开都会重新读取目录。
+3. 在 `plugins.json` 里加一条。`npm` 填包名，`url` 填上面的 GitHub 地址，`count` 改成条目数。开发时的 `pnpm market:registry` 和桌面安装包里的私有源都读这份列表。
+4. 重启 `pnpm market:registry`，再重启 `pnpm dsh:private`。市场每次打开都会重新读取目录。打过的安装包要重新打包才会带上新插件。
 
 装进用户 profile 的是 `npm` 字段指向的包。这个包如果还有自己的运行时依赖，那些依赖的 tarball 也要按同样步骤放进来。peer 不需要拷，宿主已经提供。
 
@@ -65,3 +64,9 @@ DSHM_NPM_MIRROR=http://<内网地址>:4873
 ```
 
 同时带上 `npm_config_auto_install_peers=false` 和 `pnpm_config_auto_install_peers=false`。只对运行 Web 的机器开放 `4873` 和 `4874`。当前配置允许匿名发布，不要暴露到公网。
+
+## 桌面安装包
+
+`pnpm run package:desktop:win:x64:unsigned` 会把 `plugins.json`、`tarballs/` 和 Verdaccio 放进安装包的 `resources/market-registry`。装好的程序在本机 `127.0.0.1:4873` 和 `4874` 自己启动这份源，并把桌面里的插件市场指过去。它不读终端里的 `DSHM_*`。
+
+本机源的数据写在应用用户目录的 `market-registry` 里，不写进安装目录。安装包里新加的版本会在下次启动时补进去。开发时仍要另开 `pnpm market:registry`，`pnpm run dev:desktop` 不会自己启动 Verdaccio。

@@ -47,6 +47,7 @@ import { DesktopUpdateSchedule, resolveDesktopUpdateScheduleConfig } from './upd
 import { desktopUpdateErrorSummary, presentDesktopUpdate } from './update-presentation.ts'
 import { desktopErrorState } from './startup-error.ts'
 import { readDesktopLoginShellEnvironment, resolveDesktopLoginShellConfig } from './login-shell-environment.ts'
+import { packagedPluginMarketRoot, pluginMarketHostEnvironment, startPackagedPluginMarket, stopPackagedPluginMarket } from './plugin-market.ts'
 import { DesktopMandatoryUpdatePolicy, resolveDesktopPolicyConfig, type DesktopPolicyState } from './mandatory-update-policy.ts'
 import { desktopClientMetadata, desktopClientVersion } from './client-metadata.ts'
 import { DesktopMandatoryUpdateWindow } from './mandatory-update-window.ts'
@@ -333,15 +334,29 @@ async function main(): Promise<void> {
   // Dock and Finder launches inherit only launchd's environment; every Host shares one login-shell read.
   const loginShellRead = new AbortController()
   // The probe runs in its own process group, which outlives Desktop unless the read is aborted.
-  app.on('will-quit', () => { loginShellRead.abort() })
+  app.on('will-quit', () => { loginShellRead.abort(); stopPackagedPluginMarket() })
   const loginShell = readDesktopLoginShellEnvironment(process.env, resolveDesktopLoginShellConfig(process.env), {
     signal: loginShellRead.signal,
   }).then((result) => {
     for (const failure of result.failures) console.warn(`desktop login shell: ${failure.shell} failed (${failure.reason})`)
     return result.environment
   })
+  const marketRoot = development ? undefined : packagedPluginMarketRoot(process.resourcesPath)
   let hostEnvironment: NodeJS.ProcessEnv = process.env
-  const prepareHostEnvironment = async (): Promise<void> => { hostEnvironment = await loginShell }
+  const prepareHostEnvironment = async (): Promise<void> => {
+    const [base] = await Promise.all([
+      loginShell,
+      marketRoot === undefined ? Promise.resolve() : startPackagedPluginMarket(marketRoot, app.getPath('userData'), resources.node),
+    ])
+    // Packaged builds only remap the catalog when Verdaccio was actually shipped and started.
+    // Development still remaps so `pnpm market:registry` is the only source the Host sees.
+    hostEnvironment = development || marketRoot !== undefined
+      ? pluginMarketHostEnvironment(base)
+      : base
+    if (!development && marketRoot === undefined) {
+      console.warn('desktop plugin market: resources/market-registry is incomplete; Host keeps the default catalog')
+    }
+  }
   let quitting = false
   let startup: Promise<void> | undefined
   let workspaceRecovery: Promise<void> | undefined
