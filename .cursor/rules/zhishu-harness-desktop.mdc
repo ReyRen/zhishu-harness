@@ -1,0 +1,39 @@
+---
+description: 智枢桌面端二次开发约束。改登录门、会话/业务空间、标题栏切换、平台地址或安装包里的 overlay 时遵守。
+globs: apps/desktop/**,overlay/desktop-secondary-development.md
+alwaysApply: false
+---
+
+# 智枢桌面端
+
+智枢桌面端是官方 `apps/desktop` 上的二次开发，不是 `dsh-desktop`。会话用官方对话和官方运行时；业务直接加载 model 整站，不在 Harness 里重做平台页面。model 的 `/harnessAgent` 是容器里的 web profile，没有安装包里的 Python 创作环境和 Office 运行时。三种差别见 `overlay/desktop-secondary-development.md` 的「三种 Harness 的差别」。
+
+## 两个空间
+
+- 会话是主窗口网页 `dsh-app://app/`。业务是盖在上面的 `WebContentsView`，分区 `persist:zhishu-model`。从登录到整站用同一个 view，`sessionStorage` 里的登录标记不能丢。
+- 未登录时平台页盖住对话。最小化把整个窗口收到任务栏，还原后仍是登录页，不能露出底下的会话页。离开登录流程后藏起平台页，进入会话。再切到业务时显示已经打开的整站。模型训练不是业务落地页。不要藏平台自己的顶栏、侧栏、标签。桌面嵌入时可以藏起业务侧栏自己的收起按钮，改由窗口左上角的折叠按钮按当前空间切换。
+- Windows 标题栏「编辑」右侧切换「会话 / 业务」，下拉层是独立 `WebContentsView`。未登录时隐藏。macOS 没有这个按钮。不要把切换做进 model 页面。
+
+## 登录
+
+- 启动走 `ModelPlatformGate.open()`，不打开官方欢迎页。官方账号菜单只由 `overlay/hide-official-account` 关掉。不要改欢迎页，不要停账号控制器，不要在桌面端重做验证码或 RSA。
+- 冷启动：该分区 cookie 仍有效则打开 `/desktop-entry`，否则 `/login`。在登录页输入账号不经过 `/desktop-entry`。
+- `/login`、`/register`、`/desktop-entry`、`/complete-identity` 仍算登录流程。地址离开这些路径、并且仍是平台源站时，才 `enterWorkspace()` 打开对话。
+- 会话页账号菜单是 `overlay/platform-account`，不要重新打开 `ui-settings-account`。业务页只在 `window.zhishuDesktop.embedded` 时藏蓝顶栏并在侧栏放账号菜单。浏览器打开 model 保持原顶栏。
+
+## 地址和安装包
+
+- 本地开发默认 `http://127.0.0.1:8888`。未打包时，shell 里的 `DSH_MODEL_ORIGIN` 只影响这一次启动。
+- 安装包里的页面由本机 `http://127.0.0.1:17321` 提供，静态文件在 `resources/model-site`。后台地址在安装目录的 `resources/model-gateway.json`，改完重启即可。升级安装保留已有的这份文件。不要把页面改回 `https://172.18.127.67`。
+- 走网关的请求把 `Origin` 和 `Referer` 换成 `publicOrigin`（缺省 `https://172.18.127.67`），所有转发都改，包括 `:3002`。路由自带 `host` 时只改 `Host`。开发工具里看到的仍是页面发给 `127.0.0.1` 的头。
+- 打包时 `prepare:model-site` 先构建 model（默认 `build:delivery:full`）以及 flow、prompt，再拷进安装包。`DSH_MODEL_DELIVERY=lite` 只构建主应用。`DSH_DESKTOP_SKIP_MODEL_BUILD=1` 只拷贝已经打好的 dist。
+- `overlay/` 打进 `resources/overlay`（asar 外面）。壳启动时写入 `DSH_ZHISHU_OVERLAY`。改 overlay 或壳源码后要重新打包才进安装包。
+- overlay 仍只加载到带 Web 界面的 profile；设置了 `VITEST` 时不加载。不要改成从 asar 里的相对路径读插件。
+
+## 合并 main 之后
+
+- 包被移动或删除后，先在仓库根目录执行 `pnpm run clean`，再 `pnpm run dev:desktop`。`clean` 不改 `node_modules`。若启动报 `node_modules\.pnpm\node_modules` 下的 `ENOENT`，退出应用，删掉根目录 `node_modules`，再 `pnpm install`。锁文件未变时，单独 `pnpm install` 不会重写这些链接。步骤见 `overlay/desktop-secondary-development.md` 的「合并官方代码之后」。
+
+## 不要动
+
+不要改 `isLoopbackHostname`，不要拆掉 `/api` 的 Host 围栏。对话界面增量仍放 `overlay/`，不要为桌面壳去改 `packages/` 里的界面源码。

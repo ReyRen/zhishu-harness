@@ -28,4 +28,4 @@ profile 在容器挂载的用户目录里，换镜像不会重写。开关是否
 
 设置里的「内置插件」是只读的已启动名单。侧栏「插件」才管理组合包。「官方」里带开关的是可选组合包，没有开关的是 `plugins.item` 配置卡片。终端卡片写入 loader 行 `bash-sandbox`（Windows 为 `pwsh-sandbox`），不是 `dsh-shell`，也不是右侧栏终端。
 
-细节见 `overlay/plugin-secondary-development.md`。
+细节见 `overlay/plugin-secondary-development.md`。桌面壳的登录门、会话/业务空间和安装包约束见同目录的 `zhishu-harness-desktop.mdc`，说明见 `overlay/desktop-secondary-development.md`。

@@ -14,11 +14,18 @@ import { setTimeout as delay } from 'node:timers/promises'
 const root = dirname(fileURLToPath(import.meta.url))
 const registry = 'http://127.0.0.1:4873'
 const catalogPort = 4874
-/** Community packages copied into ./tarballs. Versions match plugins.json. */
-const mirrored = [
-  { name: 'dsh-dream-skin', version: '10.15.0' },
-  { name: 'open-sea-skin', version: '1.2.5' },
-]
+/** Packages listed in plugins.json. The desktop installer reads the same file. */
+function mirroredPackages() {
+  const catalog = JSON.parse(readFileSync(join(root, 'plugins.json'), 'utf8'))
+  if (!Array.isArray(catalog.plugins)) throw new Error('plugins.json has no plugins list')
+  return catalog.plugins.map(plugin => {
+    const name = typeof plugin.npm === 'string' && plugin.npm !== '' ? plugin.npm : plugin.name
+    if (typeof name !== 'string' || name === '' || typeof plugin.version !== 'string' || plugin.version === '') {
+      throw new Error('plugins.json entry needs a name and a version')
+    }
+    return { name, version: plugin.version }
+  })
+}
 /** Local publish account. It exists only in this machine's htpasswd file. */
 const publisher = { name: 'zhishu', password: 'zhishu-local', email: 'zhishu@localhost' }
 
@@ -112,7 +119,7 @@ function writeNpmrc(token) {
 
 async function ensureMirrored(token) {
   const npmrc = writeNpmrc(token)
-  for (const item of mirrored) {
+  for (const item of mirroredPackages()) {
     const stored = join(root, 'storage', item.name, `${item.name}-${item.version}.tgz`)
     if (existsSync(stored)) continue
     const packed = join(root, 'tarballs', `${item.name}-${item.version}.tgz`)

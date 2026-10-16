@@ -61,6 +61,9 @@ ManifestDPIAware true
   ${EndIf}
   Call InstallerResolveTheme
   InitPluginsDir
+  IfFileExists "$INSTDIR\resources\model-gateway.json" 0 gateway_backup_done
+    CopyFiles /SILENT "$INSTDIR\resources\model-gateway.json" "$PLUGINSDIR\model-gateway.json"
+  gateway_backup_done:
   File "/oname=$PLUGINSDIR\brand.bmp" "${INSTALLER_BUILD_DIR}\brand.bmp"
   File "/oname=$PLUGINSDIR\brand-2x.bmp" "${INSTALLER_BUILD_DIR}\brand-2x.bmp"
   File "/oname=$PLUGINSDIR\brand-dark.bmp" "${INSTALLER_BUILD_DIR}\brand-dark.bmp"
@@ -209,6 +212,9 @@ ManifestDPIAware true
   !insertmacro dshFinishDirectories
   ; Standard uninstall-entry metadata read by inventory tools; the upstream template records it only under its private key.
   WriteRegStr SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}" InstallLocation "$INSTDIR"
+  ${If} ${FileExists} "$PLUGINSDIR\model-gateway.json"
+    CopyFiles /SILENT "$PLUGINSDIR\model-gateway.json" "$INSTDIR\resources\model-gateway.json"
+  ${EndIf}
   ${If} $0 == 1
     SetErrors
   ${Else}

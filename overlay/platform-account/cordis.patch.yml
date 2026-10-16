@@ -1,0 +1,5 @@
+# Occupies settings.launcher with the platform user. profile-boot loads this
+# patch only for profile `desktop`. Container web keeps the official launcher.
+- insert:
+    - id: zhishu-platform-account
+      name: ./index.js

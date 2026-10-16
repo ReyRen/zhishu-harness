@@ -13,6 +13,8 @@ export interface DesktopTargetBuildPaths {
   readonly packedDsh: string
   readonly packedVendor: string
   readonly packedLandlock: string
+  readonly modelSite: string
+  readonly marketRegistry: string
   readonly downloads: string
 }
 

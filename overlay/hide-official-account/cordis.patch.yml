@@ -1,0 +1,5 @@
+# DeepSeek account menu is not the platform login. The desktop shell uses the
+# model site instead. profile-boot loads this patch only for profile `desktop`.
+# Container web (profile `web`) keeps this row.
+- id: ui-settings-account
+  disabled: true

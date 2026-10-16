@@ -8,7 +8,6 @@ import { fileURLToPath } from 'node:url'
 import {
   app,
   BrowserWindow,
-  clipboard,
   dialog,
   ipcMain,
   Menu,
@@ -38,15 +37,17 @@ import { DesktopCommandManager } from './command-management.ts'
 import { serveWebDocument, authenticateWebHost, forwardWebRequest } from './web-document.ts'
 import { DesktopFatalRecovery } from './fatal-recovery.ts'
 import { pruneCrashReports, RendererConsoleTail, writeCrashReport, type CrashReportSource } from './crash-report.ts'
-import { openWelcomeWindow } from './welcome-window.ts'
-import { WELCOME_IPC, needsWelcome, type WelcomeNotice } from './welcome-api.ts'
+import { WELCOME_IPC } from './welcome-api.ts'
 import { connectDesktopWelcome, type DesktopWelcomeBackend } from './welcome-backend.ts'
+import { ModelPlatformGate } from './model-space/model-gate.ts'
+import { startPackagedModelSite } from './model-space/model-gateway.ts'
 import { DesktopUpdateJournal } from './update-journal.ts'
 import { DesktopUpdatePreparationError } from './update-error.ts'
 import { DesktopUpdateSchedule, resolveDesktopUpdateScheduleConfig } from './update-schedule.ts'
 import { desktopUpdateErrorSummary, presentDesktopUpdate } from './update-presentation.ts'
 import { desktopErrorState } from './startup-error.ts'
 import { readDesktopLoginShellEnvironment, resolveDesktopLoginShellConfig } from './login-shell-environment.ts'
+import { packagedPluginMarketRoot, pluginMarketHostEnvironment, startPackagedPluginMarket, stopPackagedPluginMarket } from './plugin-market.ts'
 import { DesktopMandatoryUpdatePolicy, resolveDesktopPolicyConfig, type DesktopPolicyState } from './mandatory-update-policy.ts'
 import { desktopClientMetadata, desktopClientVersion } from './client-metadata.ts'
 import { DesktopMandatoryUpdateWindow } from './mandatory-update-window.ts'
@@ -321,6 +322,10 @@ async function main(): Promise<void> {
   const resources = runtimeResources()
   const paths = resolveDesktopPaths()
   const development = !app.isPackaged
+  const overlayDir = development
+    ? join(app.getAppPath(), '..', '..', 'overlay')
+    : typeof process.resourcesPath === 'string' ? join(process.resourcesPath, 'overlay') : undefined
+  if (overlayDir !== undefined) process.env.DSH_ZHISHU_OVERLAY = overlayDir
   const primaryRuntime = development
     ? developmentPrimaryRuntime()
     : join(process.resourcesPath, 'runtime', 'primary-runtime')
@@ -329,15 +334,29 @@ async function main(): Promise<void> {
   // Dock and Finder launches inherit only launchd's environment; every Host shares one login-shell read.
   const loginShellRead = new AbortController()
   // The probe runs in its own process group, which outlives Desktop unless the read is aborted.
-  app.on('will-quit', () => { loginShellRead.abort() })
+  app.on('will-quit', () => { loginShellRead.abort(); stopPackagedPluginMarket() })
   const loginShell = readDesktopLoginShellEnvironment(process.env, resolveDesktopLoginShellConfig(process.env), {
     signal: loginShellRead.signal,
   }).then((result) => {
     for (const failure of result.failures) console.warn(`desktop login shell: ${failure.shell} failed (${failure.reason})`)
     return result.environment
   })
+  const marketRoot = development ? undefined : packagedPluginMarketRoot(process.resourcesPath)
   let hostEnvironment: NodeJS.ProcessEnv = process.env
-  const prepareHostEnvironment = async (): Promise<void> => { hostEnvironment = await loginShell }
+  const prepareHostEnvironment = async (): Promise<void> => {
+    const [base] = await Promise.all([
+      loginShell,
+      marketRoot === undefined ? Promise.resolve() : startPackagedPluginMarket(marketRoot, app.getPath('userData'), resources.node),
+    ])
+    // Packaged builds only remap the catalog when Verdaccio was actually shipped and started.
+    // Development still remaps so `pnpm market:registry` is the only source the Host sees.
+    hostEnvironment = development || marketRoot !== undefined
+      ? pluginMarketHostEnvironment(base)
+      : base
+    if (!development && marketRoot === undefined) {
+      console.warn('desktop plugin market: resources/market-registry is incomplete; Host keeps the default catalog')
+    }
+  }
   let quitting = false
   let startup: Promise<void> | undefined
   let workspaceRecovery: Promise<void> | undefined
@@ -398,6 +417,8 @@ async function main(): Promise<void> {
     show: ordinaryMessageBox,
   })
   const appPreload = fileURLToPath(new URL('./preload-app.cjs', import.meta.url))
+  const modelPreload = fileURLToPath(new URL('./preload-model-gate.cjs', import.meta.url))
+  let modelGate: ModelPlatformGate | undefined
   const applicationUrl = `${SCHEME}://app/`
   let hostUrl: string | undefined
   let hostCookie: string | undefined
@@ -415,8 +436,6 @@ async function main(): Promise<void> {
   let stopAccount: (() => void) | undefined
   let openedAttempt: string | undefined
   let returnedAttempt: string | undefined
-  let pendingWelcomeNotice: WelcomeNotice | undefined
-  let previousAccountStatus: string | undefined
   const assertProductSender = (event: IpcMainInvokeEvent): void => {
     assertDesktopSender(event, ['app'])
     if (mainWindow === undefined || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents
@@ -472,28 +491,10 @@ async function main(): Promise<void> {
             focusPrimaryWindow()
           }
           if (state.status === 'credential-stored' && attempt?.phase === 'succeeded' && welcomeWindow !== undefined) void enterWorkspace({ activate: false }).catch(() => undefined)
-          if (previousAccountStatus === 'credential-stored' && state.status === 'signed-out') {
-            void readWelcomeState().then(async (value) => {
-              if (needsWelcome(value) && !quitting) {
-                enteredWorkspace = false
-                await showWelcome()
-                if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) welcomeWindow.webContents.send(WELCOME_IPC.state, state)
-              }
-              return undefined
-            }).catch(() => undefined)
-          }
-          previousAccountStatus = state.status
         }, () => {
           // The stream reconnects; a transport failure does not change account state.
         }, () => {
-          void readWelcomeState().then(async (value) => {
-            if (!needsWelcome(value) || quitting) return
-            pendingWelcomeNotice = 'session-expired'
-            enteredWorkspace = false
-            await showWelcome()
-            const state = await accountBackend.state()
-            if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) welcomeWindow.webContents.send(WELCOME_IPC.state, state)
-          }).catch(() => undefined)
+          modelGate?.presentLogin()
         }, (enabled) => { analyticsEnabled = enabled })
       },
       stop: async () => {
@@ -929,7 +930,7 @@ async function main(): Promise<void> {
   const applicationIconPath = development ? join(app.getAppPath(), 'resources', 'icon-windows.png')
     : join(process.resourcesPath, 'icon.png')
   app.setAboutPanelOptions({
-    applicationName: 'DeepSeek Harness',
+    applicationName: 'Zhishu Harness',
     applicationVersion: app.getVersion(),
     // The release has no separate build number; omit Electron's bundle version.
     version: '',
@@ -985,7 +986,7 @@ async function main(): Promise<void> {
     tray?.relabel()
   }
   refreshApplicationMenu()
-  const trayIconPath = development ? join(app.getAppPath(), 'resources', 'tray-windows.ico') : join(process.resourcesPath, 'tray.ico')
+  const trayIconPath = development ? join(app.getAppPath(), 'resources', 'icon-windows.ico') : join(process.resourcesPath, 'tray.ico')
   if (process.platform === 'win32') {
     // The tray is the way back to a hidden window; without it, relaunching the application still focuses it.
     try {
@@ -1136,68 +1137,6 @@ async function main(): Promise<void> {
       window.webContents.openDevTools({ mode: 'detach' })
     }
   }
-  let openingWelcome: Promise<void> | undefined
-  const showWelcome = (): Promise<void> => {
-    if (quitting) return Promise.resolve()
-    if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) {
-      if (!welcomeWindow.isVisible()) void track('auth_page_view', {})
-      welcomeWindow.show()
-      welcomeWindow.focus()
-      return Promise.resolve()
-    }
-    openingWelcome ??= (async () => {
-      welcomeWindow = await openWelcomeWindow(locale, {
-        analytics: track,
-        analyticsEnabled: () => Promise.resolve(analyticsEnabled),
-        takeNotice: () => {
-          const notice = pendingWelcomeNotice
-          pendingWelcomeNotice = undefined
-          return Promise.resolve(notice)
-        },
-        startSignIn: async () => {
-          if (welcomeBackend === undefined) throw new Error('desktop welcome: backend unavailable')
-          return welcomeBackend.account.start(desktopClientMetadata(locale.id))
-        },
-        cancelSignIn: async (id) => {
-          if (welcomeBackend === undefined) throw new Error('desktop welcome: backend unavailable')
-          return welcomeBackend.account.cancel(id)
-        },
-        copySignInLink: async (id) => {
-          const state = await welcomeBackend?.account.state()
-          if (state?.attempt?.id !== id || state.attempt.phase !== 'waiting-browser' || state.attempt.authorizeUrl === undefined) {
-            throw new Error('desktop welcome: login link is unavailable')
-          }
-          await clipboard.writeText(platformLoginUrl(state.attempt.authorizeUrl))
-        },
-        saveApiKey: async (apiKey) => {
-          if (backend.host === undefined || welcomeBackend === undefined) return { ok: false }
-          const saved = await welcomeBackend.save(apiKey)
-          if (!saved.ok) return saved
-          await enterWorkspace()
-          return { ok: true }
-        },
-        skip: enterWorkspace,
-      })
-      const window = welcomeWindow
-      window.once('closed', () => {
-        void welcomeBackend?.account.state().then((state) => {
-          if (state.attempt !== null && !enteredWorkspace) return welcomeBackend?.account.cancel(state.attempt.id)
-          return undefined
-        }).catch(() => undefined)
-      })
-      window.once('closed', () => {
-        if (welcomeWindow === window) welcomeWindow = undefined
-        if (enteredWorkspace || recovery.active) return
-        // Nothing runs before the workspace opens. macOS keeps the Dock convention and drops the
-        // unused main window so the next activation rebuilds the welcome; elsewhere the close quits.
-        if (process.platform === 'darwin') mainWindow?.destroy()
-        else app.quit()
-      })
-      if (isQuitting() || recovery.active || enteredWorkspace) window.close()
-      else mainWindow?.hide()
-    })().finally(() => { openingWelcome = undefined })
-    return openingWelcome
-  }
   const openInitialWindow = async (): Promise<void> => {
     if (quitting || recovery.active) return
     const state = await readWelcomeState()
@@ -1205,13 +1144,13 @@ async function main(): Promise<void> {
     locale = resolveDesktopStartupLocale(state.localePreference, systemLanguages)
     windowsLanguage = locale.id
     refreshApplicationMenu()
-    if (!enteredWorkspace && needsWelcome({ loggedIn: state.loggedIn, hasApiKey: state.hasApiKey })) {
-      // A later login must retain its own activation policy instead of replaying startup focus.
-      raiseAfterUpdate = false
-      await showWelcome()
-    } else {
-      await enterWorkspace()
-    }
+    const window = mainWindow ?? createMainWindow()
+    if (!development) await startPackagedModelSite(process.resourcesPath)
+    modelGate ??= new ModelPlatformGate(modelPreload, () => enterWorkspace())
+    modelGate.attach(window)
+    // Model login is the gate. A valid platform cookie continues into the model
+    // site, which then opens the Harness workspace. DeepSeek welcome stays unused.
+    await modelGate.open()
   }
   focusPrimaryWindow = () => {
     if (quitting) return
@@ -1222,8 +1161,13 @@ async function main(): Promise<void> {
       void (backend.state.phase === 'ready' ? openInitialWindow() : navigateMain(applicationUrl)).catch((error: unknown) => { reportFatal(error, 'main') })
       return
     }
-    // Startup and sign-out select the visible window before activation may reveal the workspace.
-    if (window === mainWindow && !enteredWorkspace) return
+    // Login covers the main window; focusing it must not wait for the Harness workspace.
+    if (window === mainWindow && !enteredWorkspace) {
+      if (window.isMinimized()) window.restore()
+      window.show()
+      window.focus()
+      return
+    }
     if (window.isMinimized()) window.restore()
     window.show()
     window.focus()
@@ -1280,7 +1224,7 @@ async function main(): Promise<void> {
       if (quitting || shellInstallerOwnsQuit) return
       if (approved) { finishQuit(); return }
       // A quit that started from closing the welcome window destroyed it; a cancelled quit needs it back.
-      if (!enteredWorkspace && !recovery.active) void showWelcome().catch((error: unknown) => { reportFatal(error, 'main') })
+      if (!enteredWorkspace && !recovery.active) modelGate?.presentLogin()
     }).catch((error: unknown) => { console.error(error); if (!quitting && !shellInstallerOwnsQuit) finishQuit() })
   })
 

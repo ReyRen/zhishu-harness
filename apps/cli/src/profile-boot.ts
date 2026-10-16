@@ -10,7 +10,7 @@
  * @module @deepseek-ai/dsh/profile-boot
  */
 
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { FiberState, type Context } from '@deepseek-ai/cordis'
@@ -181,30 +181,58 @@ interface ComposedProfile {
   overlays: PatchOptions[]
 }
 
-/**
- * Fork Web overlay patches under `<repo>/overlay/<name>/cordis.patch.yml`.
- * They apply only to profiles containing the Web bundle, after shipped bundles.
- * Vitest boots the same launcher and must keep the stock composition.
- * @param profile - loaded profile whose bundle layers select the Web surface.
- * @returns absolute patch paths, in directory-name order.
- */
 /** Overlay directory whose insert uses the same Cordis id as the market bundle. */
 const PREINSTALLED_MARKET_OVERLAY = 'dsh-market'
 /** Package name of that bundle. A profile copy inserts the id itself. */
 const PREINSTALLED_MARKET_PACKAGE = 'dshmarket'
+/** Profile booted by the desktop shell. Container web keeps the name `web`. */
+const DESKTOP_PROFILE = 'desktop'
+/**
+ * Account UI that only exists inside the desktop shell. Container web has no
+ * platform login page, so it keeps the official settings launcher and account menu.
+ */
+const DESKTOP_ONLY_OVERLAYS = new Set(['hide-official-account', 'platform-account'])
 
+/**
+ * Overlay directory for this process. A packaged desktop app sets
+ * `DSH_ZHISHU_OVERLAY` to the copy beside its asar; otherwise the repository
+ * `overlay/` directory is used. The first existing directory wins.
+ * @returns the absolute overlay directory, or `undefined` when neither exists.
+ */
+function zhishuOverlayDirectory(): string | undefined {
+  const configured = process.env.DSH_ZHISHU_OVERLAY?.trim()
+  const candidates = configured !== undefined && configured !== ''
+    ? [resolve(configured), fileURLToPath(new URL('../../../overlay', import.meta.url))]
+    : [fileURLToPath(new URL('../../../overlay', import.meta.url))]
+  return candidates.find((dir) => {
+    try { return statSync(dir).isDirectory() } catch { return false }
+  })
+}
+
+/**
+ * Fork overlay patches under `<repo>/overlay/<name>/cordis.patch.yml`.
+ * Each directory is one secondary-development plugin. They apply only to
+ * profiles containing the Web bundle, after the shipped bundles, so an overlay
+ * can disable an upstream row without editing it. The platform account menu
+ * loads only for the desktop profile; container web keeps the official rows.
+ * Vitest boots the same launcher and must keep the stock composition.
+ * @param profile - loaded profile whose bundle layers select the Web surface.
+ * @returns absolute patch paths, in directory-name order.
+ */
 function zhishuOverlayPatches(profile: Profile): string[] {
   if (process.env.VITEST !== undefined
     || !profile.layers.some(layer => layer.packageName === '@deepseek-ai/dsh-web-app')) return []
-  const dir = fileURLToPath(new URL('../../../overlay', import.meta.url))
-  if (!existsSync(dir)) return []
+  const dir = zhishuOverlayDirectory()
+  if (dir === undefined) return []
   const profileOwnsMarket = profile.layers.some(layer => layer.packageName === PREINSTALLED_MARKET_PACKAGE)
+  const desktopAccount = profile.name === DESKTOP_PROFILE
   const files: string[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue
     // The profile bundle's own patch already inserts id dsh-market. Loading
     // this overlay as well would register that id twice.
     if (profileOwnsMarket && entry.name === PREINSTALLED_MARKET_OVERLAY) continue
+    if (!desktopAccount && DESKTOP_ONLY_OVERLAYS.has(entry.name)) continue
     const patch = join(dir, entry.name, 'cordis.patch.yml')
     if (existsSync(patch)) files.push(patch)
   }

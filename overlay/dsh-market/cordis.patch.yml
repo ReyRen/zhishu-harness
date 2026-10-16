@@ -2,9 +2,13 @@
 # apps/cli dependency, so the running copy is the installation copy. This row
 # is skipped when the user profile already has a dshmarket bundle layer,
 # because that layer inserts the same id.
+#
+# Do not set config.profile here. A fixed `web` makes the desktop app manage
+# ~/.dsh/profiles/web and fall back to spawning bare `dsh` (which is not on
+# PATH inside Electron). With profile omitted, the market follows the
+# launcher's profileContext: `web` under `dsh web`, `desktop` under the app.
 - insert:
     - id: dsh-market
       name: dshmarket
       config:
-        profile: web
         allowRestart: false

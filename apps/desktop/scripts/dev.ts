@@ -8,6 +8,7 @@ import { parseArgs } from 'node:util'
 import { DESKTOP_HOST_PROTOCOL_VERSION } from '../src/host-protocol.ts'
 import type { DesktopRelease } from '../src/release.ts'
 import { developmentRuntimeDirectory, resolveDesktopBuildTarget } from './desktop-build-paths.mjs'
+import { pluginMarketHostEnvironment } from '../src/plugin-market.ts'
 import { prepareDevelopmentProject } from './development-project.ts'
 import { prepareDevelopmentApp } from './development-app.ts'
 import { preparePrimaryRuntime } from './prepare-primary-runtime.ts'
@@ -37,6 +38,16 @@ function debugPort(name: string, fallback: number): number {
   return port
 }
 
+/** Drop peer-install overrides so a market-only setting cannot prune host dependencies. */
+function harnessBuildEnvironment(environment: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const next = { ...environment }
+  delete next.npm_config_auto_install_peers
+  delete next.pnpm_config_auto_install_peers
+  delete next.NPM_CONFIG_AUTO_INSTALL_PEERS
+  delete next.PNPM_CONFIG_AUTO_INSTALL_PEERS
+  return next
+}
+
 async function run(command: string, args: readonly string[], cwd: string, environment = process.env): Promise<void> {
   await new Promise<void>((resolvePromise, reject) => {
     const child = spawn(command, args, { cwd, env: environment, stdio: 'inherit' })
@@ -53,7 +64,7 @@ async function runPackageScript(script: string, cwd: string): Promise<void> {
   if (packageManager === undefined || packageManager === '') {
     throw new Error('desktop development: invoke this launcher through pnpm run dev:desktop or start:desktop')
   }
-  await run(process.execPath, [packageManager, 'run', script], cwd)
+  await run(process.execPath, [packageManager, 'run', script], cwd, harnessBuildEnvironment())
 }
 
 async function launchElectron(): Promise<void> {
@@ -65,14 +76,14 @@ async function launchElectron(): Promise<void> {
   const hostPort = debugPort('DSH_DESKTOP_HOST_INSPECT_PORT', 9230)
   const home = resolve(process.env.DSH_HOME ?? join(DEVELOPMENT_ROOT, 'home'))
   const userData = resolve(process.env.DSH_DESKTOP_USER_DATA_DIR ?? join(DEVELOPMENT_ROOT, 'electron-user-data'))
-  const environment: NodeJS.ProcessEnv = {
+  const environment = pluginMarketHostEnvironment({
     ...process.env,
     DSH_HOME: home,
     DSH_DESKTOP_PRIMARY_RUNTIME_DIR: process.env.DSH_DESKTOP_PRIMARY_RUNTIME_DIR ?? developmentRuntimeDirectory(),
     DSH_DESKTOP_HOST_INSPECT_PORT: String(hostPort),
     DSH_DESKTOP_OPEN_DEVTOOLS: process.env.DSH_DESKTOP_OPEN_DEVTOOLS ?? '1',
     ELECTRON_ENABLE_LOGGING: process.env.ELECTRON_ENABLE_LOGGING ?? '1',
-  }
+  })
   console.log(`desktop development: DSH_HOME=${home}`)
   console.log(`desktop development: userData=${userData}`)
   console.log(`desktop development: inspectors main=${String(mainPort)}, renderer=${String(rendererPort)}, host=${String(hostPort)}`)
