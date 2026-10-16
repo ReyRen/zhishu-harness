@@ -50,7 +50,7 @@ import type { OperationRecord } from './operations.ts'
 import { Diagnostics } from './Diagnostics.tsx'
 import { exportMarketLog } from './self-check.ts'
 import {
-  api, applyGithubRouting, avatarColor, catalogEntryForInstalled, entryForDep, failureText, githubRouteCandidates, groupSwitchState, installedForCatalog, isGenerationSpec, isInstalled, localizeBilingual, localizeBilingualList, looksTerminal, matchInstalledName, orderedCategories, pluginCategories,
+  api, applyGithubRouting, avatarColor, catalogEntryForInstalled, entryForDep, failureText, githubRouteCandidates, groupSwitchState, installedForCatalog, isGenerationSpec, isGistExportResult, isInstalled, localizeBilingual, localizeBilingualList, looksTerminal, matchInstalledName, orderedCategories, pluginCategories,
   formatCount, pageItems, pluginName, blockAliases, pluginScreenshotCandidates, pluginScreenshots, pluginsForFavorites, queuedRowApplies, rankThemeScreenshots, readSession, releaseNotesHttpsImage, rememberGithubRoute, resetScreenshotsCache, resolveCatalogRestore, safeScreenshots, sanitizeReleaseNotesBody, staleFavoriteUrls, themePlugins as themePluginsOf, themeSwatch, TIME_RANGE_DAYS, visiblePlugins, restartHintKey,
 } from './market-data.ts'
 import type {
@@ -4649,10 +4649,11 @@ export function MarketSection(props: MarketSectionProps) {
         throw error
       }
       if (action === 'export') {
-        setGistResult(body as unknown as GistExportResult)
+        if (!isGistExportResult(body)) throw new Error(t('gistErrInvalid'))
+        setGistResult(body)
         // Backfill the id so the next export updates this Gist instead of
         // creating yet another one.
-        const ref = body as unknown as GistExportResult
+        const ref = body
         if (typeof ref.gistId === 'string' && ref.gistId !== '') {
           setGistId(ref.gistId)
           // A fresh export flips the mode to update so the next export
@@ -7527,12 +7528,9 @@ export function MarketSection(props: MarketSectionProps) {
           open
           onClose={() => setNotesFor(null)}
           className={notesState === 'ready' && updateNotes?.kind === 'release' ? css.notesModalWide : undefined}
-          /* The host's Modal renders its title node verbatim; the hand-written
-             primitives.d.ts narrows the prop to string, so this cast documents
-             intent rather than defeating a runtime check. */
           title={(notesFor.repoUrl !== null
             ? <a className={css.nameLink} href={notesFor.repoUrl + '#readme'} target="_blank" rel="noreferrer">{notesFor.name}</a>
-            : notesFor.name) as unknown as string}
+            : notesFor.name)}
           footer={(
             <Button variant="ghost" onClick={() => setNotesFor(null)}>{t('gotIt')}</Button>
           )}

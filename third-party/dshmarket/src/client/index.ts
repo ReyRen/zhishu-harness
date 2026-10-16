@@ -78,13 +78,15 @@ interface LocaleService {
 /** The subset of the slots service this plugin touches. */
 interface SlotsService {
   inject(slot: string, register: () => unknown): void
-  register(meta: Record<string, unknown>, component: () => unknown): unknown
+  register<Props>(meta: Record<string, unknown>, component: (props: Props) => unknown): unknown
 }
 
 /** The client cordis context shape this plugin relies on (structural: the
  * host provides the real Context; typing the touched surface keeps this
  * external package free of monorepo-internal type dependencies). */
 interface MarketClientContext {
+  provide?: (name: string, value: unknown) => void
+  inject(services: string[], callback: (scoped: SettingsScopeHost) => void): void
   effect(callback: () => unknown, label?: string): void
   on(event: string, callback: () => void): () => void
   locale: LocaleService
@@ -105,7 +107,7 @@ export function apply(ctx: MarketClientContext): void {
   // alias. icons.ts accepts either spelling and skips a missing glyph so the
   // next rename costs one icon, not the whole page — do not fold icon gaps
   // into this hard disable.
-  const mod = primitives as unknown as Record<string, unknown>
+  const mod = primitives as Record<string, unknown>
   const gaps = missingPrimitives(mod)
   if (gaps.length > 0) {
     console.warn('[dsh-market] host ui-primitives missing ' + gaps.join(', ') + ' — market section disabled (dsh web >= 0.1.0-rc.6 required)')
@@ -196,7 +198,7 @@ export function apply(ctx: MarketClientContext): void {
   // Guarded: `provide` is cordis's, and a host old enough to be missing it
   // should lose the control surface, not the whole market.
   if (typeof (ctx as { provide?: unknown }).provide === 'function') {
-    ;(ctx as unknown as { provide: (name: string, value: unknown) => void }).provide('market', marketControl)
+    ;(ctx as { provide: (name: string, value: unknown) => void }).provide('market', marketControl)
   }
 
   // The settings card (dsh >= 0.1.0-rc.7). Registered through a NESTED
@@ -204,7 +206,7 @@ export function apply(ctx: MarketClientContext): void {
   // would keep this whole plugin unmounted on any host without that
   // service — the market's own page would vanish on rc.6 to gain a card
   // rc.6 cannot render. Nested, the card simply never appears there.
-  const settingsCtx = ctx as unknown as {
+  const settingsCtx = ctx as {
     inject(services: string[], callback: (scoped: SettingsScopeHost) => void): void
   }
   settingsCtx.inject(['settingsScope'], (scoped) => {
@@ -228,7 +230,7 @@ export function apply(ctx: MarketClientContext): void {
   // Detection is the slot itself: `slots.inject` waits for the slot to exist,
   // so a host that never declares it (every release before 0.1.7) never runs
   // this, and no version string is consulted.
-  const bundleConfigCtx = ctx as unknown as {
+  const bundleConfigCtx = ctx as {
     slots: {
       inject(name: string, register: () => unknown): void
       register(options: Record<string, unknown>, render: (ownerProps: { view?: string }) => unknown): unknown
@@ -265,7 +267,7 @@ export function apply(ctx: MarketClientContext): void {
   // Detection is the slot itself, as everywhere else here: a host that does
   // not declare it never runs this, and the older line keeps its card through
   // `settings.plugin.item`.
-  const pluginsTabCtx = ctx as unknown as {
+  const pluginsTabCtx = ctx as {
     slots: {
       inject(name: string, register: () => unknown): void
       register(options: Record<string, unknown>, render: () => unknown): unknown

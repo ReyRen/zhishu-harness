@@ -155,6 +155,15 @@ DSHM_REGISTRY_URL=https://your-mirror.example/plugins.json dsh web
 dsh plugin --profile web add @liustack/modlens
 ```
 
+## 平台源码检查
+
+内嵌源码使用明确的 Host 类型约定，在更新界面状态前验证 Gist 导出响应。平台测试配置只运行这些本地检查，不依赖外部项目未打包的网络测试夹具。
+
+```bash
+pnpm --dir third-party/dshmarket run typecheck
+pnpm --dir third-party/dshmarket run test:platform
+```
+
 ## 许可
 
 MIT · [dshmarket.com](https://dshmarket.com)

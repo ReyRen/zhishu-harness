@@ -21,7 +21,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 			}
 			return to;
 		};
-		var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(isNodeMode || !mod || !mod.__esModule || !__hasOwnProp.call(mod, "default") ? __defProp(target, "default", {
+		var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", {
 			value: mod,
 			enumerable: true
 		}) : target, mod));
@@ -1863,6 +1863,10 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 		function installedForCatalog(installed, bundles) {
 			return Object.fromEntries([...bundles.map((name) => [name, "*"]), ...Object.entries(installed)]);
 		}
+		/** Validate a Gist export reply before storing it in the client UI. */
+		function isGistExportResult(value) {
+			return value !== null && typeof value === "object" && !Array.isArray(value) && "ok" in value && typeof value.ok === "boolean" && "gistId" in value && typeof value.gistId === "string" && "gistUrl" in value && typeof value.gistUrl === "string";
+		}
 		/**
 		* A `link:` the desktop host wrote for one of its generations (#497). The
 		* test the server applies (`isGenerationLink` in sources.ts), repeated here
@@ -2125,7 +2129,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 		function entryIdentities(plugin) {
 			const cached = entryIdCache.get(plugin);
 			if (cached !== void 0) return cached;
-			const ids = /* @__PURE__ */ new Set([plugin.name.toLowerCase()]);
+			const ids = new Set([plugin.name.toLowerCase()]);
 			if (plugin.npm) ids.add(plugin.npm.toLowerCase());
 			const m = /^https:\/\/github\.com\/([^/]+\/[^/]+?)(?:\/tree\/[^/]+\/(.+?))?\/?$/.exec(plugin.url);
 			if (m !== null) ids.add(m[2] !== void 0 ? `${m[1].toLowerCase()}#path:/${m[2].toLowerCase()}` : m[1].toLowerCase());
@@ -2159,7 +2163,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 			return ids;
 		}
 		function depIdentities(name, spec, repoIdentities = []) {
-			const ids = /* @__PURE__ */ new Set([name.toLowerCase()]);
+			const ids = new Set([name.toLowerCase()]);
 			const scoped = /^@([^/]+)\/(.+)$/.exec(name);
 			if (scoped !== null) ids.add(`${scoped[1].toLowerCase()}/${scoped[2].toLowerCase()}`);
 			for (const id of githubSpecRepoIds(spec)) ids.add(id);
@@ -2362,7 +2366,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 		* a request carrying the user's IP, so registry data and README content are
 		* both treated as untrusted here, matching the upstream build gate.
 		*/
-		const SCREENSHOT_HOSTS = /* @__PURE__ */ new Set([
+		const SCREENSHOT_HOSTS = new Set([
 			"raw.githubusercontent.com",
 			"user-images.githubusercontent.com",
 			"camo.githubusercontent.com",
@@ -4629,8 +4633,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 			const loaded = (0, react.useRef)(false);
 			const load = (0, react.useCallback)(() => {
 				fetch(api("/dsh-market/presets"), { cache: "no-store" }).then((res) => res.json()).then((body) => {
-					const list = Array.isArray(body) ? body : Array.isArray(body.presets) ? body.presets : [];
-					setPresets(list.map((item) => {
+					setPresets((Array.isArray(body) ? body : Array.isArray(body.presets) ? body.presets : []).map((item) => {
 						const preset = item ?? {};
 						return {
 							name: String(preset.name ?? ""),
@@ -4943,8 +4946,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 			const loaded = (0, react.useRef)(false);
 			const load = (0, react.useCallback)(() => {
 				fetch(api("/dsh-market/snapshots"), { cache: "no-store" }).then((res) => res.json()).then((body) => {
-					const list = Array.isArray(body) ? body : Array.isArray(body.snapshots) ? body.snapshots : [];
-					setSnapshots(list.map(snapshotOf).filter((snap) => snap !== null));
+					setSnapshots((Array.isArray(body) ? body : Array.isArray(body.snapshots) ? body.snapshots : []).map(snapshotOf).filter((snap) => snap !== null));
 					setError(null);
 					loaded.current = true;
 				}).catch(() => setError(t("snapListFail") + "network"));
@@ -7229,13 +7231,12 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 		*/
 		function useMediaWide() {
 			const query = "(min-width: 681px)";
-			const subscribe = (0, react.useCallback)((notify) => {
+			return (0, react.useSyncExternalStore)((0, react.useCallback)((notify) => {
 				if (typeof matchMedia !== "function") return () => {};
 				const list = matchMedia(query);
 				list.addEventListener("change", notify);
 				return () => list.removeEventListener("change", notify);
-			}, []);
-			return (0, react.useSyncExternalStore)(subscribe, () => typeof matchMedia === "function" ? matchMedia(query).matches : true, () => true);
+			}, []), () => typeof matchMedia === "function" ? matchMedia(query).matches : true, () => true);
 		}
 		/**
 		* A card's description, clamped to 5 lines so one wordy entry doesn't blow
@@ -7824,7 +7825,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 		* Found in under 15% of the 3844 scanned catalog records (2026-09). A
 		* frequency, stated as one; it says nothing about harm.
 		*/
-		const UNCOMMON_CAPABILITIES = /* @__PURE__ */ new Set([
+		const UNCOMMON_CAPABILITIES = new Set([
 			"credentials",
 			"llm",
 			"dynamic-code",
@@ -8738,7 +8739,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 			const blockedNameSet = (0, react.useMemo)(() => new Set(blockedNames), [blockedNames]);
 			const updateExemptSet = (0, react.useMemo)(() => new Set(updateExemptNames), [updateExemptNames]);
 			/** Effective switch state: market disable list ∪ user-patch-layer disables. */
-			const effectiveDisabledSet = (0, react.useMemo)(() => /* @__PURE__ */ new Set([
+			const effectiveDisabledSet = (0, react.useMemo)(() => new Set([
 				...disabledNames,
 				...patchDisabledNames,
 				...unbundledNames
@@ -9044,13 +9045,11 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 			]);
 			const scrollToTop = () => {
 				const el = bodyRef.current;
-				if (el) {
-					if (typeof el.scrollTo === "function") el.scrollTo({
-						top: 0,
-						behavior: "smooth"
-					});
-					else el.scrollTop = 0;
-				}
+				if (el) if (typeof el.scrollTo === "function") el.scrollTo({
+					top: 0,
+					behavior: "smooth"
+				});
+				else el.scrollTop = 0;
 			};
 			(0, react.useLayoutEffect)(() => {
 				const el = bodyRef.current;
@@ -9252,12 +9251,11 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 			const favoritePagePlugins = favoritePlugins.slice((favoritePluginPagination.currentPage - 1) * favoritePluginPagination.pageSize, favoritePluginPagination.currentPage * favoritePluginPagination.pageSize);
 			const favoritePageThemes = favoriteThemes.slice((favoriteThemePagination.currentPage - 1) * favoriteThemePagination.pageSize, favoriteThemePagination.currentPage * favoriteThemePagination.pageSize);
 			const favoritePageHostPackages = [...new Set(favoritePagePlugins.flatMap((plugin) => typeof plugin.npm === "string" && plugin.npm !== "" ? [plugin.npm] : []))];
-			const favoritePageHostPackagesKey = favoritePageHostPackages.join("\0");
 			(0, react.useEffect)(() => {
 				if (tab === "favorites") loadHostCompatibility(favoritePageHostPackages);
 			}, [
 				tab,
-				favoritePageHostPackagesKey,
+				favoritePageHostPackages.join("\0"),
 				loadHostCompatibility
 			]);
 			const favoriteStale = (0, react.useMemo)(() => data === null ? [] : staleFavoriteUrls(favoriteUrls, data.plugins), [data, favoriteUrls]);
@@ -9366,11 +9364,10 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 								...prev,
 								...body.activation
 							}));
-							const warns = Object.entries(body.activation).filter(([, info]) => info.state !== "live" && info.state !== "missing" && info.loadedByProfile !== true).map(([name, info]) => ({
+							setActivationWarnings(Object.entries(body.activation).filter(([, info]) => info.state !== "live" && info.state !== "missing" && info.loadedByProfile !== true).map(([name, info]) => ({
 								name,
 								info
-							}));
-							setActivationWarnings(warns);
+							})));
 						}
 						if (body.hot) {
 							setDoneUrls((urls) => urls.filter((url) => url !== plugin.url));
@@ -10452,10 +10449,8 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 							...body.activation
 						}));
 						if (body.restart === true) setToggleRestart((n) => n + 1);
-						if (body.refresh === true) {
-							if ((loadedDisabled.current?.has(name) ?? false) === !enabled) clearPendingRefresh(name);
-							else setRefreshNames((names) => names.includes(name) ? names : names.concat(name));
-						}
+						if (body.refresh === true) if ((loadedDisabled.current?.has(name) ?? false) === !enabled) clearPendingRefresh(name);
+						else setRefreshNames((names) => names.includes(name) ? names : names.concat(name));
 						if (!reload) setToggled({
 							name,
 							enabled
@@ -10499,14 +10494,14 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 					if (status === 200 && body.ok) {
 						setGroupPayload(body);
 						if (Array.isArray(body.restartMembers) && body.restartMembers.length > 0) setToggleRestart((n) => n + body.restartMembers.length);
-						if (Array.isArray(body.refreshMembers) && body.refreshMembers.length > 0) setRefreshNames((names) => [.../* @__PURE__ */ new Set([...names, ...body.refreshMembers])]);
+						if (Array.isArray(body.refreshMembers) && body.refreshMembers.length > 0) setRefreshNames((names) => [...new Set([...names, ...body.refreshMembers])]);
 						refreshInstalled();
 						return true;
 					}
 					const text = (v) => typeof v === "string" ? v : v == null ? "" : JSON.stringify(v);
 					setInstallError(text(body.error) || t("toggleFail"));
 					if (Array.isArray(body.restartMembers) && body.restartMembers.length > 0) setToggleRestart((n) => n + body.restartMembers.length);
-					if (Array.isArray(body.refreshMembers) && body.refreshMembers.length > 0) setRefreshNames((names) => [.../* @__PURE__ */ new Set([...names, ...body.refreshMembers])]);
+					if (Array.isArray(body.refreshMembers) && body.refreshMembers.length > 0) setRefreshNames((names) => [...new Set([...names, ...body.refreshMembers])]);
 					return false;
 				}).catch((error) => {
 					setInstallError(String(error));
@@ -10580,21 +10575,19 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 			}, [doGroupAction]);
 			const doAssign = (0, react.useCallback)((name, group) => {
 				if (group === "") return;
-				const members = groups[group] ?? [];
 				doGroupAction({
 					action: "set-members",
 					name: group,
-					members: [...members, name]
+					members: [...groups[group] ?? [], name]
 				}).then((ok) => {
 					if (ok) setAssignFor(null);
 				});
 			}, [doGroupAction, groups]);
 			const doRemoveMember = (0, react.useCallback)((group, name) => {
-				const members = (groups[group] ?? []).filter((member) => member !== name);
 				doGroupAction({
 					action: "set-members",
 					name: group,
-					members
+					members: (groups[group] ?? []).filter((member) => member !== name)
 				});
 			}, [doGroupAction, groups]);
 			/** Open the multi-select add-members dialog for a group. Plugins only. */
@@ -10637,7 +10630,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 			const updatableNames = Object.keys(installed).filter((name) => name !== selfName && !effectiveDisabledSet.has(name) && isPluginUpdatable(name, String(installed[name]), updates[name], updatedNames));
 			const batchUpdatableNames = updatableNames.filter((name) => updates[name]?.restoreRequired !== true);
 			const ignoredUpdateSet = (0, react.useMemo)(() => new Set(ignoredUpdateNames), [ignoredUpdateNames]);
-			const quietUpdateSet = (0, react.useMemo)(() => /* @__PURE__ */ new Set([...ignoredUpdateNames, ...updateExemptNames]), [ignoredUpdateNames, updateExemptNames]);
+			const quietUpdateSet = (0, react.useMemo)(() => new Set([...ignoredUpdateNames, ...updateExemptNames]), [ignoredUpdateNames, updateExemptNames]);
 			const reminderUpdatableNames = updatableNames.filter((name) => !quietUpdateSet.has(name) && !installedBlocked(name));
 			const reminderBatchUpdatableNames = batchUpdatableNames.filter((name) => !quietUpdateSet.has(name) && !installedBlocked(name));
 			const reminderUpdateNames = [...updates[selfName]?.updateAvailable === true && !updatedNames.includes(selfName) ? [selfName] : [], ...updatableNames].filter((name) => !quietUpdateSet.has(name) && !installedBlocked(name));
@@ -10645,7 +10638,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 			const ignoreUpdateNotices = (0, react.useCallback)((names) => {
 				if (bootId === null || names.length === 0) return;
 				setIgnoredUpdateNames((current) => {
-					const next = [.../* @__PURE__ */ new Set([...current, ...names])];
+					const next = [...new Set([...current, ...names])];
 					try {
 						sessionStorage.setItem(IGNORED_UPDATES_SESSION_KEY, JSON.stringify({
 							boot: bootId,
@@ -10803,7 +10796,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 					body.gistId = gistId.trim();
 				}
 				if (action === "export") {
-					const allNames = /* @__PURE__ */ new Set([...Object.keys(installed), ...installedBundles]);
+					const allNames = new Set([...Object.keys(installed), ...installedBundles]);
 					if (!(exportSelection.size === allNames.size && exportSelection.size > 0)) {
 						body.includeDeps = [...exportSelection];
 						if (exportIncludeConfig) body.includeConfig = true;
@@ -10825,6 +10818,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 						throw error;
 					}
 					if (action === "export") {
+						if (!isGistExportResult(body)) throw new Error(t("gistErrInvalid"));
 						setGistResult(body);
 						const ref = body;
 						if (typeof ref.gistId === "string" && ref.gistId !== "") {
@@ -10861,7 +10855,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 			]);
 			/** The picker list: dependency plugins + bundle-only plugins, deduplicated. */
 			const exportOptions = (0, react.useMemo)(() => {
-				return [.../* @__PURE__ */ new Set([...Object.keys(installed), ...installedBundles])].sort();
+				return [...new Set([...Object.keys(installed), ...installedBundles])].sort();
 			}, [installed, installedBundles]);
 			/** Classify an install spec for the export picker badge. */
 			const specKind = (spec) => {
@@ -10871,7 +10865,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 				return "npm";
 			};
 			const openExportPicker = (0, react.useCallback)(() => {
-				const names = /* @__PURE__ */ new Set([...Object.keys(installed), ...installedBundles]);
+				const names = new Set([...Object.keys(installed), ...installedBundles]);
 				setExportSelection(new Set(names));
 				setExportIncludeConfig(false);
 				setExportOpen(true);
@@ -10889,7 +10883,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 				try {
 					last = Number(localStorage.getItem("dshm-webdav-last")) || 0;
 				} catch {}
-				if (Date.now() - last >= 864e5) runWebdav("backup");
+				if (Date.now() - last >= 1440 * 60 * 1e3) runWebdav("backup");
 			}, [
 				autoBackup,
 				runWebdav,
@@ -10914,27 +10908,6 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 				...pendingDependencies,
 				...installed
 			};
-			/**
-			* Installed entries ordered for the list view: enabled plugins first
-			* (#745), then rows with a pending update, then manifest order — a stable
-			* sort, so each of those groups keeps its own order.
-			*
-			* The order settles once and then holds, so rows never reshuffle under a
-			* pointer that is already aiming at one (#631). Two moments are allowed to
-			* move it. One is when the update check lands: `/installed` is a local read
-			* and `/updates` is a network probe over every package, so the list is
-			* always rendered BEFORE the answer exists — freezing on the view alone
-			* would leave it in manifest order forever. `updatesLoaded` is therefore
-			* the one part of `updates` allowed in, as a boolean: it flips once when
-			* the result arrives, and every later change (a newer check, a row the user
-			* just updated) leaves the boolean and the order alone. The other is the
-			* disable set changing: when the snapshot first arrives, or when a switch
-			* the user flipped settles — and in the switch case the toggled row is the
-			* only one that crosses the enabled/disabled line, so every other row
-			* stays where it was.
-			*/
-			const isInstalledListActive = tab === "installed" && installedView === "list";
-			const updatesLoaded = Object.keys(updates).length > 0;
 			const orderedInstalledEntries = (0, react.useMemo)(() => {
 				return Object.entries(displayedInstalled).filter(([name]) => name !== selfName).sort(([nameA, specA], [nameB, specB]) => {
 					const aOn = effectiveDisabledSet.has(nameA) ? 0 : 1;
@@ -10944,10 +10917,10 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 					return (isPluginUpdatable(nameB, String(specB), updates[nameB], updatedNames, quietUpdateSet) ? 1 : 0) - aUp;
 				});
 			}, [
-				isInstalledListActive,
+				tab === "installed" && installedView === "list",
 				displayedInstalled,
 				selfName,
-				updatesLoaded,
+				Object.keys(updates).length > 0,
 				effectiveDisabledSet
 			]);
 			const missingRestoreCount = Object.keys(pendingDependencies).filter((name) => !installedFiles.includes(name)).length;
@@ -11108,10 +11081,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 				const installScript = /^runs code at install time(?: \((.+)\))?$/.exec(line);
 				if (installScript !== null) return installScript[1] === void 0 ? t("capRedInstallScript") : t("capRedInstallScriptScripts").replace("{0}", installScript[1]);
 				const coreVerb = /^tampers with a core bundle \((overrides|disables) bundle (.+)\)$/.exec(line);
-				if (coreVerb !== null) {
-					const key = coreVerb[1] === "overrides" ? "capRedCoreOverride" : "capRedCoreDisable";
-					return t(key).replace("{0}", coreVerb[2]);
-				}
+				if (coreVerb !== null) return t(coreVerb[1] === "overrides" ? "capRedCoreOverride" : "capRedCoreDisable").replace("{0}", coreVerb[2]);
 				const coreTamper = /^tampers with a core bundle(?: \((.+)\))?$/.exec(line);
 				if (coreTamper !== null) return coreTamper[1] === void 0 ? t("capRedCoreTamper") : t("capRedCoreTamperDetail").replace("{0}", coreTamper[1]);
 				return line;
@@ -11768,7 +11738,7 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 			* restart banner (a full host restart, a different action entirely) stays
 			* separate.
 			*/
-			const pendingRefreshNames = (0, react.useMemo)(() => [.../* @__PURE__ */ new Set([...hotNames, ...refreshNames])], [hotNames, refreshNames]);
+			const pendingRefreshNames = (0, react.useMemo)(() => [...new Set([...hotNames, ...refreshNames])], [hotNames, refreshNames]);
 			/** Installed plugins the market itself cannot group (#60). */
 			const groupableNames = Object.keys(installed).filter((name) => name !== "dsh-market" && name !== "dshmarket");
 			/** Names already inside some group; everything else shows under "ungrouped". */
@@ -11830,11 +11800,10 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 			/** Set or clear the single theme slot. The previous theme leaves this group. */
 			const applyGroupTheme = (0, react.useCallback)((group, themeName) => {
 				const without = (groups[group] ?? []).filter((name) => !installedThemeNames.has(name));
-				const next = themeName === null ? without : [...without, themeName];
 				doGroupAction({
 					action: "set-members",
 					name: group,
-					members: next
+					members: themeName === null ? without : [...without, themeName]
 				}).then((ok) => {
 					if (ok) setThemePanel(null);
 				});

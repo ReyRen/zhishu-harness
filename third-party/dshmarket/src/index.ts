@@ -207,7 +207,7 @@ export function useTrustedHosts(ctx: Context): () => void {
 
 export function apply(ctx: Context, config?: Config): void {
   ctx.inject(['webServer', 'loader'], (hostCtx: Context) => {
-    const host = hostCtx as unknown as MarketEffectHost
+    const host = hostCtx as Context & MarketEffectHost
     const desktopProfiles = ctx.get('desktopProfiles') as DesktopProfilesLike | undefined
     if (desktopProfiles === undefined) {
       // An explicit `profile:` in cordis.yml is the operator speaking and
@@ -334,7 +334,7 @@ export function apply(ctx: Context, config?: Config): void {
     // Ordinary DSH keeps the existing CLI path above.
     hostCtx.inject(['desktopPnpm'], (desktopCtx: Context) => {
       const current = desktopProfiles.current
-      const service = (desktopCtx as unknown as { desktopPnpm: DesktopPnpmLike }).desktopPnpm
+      const service = (desktopCtx as Context & { desktopPnpm: DesktopPnpmLike }).desktopPnpm
       const runtime = createDesktopPluginRuntime(service, current.dir)
       const resolved: MarketConfig = {
         profile: current.name,
@@ -359,7 +359,7 @@ export function apply(ctx: Context, config?: Config): void {
         // too: Desktop's packaged pnpm still runs plugin build scripts.
         buildEnv: config?.buildEnv,
       }
-      const desktopHost = desktopCtx as unknown as MarketEffectHost
+      const desktopHost = desktopCtx as Context & MarketEffectHost
       installDesktopMarketSettings(desktopCtx)
       desktopHost.effect(() => {
         // The host that publishes `desktopProfiles` is the one that may own
