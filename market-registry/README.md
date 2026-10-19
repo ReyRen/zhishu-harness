@@ -71,3 +71,7 @@ Also set `npm_config_auto_install_peers=false` and `pnpm_config_auto_install_pee
 `pnpm run package:desktop:win:x64:unsigned` includes `plugins.json`, `tarballs/` and Verdaccio under `resources/market-registry`. The installed application starts the registry on local `127.0.0.1:4873` and `4874` and points its plugin market there, without reading terminal `DSHM_*` values.
 
 Registry data lives under `market-registry` in the application's user directory, not the installation directory. A later startup imports new bundled versions. During development, start `pnpm market:registry` separately; `pnpm run dev:desktop` does not start Verdaccio.
+
+## Container Web image
+
+The [container build](../docker/README.md) installs the independent frozen Verdaccio lockfile and prepares the same catalog and tarballs, including additional dependency tarballs not listed as installable plugins. It starts both loopback services before native Web, disables publishing and peer auto-installation, and tests cold-cache installation without networking. Each container has its own listeners; do not expose them through the platform proxy. Installed plugins persist in the user's `DSH_HOME` profile, while temporary registry storage is regenerated from the image. Adding plugins or changing versions requires rebuilding the image.

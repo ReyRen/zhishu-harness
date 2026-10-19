@@ -38,6 +38,20 @@
 docker run --rm --init --network none --entrypoint node "$IMAGE" /opt/dsh/docker/smoke-office.mjs
 ```
 
+## 离线插件市场
+
+镜像包含与桌面端相同的[私有目录和社区安装包](../market-registry/README.zh.md)，以及 Verdaccio 和锁定的 Linux 依赖。启动时导入全部随包 tarball，先在 `127.0.0.1:4873` 启动包仓库、在 `127.0.0.1:4874` 启动目录，再启动 Web。两个地址都留在各自容器内部，不需要宿主机端口或额外代理规则。禁止发布包；缺包不会回退到公网 npm。任一服务失败会停止容器，不让 Web 继续连接失效的市场。
+
+Host 自动获得 `DSHM_REGISTRY_URL`、`DSHM_NPM_MIRROR`，并关闭 peer 自动安装。用户仍通过原生市场安装插件。profile、已安装包和设置保存在现有 JFS 挂载中的 `DSH_HOME`；临时仓库数据从镜像重建。新增目录或包版本需要重建镜像，并带上该包全部非宿主运行时依赖。
+
+构建在断网环境执行 [smoke-market.mjs](smoke-market.mjs)：使用全新 profile 和空包缓存安装全部目录插件，认证原生 Web 并获取插件客户端，使用同一 profile 重启 Web，再检查缺包及发布请求被拒绝。不挂载用户数据时可重复检查：
+
+```bash
+docker run --rm --init --network none --entrypoint node "$IMAGE" /opt/dsh/docker/smoke-market.mjs
+```
+
+离线范围是随镜像交付的 Office、运行时资源和市场安装包，不包括任意 npm/GitHub 插件、模型推理或联网搜索；它们仍需要配置相应服务。桌面端专属的操作系统集成和受浏览器限制的能力，也不会因为安装服务端依赖而自动具备。
+
 ## 验证单个用户
 
 `docker/compose.yml` 用于验证一个普通容器；生产容器由 Worker 管理。先在该 Worker 执行 `bash docker/security/install.sh` 安装独立策略。Worker 必须已创建禁用容器互访的 `gcs-dsh-users` bridge 网络。

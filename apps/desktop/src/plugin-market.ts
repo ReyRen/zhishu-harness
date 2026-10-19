@@ -77,7 +77,7 @@ export function pluginMarketPackages(catalogPath: string): PluginMarketPackage[]
 /**
  * Copy any catalog tarball that is not already in Verdaccio's storage and write its metadata.
  * @param storageDir - Writable Verdaccio storage directory.
- * @param tarballsDir - Directory of `<name>-<version>.tgz` files.
+ * @param tarballsDir - Directory of npm-pack tarballs, with scoped names flattened to `scope-name-version.tgz`.
  * @param packages - Packages that must be installable after this call.
  */
 export function seedPluginMarketStorage(
@@ -85,7 +85,8 @@ export function seedPluginMarketStorage(
 ): void {
   mkdirSync(storageDir, { recursive: true })
   for (const item of packages) {
-    const packed = join(tarballsDir, `${item.name}-${item.version}.tgz`)
+    const filename = `${item.name.replace(/^@/u, '').replaceAll('/', '-')}-${item.version}.tgz`
+    const packed = join(tarballsDir, filename)
     if (!existsSync(packed)) throw new Error(`desktop plugin market: missing ${packed}`)
     const bytes = readFileSync(packed)
     const manifest = readPackedManifest(bytes)
@@ -94,7 +95,6 @@ export function seedPluginMarketStorage(
     }
     const directory = join(storageDir, item.name)
     mkdirSync(directory, { recursive: true })
-    const filename = `${item.name}-${item.version}.tgz`
     const stored = join(directory, filename)
     if (!existsSync(stored)) copyFileSync(packed, stored)
     writePackageDocument(join(directory, 'package.json'), item, bytes, manifest, filename)

@@ -55,10 +55,13 @@ RUN --mount=type=cache,id=zhishu-harness-pnpm,target=/pnpm/store \
   pnpm install --offline --frozen-lockfile \
   && pnpm run clean
 
-RUN node --test docker/tests/cache-primary-runtime.test.mjs docker/tests/sandbox-policy.test.mjs
+RUN for script in docker/*.mjs; do node --check "$script"; done \
+  && node --test docker/tests/*.test.mjs
 
 RUN test -n "${DSH_CLIENT_COMMIT_HASH}" \
   && DSH_CLIENT_COMMIT_HASH="${DSH_CLIENT_COMMIT_HASH}" pnpm run build
+
+RUN node --import tsx/esm docker/prepare-market.mjs /opt/dsh-market
 
 RUN --mount=type=cache,id=zhishu-harness-primary-runtime,target=/var/cache/dsh-primary-runtime,sharing=locked \
   case "${TARGETARCH}" in \
@@ -73,6 +76,13 @@ RUN --mount=type=cache,id=zhishu-harness-primary-runtime,target=/var/cache/dsh-p
     --output /opt/dsh-runtime \
     --cache /var/cache/dsh-primary-runtime
 
+FROM build-base AS market-dependencies
+
+WORKDIR /opt/dsh/market-registry
+COPY market-registry/package.json market-registry/pnpm-lock.yaml ./
+RUN --mount=type=cache,id=zhishu-harness-market-pnpm,target=/pnpm/store \
+  pnpm install --ignore-workspace --prod --frozen-lockfile --config.auto-install-peers=false
+
 FROM node:${NODE_VERSION} AS runtime
 
 ARG DEBIAN_MIRROR
@@ -86,6 +96,10 @@ ENV DSH_DEFAULT_WORKSPACE_TITLE=默认工作区
 ENV DSH_WEB_PORT=3080
 ENV DSH_INTERNAL_PORT=3081
 ENV DSH_PRIMARY_RUNTIME=/opt/dsh-runtime/primary-runtime
+ENV DSHM_REGISTRY_URL=http://127.0.0.1:4874/plugins.json
+ENV DSHM_NPM_MIRROR=http://127.0.0.1:4873
+ENV npm_config_auto_install_peers=false
+ENV pnpm_config_auto_install_peers=false
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV NODE_ENV=production
 ENV NODE_OPTIONS=--enable-source-maps
@@ -122,10 +136,15 @@ RUN --mount=type=cache,id=zhishu-harness-apt-cache,target=/var/cache/apt,sharing
 
 COPY --from=builder /opt/dsh /opt/dsh
 COPY --from=builder /opt/dsh-runtime /opt/dsh-runtime
+COPY --from=builder /opt/dsh-market /opt/dsh-market
+COPY --from=market-dependencies /opt/dsh/market-registry/node_modules /opt/dsh/market-registry/node_modules
 COPY --chmod=0755 docker/container-entrypoint.sh /opt/dsh/deploy/container-entrypoint.sh
 COPY --chmod=0755 docker/bwrap /usr/local/bin/bwrap
 
-RUN --network=none node /opt/dsh/docker/smoke-office.mjs
+FROM runtime AS validated
+
+RUN --network=none node /opt/dsh/docker/smoke-office.mjs \
+  && node /opt/dsh/docker/smoke-market.mjs
 
 WORKDIR /storage-root-jfs/user
 

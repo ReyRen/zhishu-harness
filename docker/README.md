@@ -38,6 +38,20 @@ The image build runs [smoke-office.mjs](smoke-office.mjs) without network access
 docker run --rm --init --network none --entrypoint node "$IMAGE" /opt/dsh/docker/smoke-office.mjs
 ```
 
+## Offline plugin market
+
+The image includes the same [private catalog and community tarballs](../market-registry/README.md) as Desktop, plus Verdaccio and its locked Linux dependencies. Startup imports every bundled tarball, then starts the registry at `127.0.0.1:4873` and the catalog at `127.0.0.1:4874` before Web. Both listeners remain inside each container; no host ports or extra proxy routes are needed. Publishing is disabled and missing packages do not fall back to public npm. A failed service stops the container rather than leaving Web connected to a broken market.
+
+The Host receives `DSHM_REGISTRY_URL`, `DSHM_NPM_MIRROR` and disabled automatic peer installation. Users install plugins through the native market. Their profile, installed packages and settings remain under `DSH_HOME` on the existing JFS mount; temporary registry storage is recreated from the image. Rebuild the image to deliver a new catalog or package version, including all of its non-host runtime dependencies.
+
+The build runs [smoke-market.mjs](smoke-market.mjs) with networking disabled: it installs every catalog package into a fresh profile and empty package cache, authenticates native Web and fetches its plugin clients, restarts Web using the same profile, and checks missing-package and publishing rejection. Repeat without user data:
+
+```bash
+docker run --rm --init --network none --entrypoint node "$IMAGE" /opt/dsh/docker/smoke-market.mjs
+```
+
+Offline coverage applies to shipped Office/runtime resources and bundled market packages, not arbitrary npm/GitHub plugins, model inference or web search. Those require their configured services. Desktop-only operating-system integrations and browser-restricted capabilities are not supplied by installing server dependencies.
+
 ## Validate one user
 
 `docker/compose.yml` validates one ordinary container; Worker manages production containers. First install the scoped policy on this Worker with `bash docker/security/install.sh`. The Worker must have created the `gcs-dsh-users` bridge with inter-container communication disabled.
