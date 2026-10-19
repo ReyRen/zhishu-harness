@@ -1,4 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { gzipSync } from 'node:zlib'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -54,5 +55,23 @@ describe('desktop plugin market', () => {
     const index = JSON.parse(readFileSync(join(storage, '.verdaccio-db.json'), 'utf8')) as { list: string[]; secret: string }
     expect(index.list).toEqual(['open-sea-skin'])
     expect(index.secret).toHaveLength(32)
+  })
+
+  it('uses npm-pack filenames for scoped packages', () => {
+    const root = mkdtempSync(join(tmpdir(), 'scoped-market-'))
+    directories.push(root)
+    const manifest = Buffer.from(JSON.stringify({ name: '@example/skin', version: '1.0.0' }))
+    const archive = Buffer.alloc(2048)
+    archive.write('package/package.json', 0)
+    archive.write(`${manifest.length.toString(8).padStart(11, '0')}\0`, 124)
+    manifest.copy(archive, 512)
+    writeFileSync(join(root, 'example-skin-1.0.0.tgz'), gzipSync(archive))
+    seedPluginMarketStorage(join(root, 'storage'), root, [{ name: '@example/skin', version: '1.0.0' }])
+    const stored = join(root, 'storage', '@example', 'skin')
+    expect(readFileSync(join(stored, 'example-skin-1.0.0.tgz'))).toEqual(gzipSync(archive))
+    const metadata = JSON.parse(readFileSync(join(stored, 'package.json'), 'utf8')) as {
+      versions: Record<string, { dist: { tarball: string } }>
+    }
+    expect(metadata.versions['1.0.0']?.dist.tarball).toBe('http://127.0.0.1:4873/@example/skin/-/example-skin-1.0.0.tgz')
   })
 })

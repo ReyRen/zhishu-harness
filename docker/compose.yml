@@ -18,6 +18,10 @@ services:
       DSH_INTERNAL_PORT: ${DSH_INTERNAL_PORT:-3081}
       DSH_PUBLIC_AUTHORITY: ${DSH_PUBLIC_AUTHORITY:-dsh-web:3081}
       DSH_PRIMARY_RUNTIME: /opt/dsh-runtime/primary-runtime
+      DSHM_REGISTRY_URL: http://127.0.0.1:4874/plugins.json
+      DSHM_NPM_MIRROR: http://127.0.0.1:4873
+      npm_config_auto_install_peers: 'false'
+      pnpm_config_auto_install_peers: 'false'
       PYTHONDONTWRITEBYTECODE: '1'
       NODE_ENV: production
       TZ: ${TZ:-Asia/Shanghai}

@@ -71,3 +71,7 @@ DSHM_NPM_MIRROR=http://<内网地址>:4873
 `pnpm run package:desktop:win:x64:unsigned` 会把 `plugins.json`、`tarballs/` 和 Verdaccio 放进安装包的 `resources/market-registry`。装好的程序在本机 `127.0.0.1:4873` 和 `4874` 自己启动这份源，并把桌面里的插件市场指过去。它不读终端里的 `DSHM_*`。
 
 本机源的数据写在应用用户目录的 `market-registry` 里，不写进安装目录。安装包里新加的版本会在下次启动时补进去。开发时仍要另开 `pnpm market:registry`，`pnpm run dev:desktop` 不会自己启动 Verdaccio。
+
+## 容器 Web 镜像
+
+[容器构建](../docker/README.zh.md)根据独立冻结锁文件安装 Verdaccio，并准备相同的目录和 tarball，包括未在市场列为插件的额外依赖 tarball。在原生 Web 之前启动两个 loopback 服务，禁止发布包、关闭 peer 自动安装，并断网测试空缓存安装。每个容器拥有各自的监听地址，不要通过平台代理暴露这些地址。已安装插件保存在用户 `DSH_HOME` 的 profile 中，临时仓库数据则从镜像重建。增加插件或修改版本需要重新构建镜像。
