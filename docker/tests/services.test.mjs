@@ -29,6 +29,12 @@ test('an executable error aborts startup and is awaited during teardown', async 
   } finally { await owner.close() }
 })
 
+test('a closed owner cannot start a new process', async () => {
+  const owner = serviceOwner()
+  await owner.close()
+  assert.throws(() => owner.start(process.execPath, []), /services are closed/u)
+})
+
 test('readiness requires HTTP success and responds to cancellation', async () => {
   const server = createServer((_request, response) => response.writeHead(404).end())
   server.listen(0, '127.0.0.1')

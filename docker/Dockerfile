@@ -141,6 +141,8 @@ COPY --from=market-dependencies /opt/dsh/market-registry/node_modules /opt/dsh/m
 COPY --chmod=0755 docker/container-entrypoint.sh /opt/dsh/deploy/container-entrypoint.sh
 COPY --chmod=0755 docker/bwrap /usr/local/bin/bwrap
 
+FROM runtime AS validated
+
 RUN --network=none node /opt/dsh/docker/smoke-office.mjs \
   && node /opt/dsh/docker/smoke-market.mjs
 

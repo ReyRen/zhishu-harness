@@ -1,6 +1,7 @@
 /** Verify cold-cache installation, native Web assets and persisted plugins with networking disabled. */
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -17,6 +18,25 @@ let owner
 let logs = ''
 let headers
 
+async function webRequest(path, { method = 'GET', body, extraHeaders = {} } = {}) {
+  const url = new URL(path, `http://${authority}`)
+  assert.equal(url.origin, `http://${authority}`, 'Web assets must use the public authority')
+  return new Promise((resolve, reject) => {
+    const request = httpRequest(`http://127.0.0.1:3081${url.pathname}${url.search}`, {
+      method, headers: { host: authority, ...headers, ...extraHeaders }, timeout: 90_000,
+    }, response => {
+      const chunks = []
+      response.on('data', chunk => chunks.push(chunk))
+      response.once('error', reject)
+      response.once('end', () => resolve({ status: response.statusCode, headers: response.headers,
+        body: Buffer.concat(chunks).toString('utf8') }))
+    })
+    request.once('error', reject)
+    request.once('timeout', () => request.destroy(new Error('Native Web request timed out')))
+    request.end(body)
+  })
+}
+
 async function startWeb() {
   owner = serviceOwner()
   logs = ''
@@ -32,23 +52,20 @@ async function startWeb() {
     await delay(100)
   }
   const token = logs.match(/[?&]token=([\w-]+)/u)[1]
-  const authenticated = await fetch(`http://127.0.0.1:3081/?token=${encodeURIComponent(token)}`, {
-    headers: { host: authority }, redirect: 'manual', signal: AbortSignal.timeout(5_000),
-  })
-  const cookie = authenticated.headers.getSetCookie().map(value => value.split(';')[0]).join('; ')
-  await authenticated.body?.cancel()
+  const authenticated = await webRequest(`/?token=${encodeURIComponent(token)}`)
+  const cookie = (authenticated.headers['set-cookie'] ?? []).map(value => value.split(';')[0]).join('; ')
   assert.ok(cookie, 'Native Web must create an authenticated browser cookie')
   headers = { host: authority, cookie }
-  const page = await fetch('http://127.0.0.1:3081/', { headers })
+  const page = await webRequest('/')
   assert.equal(page.status, 200)
-  const html = await page.text()
+  const html = page.body
   assert.match(html, /<!doctype html>/iu)
   const paths = [...html.matchAll(/(?:src|href)="([^"]*plugins\/[^"]+)"/gu)].map(match => match[1].replaceAll('&amp;', '&'))
   assert.ok(paths.length > 0, 'Native Web must preload plugin clients')
   for (const path of paths) {
-    const response = await fetch(new URL(path, 'http://127.0.0.1:3081/'), { headers })
+    const response = await webRequest(path)
     assert.equal(response.status, 200)
-    assert.ok((await response.text()).length > 1_000)
+    assert.ok(response.body.length > 1_000)
   }
 }
 
@@ -59,16 +76,23 @@ try {
   assert.equal(response.status, 200)
   const catalog = await response.json()
   assert.ok(catalog.plugins.length > 0)
-  const marketResponse = await fetch('http://127.0.0.1:3081/dsh-market/registry', { headers })
+  const marketResponse = await webRequest('/dsh-market/registry')
   assert.equal(marketResponse.status, 200)
-  assert.deepEqual((await marketResponse.json()).registry.plugins, catalog.plugins)
+  assert.deepEqual(JSON.parse(marketResponse.body).registry.plugins, catalog.plugins.map(item => ({
+    ...item, category: Array.isArray(item.category) ? item.category : [item.category],
+  })))
+  assert.equal((await webRequest('/dsh-market/registry', { extraHeaders: { cookie: '' } })).status, 401)
+  assert.equal((await webRequest('/dsh-market/registry', { extraHeaders: { host: 'undeclared.invalid' } })).status, 403)
   for (const item of catalog.plugins) {
     const name = item.npm ?? item.name
-    const installed = await fetch('http://127.0.0.1:3081/dsh-market/install', {
-      method: 'POST', headers: { ...headers, origin: `http://${authority}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ url: item.url, version: item.version }), signal: AbortSignal.timeout(90_000),
+    const body = JSON.stringify({ url: item.url, version: item.version })
+    const extraHeaders = { origin: `http://${authority}`, 'content-type': 'application/json' }
+    assert.equal((await webRequest('/dsh-market/install', { method: 'POST', body,
+      extraHeaders: { ...extraHeaders, origin: 'http://untrusted.invalid' } })).status, 403)
+    const installed = await webRequest('/dsh-market/install', {
+      method: 'POST', extraHeaders, body,
     })
-    const result = await installed.json()
+    const result = JSON.parse(installed.body)
     assert.equal(installed.status, 200, JSON.stringify(result))
     assert.equal(result.ok, true, JSON.stringify(result))
     const manifest = JSON.parse(await readFile(join(env.DSH_HOME, 'profiles/web/node_modules', name, 'package.json'), 'utf8'))

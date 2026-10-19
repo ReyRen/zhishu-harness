@@ -29,6 +29,7 @@ export function serviceOwner() {
     },
     close() {
       closing ??= (async () => {
+        stop(new Error('Container services are closed'))
         const kill = signal => {
           for (const { child } of children) {
             if (child.pid === undefined) continue
