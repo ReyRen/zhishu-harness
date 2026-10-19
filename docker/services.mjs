@@ -39,10 +39,11 @@ export function serviceOwner() {
           }
         }
         kill('SIGTERM')
-        const timer = setTimeout(() => kill('SIGKILL'), 5_000)
+        // Leave DSH time to cancel active work and flush state within Docker's 30-second stop window.
+        const timer = setTimeout(() => kill('SIGKILL'), 20_000)
         try {
           await Promise.all(children.map(({ closed }) => closed))
-          const deadline = Date.now() + 10_000
+          const deadline = Date.now() + 5_000
           while (children.some(({ child }) => {
             if (child.pid === undefined) return false
             try { process.kill(-child.pid, 0); return true } catch (error) {

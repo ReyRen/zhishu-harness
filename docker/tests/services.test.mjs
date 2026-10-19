@@ -35,6 +35,24 @@ test('a closed owner cannot start a new process', async () => {
   assert.throws(() => owner.start(process.execPath, []), /services are closed/u)
 })
 
+test('shutdown awaits the child flush before returning', async () => {
+  const owner = serviceOwner()
+  try {
+    const child = owner.start(process.execPath, ['-e', `
+      process.on('SIGTERM', () => setTimeout(() => { console.log('flushed'); process.exit(0) }, 50))
+      console.log('ready')
+      setInterval(() => {}, 1000)
+    `], { stdio: ['ignore', 'pipe', 'pipe'] })
+    let output = ''
+    child.stdout.on('data', chunk => { output += chunk.toString() })
+    await once(child.stdout, 'data')
+    assert.match(output, /ready/u)
+    await owner.close()
+    assert.equal(child.exitCode, 0)
+    assert.match(output, /flushed/u)
+  } finally { await owner.close() }
+})
+
 test('readiness requires HTTP success and responds to cancellation', async () => {
   const server = createServer((_request, response) => response.writeHead(404).end())
   server.listen(0, '127.0.0.1')
