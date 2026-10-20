@@ -215,10 +215,11 @@ const PREINSTALLED_MARKET_PACKAGE = 'dshmarket'
 /** Profile booted by the desktop shell. Container web keeps the name `web`. */
 const DESKTOP_PROFILE = 'desktop'
 /**
- * Account UI that only exists inside the desktop shell. Container web has no
- * platform login page, so it keeps the official settings launcher and account menu.
+ * Platform account menu. It replaces the settings gear and only exists inside
+ * the desktop shell. Container web disables the official account row and keeps
+ * that gear.
  */
-const DESKTOP_ONLY_OVERLAYS = new Set(['hide-official-account', 'platform-account'])
+const DESKTOP_ONLY_OVERLAYS = new Set(['platform-account'])
 
 /**
  * Overlay directory for this process. A packaged desktop app sets
@@ -240,8 +241,9 @@ function zhishuOverlayDirectory(): string | undefined {
  * Fork overlay patches under `<repo>/overlay/<name>/cordis.patch.yml`.
  * Each directory is one secondary-development plugin. They apply only to
  * profiles containing the Web bundle, after the shipped bundles, so an overlay
- * can disable an upstream row without editing it. The platform account menu
- * loads only for the desktop profile; container web keeps the official rows.
+ * can disable an upstream row without editing it. Every Web profile disables
+ * the official account row. The platform account menu loads only for the
+ * desktop profile; container web keeps the settings gear.
  * Vitest boots the same launcher and must keep the stock composition.
  * @param profile - loaded profile whose bundle layers select the Web surface.
  * @returns absolute patch paths, in directory-name order.

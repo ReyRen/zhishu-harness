@@ -50,7 +50,7 @@
 
 ### 全员必须加载：`overlay/`
 
-`apps/cli/src/profile-boot.ts` 的 `zhishuOverlayPatches()` 在每次启动时扫描 `overlay/<名称>/cordis.patch.yml`，按目录名排序。这些补丁叠在官方组合包之后、用户自己的补丁之前，所以可以按行 id 关掉官方那一行再插入自己的实现，不必改 `packages/` 里的官方补丁。其中 `hide-official-account` 和 `platform-account` 只在 profile `desktop` 上加载，容器化网页保留官方设置入口和账号菜单。
+`apps/cli/src/profile-boot.ts` 的 `zhishuOverlayPatches()` 在每次启动时扫描 `overlay/<名称>/cordis.patch.yml`，按目录名排序。这些补丁叠在官方组合包之后、用户自己的补丁之前，所以可以按行 id 关掉官方那一行再插入自己的实现，不必改 `packages/` 里的官方补丁。其中 `hide-official-account` 对所有 Web profile 加载，容器化网页也会关掉官方账号菜单并回到设置齿轮。`platform-account` 只在 profile `desktop` 上加载。
 
 它不是 profile 里的组合包。插件页没有开关，也不能卸载。代码在镜像里，不访问外网。换镜像之后，已经在用的用户下一次启动就会加载。品牌替换 `overlay/brand/` 就是这样：关掉 `ui-brand-official`，插入侧栏标识。新增能力时复制这个目录，不要把补丁写进官方 `cordis.patch.yml`。
 
