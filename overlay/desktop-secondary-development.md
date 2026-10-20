@@ -226,7 +226,7 @@ if (Test-Path $backup) {
 
 ## 对话界面的 overlay
 
-`apps/cli/src/profile-boot.ts` 加载 `overlay/*/cordis.patch.yml`。本地开发沿用 CLI 产物旁的仓库目录。打包时 `electron-builder` 把仓库 `overlay/` 放到安装包的 `resources/overlay`（在 asar 外面，图片才能被读到）。桌面壳启动 Host 前把这个目录写入 `DSH_ZHISHU_OVERLAY`。安装后的对话界面包含 `brand`。`hide-official-account` 跟着所有 Web profile 生效，容器里的 profile `web` 也会关掉官方账号菜单。`hide-product-onboarding` 同样跟着所有 Web profile：预览版说明被同名槽位跳过，API Key 弹窗由 `credentialOnboarding: false` 关掉。`platform-account` 只跟着 profile `desktop`。改完 overlay 后需要重新打包才会进安装包；容器镜像要重新构建才会带上这次 profile 判断。
+`apps/cli/src/profile-boot.ts` 加载 `overlay/*/cordis.patch.yml`。本地开发沿用 CLI 产物旁的仓库目录。打包时 `electron-builder` 把仓库 `overlay/` 放到安装包的 `resources/overlay`（在 asar 外面，图片才能被读到）。桌面壳启动 Host 前把这个目录写入 `DSH_ZHISHU_OVERLAY`。安装后的对话界面包含 `brand`。`hide-official-account` 跟着所有 Web profile 生效，容器里的 profile `web` 也会关掉官方账号菜单。`hide-product-onboarding` 同样跟着所有 Web profile：预览版说明被同名槽位跳过，API Key 弹窗由 `credentialOnboarding: false` 关掉，官方 DeepSeek 的密钥路由和账号路由也不加载。自定义模型提供商仍可添加。`platform-account` 只跟着 profile `desktop`。改完 overlay 后需要重新打包才会进安装包；容器镜像要重新构建才会带上这次 profile 判断。
 
 ## 插件市场私有源
 
