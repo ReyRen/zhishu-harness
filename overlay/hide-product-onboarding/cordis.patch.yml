@@ -1,0 +1,9 @@
+# First-run product dialogs are not used. The preview notice is shadowed by
+# this plugin's client. The API-key step stays registered but does not open.
+- id: ui-settings-models
+  config:
+    credentialOnboarding: false
+
+- insert:
+    - id: zhishu-hide-product-onboarding
+      name: ./index.js
