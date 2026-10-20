@@ -48,7 +48,7 @@
 | 窗口、登录门、两个空间谁盖住谁、安装包里的平台地址 | `apps/desktop` | 在平台里再做一套桌面壳 |
 | 登录页、补录、`/desktop-entry`、业务功能 | model 仓库 | 在 Harness 里复制这些页面 |
 
-官方测试设置了 `VITEST` 时不加载 overlay。没有 Web 界面的 profile 也不加载。桌面端带 Web 运行时，会加载。账号相关的 `hide-official-account` 和 `platform-account` 只在 profile 名为 `desktop` 时加载。容器化网页用 profile `web`，左下角仍是官方设置入口，官方账号菜单也保留。
+官方测试设置了 `VITEST` 时不加载 overlay。没有 Web 界面的 profile 也不加载。桌面端带 Web 运行时，会加载。`hide-official-account` 对所有 Web profile 生效，关掉官方账号菜单，左下角回到只有设置的齿轮。`platform-account` 只在 profile 名为 `desktop` 时加载，用平台账号换成这颗齿轮。容器化网页用 profile `web`，不加载平台账号。
 
 相关代码在 `apps/desktop/src/model-space/`：
 
@@ -154,12 +154,53 @@ pnpm run clean
 出现这种断链时，在仓库根目录按顺序做：
 
 1. 先退出正在运行的桌面应用。
-2. `pnpm run clean`
-3. 删除根目录的 `node_modules`。不要删本机的 pnpm 缓存。
-4. `pnpm install`
-5. `pnpm run dev:desktop`
+2. 若还要跑桌面，按下一节先备份 `downloads`。`clean` 会删掉它。
+3. `pnpm run clean`
+4. 删除根目录的 `node_modules`。不要删本机的 pnpm 缓存。
+5. `pnpm install`
+6. 按下一节把备份放回去。
+7. `pnpm run dev:desktop`
 
-依赖还在本机缓存里，一般不用重新从网络下载。只有合并后包被移动或删除时才需要删掉 `node_modules`。平时改壳源码，直接 `pnpm run dev:desktop`。
+依赖还在本机缓存里，一般不用重新从网络下载。只有合并后包被移动或删除时才需要删掉 `node_modules`。平时只改壳源码、没有切分支，直接 `pnpm run dev:desktop`。
+
+## 切分支或合并之后完全重建
+
+`lib/` 不进 git。切分支、合并 `main` 之后，磁盘上会留下上一份源码打出来的 `lib/index.js`、`lib/client.js`，以及根目录 `node_modules` 里指向已经搬走的包的链接。只执行 `pnpm run build:lib:host` 或只执行 `pnpm run build:lib:client`，另一边仍是旧产物。网页就会出现一片 `waiting for services`，或 `client bundle not found`。`pnpm dsh:private` 不会自己重编这些文件。
+
+在仓库根目录按顺序做。先停掉正在跑的 `pnpm dsh:private`、`pnpm market:registry` 和桌面窗口，并关掉已经打开的网页标签。旧标签连的是上一轮没编完的页面。
+
+`clean` 会删掉整个 `apps/desktop/.desktop-build`。还要跑桌面时，先把其中的 `downloads` 拷到仓库外面。那个目录里是已经下好的 Node 和 Python。目录不存在就跳过，后面 `pnpm run dev:desktop` 会重新向 GitHub 要约 21MB 的 Python，直连常常在 5 分钟内下不完。
+
+```powershell
+$backup = 'C:\Users\Admin\Documents\code\zhishu-desktop-downloads'
+if (Test-Path .\apps\desktop\.desktop-build\downloads) {
+  if (Test-Path $backup) { Remove-Item -Recurse -Force $backup }
+  Copy-Item -Recurse -Force .\apps\desktop\.desktop-build\downloads $backup
+}
+```
+
+然后再清编译产物并重编：
+
+```powershell
+pnpm run clean
+Remove-Item -Recurse -Force node_modules
+pnpm install
+pnpm run build:artifacts
+```
+
+编完后把备份放回去。`clean` 已经删掉 `.desktop-build`，要先建这个目录。没有备份就跳过。
+
+```powershell
+$backup = 'C:\Users\Admin\Documents\code\zhishu-desktop-downloads'
+if (Test-Path $backup) {
+  New-Item -ItemType Directory -Force .\apps\desktop\.desktop-build | Out-Null
+  Copy-Item -Recurse -Force $backup .\apps\desktop\.desktop-build\downloads
+}
+```
+
+`clean` 删掉各包的 `lib`、增量编译记录，以及没有 `package.json`、只剩产物的旧目录。
+
+`build:artifacts` 按当前分支同时重编 Host 和网页客户端，包括 `lib/index.js` 与 `lib/client.js`。完成后再执行 `pnpm dsh:private` 或 `pnpm run dev:desktop`。不要把编译命令和启动命令写在同一行里一起跑，启动会抢在编译结束之前打开页面。
 
 ## 看安装包里的网络请求
 
@@ -185,7 +226,7 @@ pnpm run clean
 
 ## 对话界面的 overlay
 
-`apps/cli/src/profile-boot.ts` 加载 `overlay/*/cordis.patch.yml`。本地开发沿用 CLI 产物旁的仓库目录。打包时 `electron-builder` 把仓库 `overlay/` 放到安装包的 `resources/overlay`（在 asar 外面，图片才能被读到）。桌面壳启动 Host 前把这个目录写入 `DSH_ZHISHU_OVERLAY`。安装后的对话界面包含 `brand`；`hide-official-account` 和 `platform-account` 只跟着 profile `desktop` 生效，同一份 overlay 目录给容器里的 profile `web` 用时不会关掉官方设置。改完 overlay 后需要重新打包才会进安装包。
+`apps/cli/src/profile-boot.ts` 加载 `overlay/*/cordis.patch.yml`。本地开发沿用 CLI 产物旁的仓库目录。打包时 `electron-builder` 把仓库 `overlay/` 放到安装包的 `resources/overlay`（在 asar 外面，图片才能被读到）。桌面壳启动 Host 前把这个目录写入 `DSH_ZHISHU_OVERLAY`。安装后的对话界面包含 `brand`。`hide-official-account` 跟着所有 Web profile 生效，容器里的 profile `web` 也会关掉官方账号菜单。`platform-account` 只跟着 profile `desktop`。改完 overlay 后需要重新打包才会进安装包；容器镜像要重新构建才会带上这次 profile 判断。
 
 ## 插件市场私有源
 
@@ -332,7 +373,7 @@ pnpm 自己会先打出 `Done in … using pnpm v11.7.0`。接着出现 `PostQue
 
 ## 重复下载
 
-第一次打包会把 Electron、内置 Node 和 Python 下载到 `apps/desktop/.desktop-build/downloads`。之后同一份文件校验通过就用缓存，只在本地重新解压。electron-builder 使用准备好的本地 Electron 目录，不会再下载一次。
+第一次打包会把 Electron、内置 Node 和 Python 下载到 `apps/desktop/.desktop-build/downloads`。之后同一份文件校验通过就用缓存，只在本地重新解压。electron-builder 使用准备好的本地 Electron 目录，不会再下载一次。`pnpm run clean` 会删掉这个目录，备份和放回的命令在「切分支或合并之后完全重建」。
 
 开发依赖里已有的 `apps/desktop/node_modules/electron/dist` 不会被这次准备步骤复用。第一次从 GitHub 拉 Electron 时终端会停在 `prepare-runtime.ts`，中间没有进度。要换国内镜像，先停掉当前打包，再执行：
 

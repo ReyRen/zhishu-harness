@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-本目录存放二次开发增量。每个子目录是独立插件。启动 Web profile（包括桌面的 Web 运行时）时，`apps/cli` 会在官方组合包之后加载其中的 `cordis.patch.yml`。无 Web 的 headless 和 SDK profile 不加载这些插件。`hide-official-account` 和 `platform-account` 只在 profile `desktop` 上加载；容器化网页（profile `web`）保留官方设置入口和账号菜单。除非官方界面没有对应 slot，否则不要改 `packages/` 中的源码。
+本目录存放二次开发增量。每个子目录是独立插件。启动 Web profile（包括桌面的 Web 运行时）时，`apps/cli` 会在官方组合包之后加载其中的 `cordis.patch.yml`。无 Web 的 headless 和 SDK profile 不加载这些插件。`hide-official-account` 对所有 Web profile 生效，关掉官方账号菜单，左下角回到设置齿轮。`platform-account` 只在 profile `desktop` 上加载。除非官方界面没有对应 slot，否则不要改 `packages/` 中的源码。
 
 ```text
 overlay/
@@ -12,7 +12,7 @@ overlay/
 │   ├── index.js           Host: serve images
 │   ├── client.js          Browser: occupy the sidebar and hero brand slots
 │   └── assets/            logo.png, logo-mark.png, zhishu-hero.webp, zhishu-hero-loop.webp, zhishu.gif
-├── hide-official-account/ Desktop only: disable the official DeepSeek account menu. Container web does not load this
+├── hide-official-account/ Every Web profile: disable the official DeepSeek account menu so the settings gear returns
 │   └── cordis.patch.yml   Disable ui-settings-account only
 ├── platform-account/      Desktop only: platform user on the conversation sidebar. Settings and sign-out live in that menu
 ├── running-status/        Running mark, “Thinking”, conversation scrollbar

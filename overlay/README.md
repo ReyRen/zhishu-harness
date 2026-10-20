@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Put secondary-development additions in this directory. Each subdirectory is an independent plugin. When a Web profile starts, including Desktop's Web runtime, `apps/cli` loads its `cordis.patch.yml` after the shipped bundles. Headless and SDK profiles do not load these Web plugins. `hide-official-account` and `platform-account` load only for profile `desktop`; container web (profile `web`) keeps the official settings launcher and account menu. Do not edit the official UI source under `packages/` unless it provides no matching slot.
+Put secondary-development additions in this directory. Each subdirectory is an independent plugin. When a Web profile starts, including Desktop's Web runtime, `apps/cli` loads its `cordis.patch.yml` after the shipped bundles. Headless and SDK profiles do not load these Web plugins. `hide-official-account` loads for every Web profile and disables the official account menu, so the settings gear returns. `platform-account` loads only for profile `desktop`. Do not edit the official UI source under `packages/` unless it provides no matching slot.
 
 ```text
 overlay/
@@ -12,7 +12,7 @@ overlay/
 │   ├── index.js           Host: serve images
 │   ├── client.js          Browser: occupy the sidebar and hero brand slots
 │   └── assets/            logo.png, logo-mark.png, zhishu-hero.webp, zhishu-hero-loop.webp, zhishu.gif
-├── hide-official-account/ Desktop only: disable the official DeepSeek account menu. Container web does not load this
+├── hide-official-account/ Every Web profile: disable the official DeepSeek account menu so the settings gear returns
 │   └── cordis.patch.yml   Disable ui-settings-account only
 ├── platform-account/      Desktop only: platform user on the conversation sidebar. Settings and sign-out live in that menu
 ├── running-status/        Running mark, “Thinking”, conversation scrollbar
