@@ -14,6 +14,11 @@ overlay/
 │   └── assets/            logo.png, logo-mark.png, zhishu-hero.webp, zhishu-hero-loop.webp, zhishu.gif
 ├── hide-official-account/ Every Web profile: disable the official DeepSeek account menu so the settings gear returns
 │   └── cordis.patch.yml   Disable ui-settings-account only
+├── hide-product-onboarding/ Every Web profile: skip the preview notice and the API-key dialog
+│   ├── cordis.patch.yml   credentialOnboarding: false, and insert this plugin
+│   ├── package.json       Declare dsh.client
+│   ├── index.js           Host row so the client bundle loads
+│   └── client.js          Browser: occupy welcome-notice and complete it immediately
 ├── platform-account/      Desktop only: platform user on the conversation sidebar. Settings and sign-out live in that menu
 ├── running-status/        Running mark, “Thinking”, conversation scrollbar
 │   ├── cordis.patch.yml   Insert this plugin
