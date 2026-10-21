@@ -10,7 +10,7 @@
 
 | 包 | 版本 | 来源 |
 | --- | --- | --- |
-| `open-sea-skin` | 1.2.5 | 社区 npm，tarball 在 `tarballs/` |
+| `open-sea-skin` | 1.2.6 | 社区 npm，tarball 在 `tarballs/` |
 
 `plugins.json` 是市场列表。`tarballs/` 是对应的安装包。启动时如果 `storage/` 里还没有这个版本，会把 tarball 发布进 Verdaccio。
 

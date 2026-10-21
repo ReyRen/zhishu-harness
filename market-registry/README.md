@@ -10,7 +10,7 @@ There is no public-registry proxy. A package absent from Verdaccio fails to inst
 
 | Package | Version | Source |
 | --- | --- | --- |
-| `open-sea-skin` | 1.2.5 | Community npm; tarball in `tarballs/` |
+| `open-sea-skin` | 1.2.6 | Community npm; tarball in `tarballs/` |
 
 `plugins.json` is the catalog and `tarballs/` holds its packages. Startup publishes a tarball to Verdaccio if `storage/` does not already contain that version.
 
