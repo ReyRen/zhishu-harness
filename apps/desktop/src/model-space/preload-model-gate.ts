@@ -31,6 +31,26 @@ contextBridge.exposeInMainWorld('dshModelSpace', {
   },
 })
 
+if (location.protocol === 'http:' || location.protocol === 'https:') {
+  const notifyBoot = (): boolean => {
+    const app = document.getElementById('app')
+    if (app === null || app.querySelector('.zhishu-boot') !== null || app.childElementCount === 0) return false
+    ipcRenderer.send(MODEL_SPACE_IPC.bootReady)
+    return true
+  }
+  const watchBoot = (): void => {
+    if (notifyBoot()) return
+    const app = document.getElementById('app')
+    if (app === null) return
+    const observer = new MutationObserver(() => {
+      if (notifyBoot()) observer.disconnect()
+    })
+    observer.observe(app, { childList: true, subtree: true })
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchBoot, { once: true })
+  else watchBoot()
+}
+
 if (location.protocol === 'data:') {
   window.addEventListener('DOMContentLoaded', () => {
     for (const button of document.querySelectorAll<HTMLButtonElement>('[data-space]')) {

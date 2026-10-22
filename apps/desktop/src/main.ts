@@ -68,7 +68,7 @@ let stopForRecovery = async (): Promise<void> => {}
 let shuttingDown = false
 /**
  * Set by quit entries that must not ask: crash recovery exit and restart, and the
- * development restart command. The installer handoff has its own before-quit branch.
+ * application-menu restart command. The installer handoff has its own before-quit branch.
  */
 let skipQuitConfirmation = false
 let windowsLanguage: string | undefined
@@ -963,15 +963,20 @@ async function main(): Promise<void> {
     { label: currentDesktopLocale().messages.checkUpdatesMenu, click: () => { void openUpdatePrompt(true) } },
     ...process.platform === 'darwin' || process.platform === 'win32'
       ? [{ label: currentDesktopLocale().messages.cliCommandMenu, click: () => { void commandManager.show() } }] : [],
-    ...development ? [
-      { type: 'separator' as const },
-      { label: currentDesktopLocale().messages.reloadPageMenu, role: 'reload' as const },
-      { label: currentDesktopLocale().messages.restartAppHostMenu, click: () => {
-        if (quitting) return
-        app.relaunch()
-        quitWithoutConfirmation()
-      } },
-    ] : [],
+    { type: 'separator' },
+    { label: currentDesktopLocale().messages.reloadPageMenu, accelerator: 'CmdOrCtrl+R', click: () => {
+      // Start the model page before the conversation document. Reloading the
+      // window document first keeps the main process inside that navigation,
+      // so the visible business page does not begin until it returns.
+      modelGate?.reload()
+      const window = mainWindow
+      if (window !== undefined && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.reload()
+    } },
+    { label: currentDesktopLocale().messages.restartAppHostMenu, click: () => {
+      if (quitting) return
+      app.relaunch()
+      quitWithoutConfirmation()
+    } },
     { type: 'separator' },
     ...hideCommands,
     { role: 'quit', ...(darwin ? { label: currentDesktopLocale().messages.quitApplication }
