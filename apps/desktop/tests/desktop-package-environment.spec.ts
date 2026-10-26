@@ -158,6 +158,17 @@ describe('Desktop local packaging configuration', () => {
     }).not.toThrow()
   })
 
+  it('keeps an unsigned Windows LAN feed from the platform file and rejects a malformed one', async () => {
+    await withDirectory(async (directory) => {
+      await writeFile(join(directory, '.env.windows'), 'DSH_DESKTOP_APP_ID=com.deepseek.harness\nDSH_DESKTOP_LAN_FEED_URL=http://10.5.60.154:8070/feeds/win-x64/\n')
+      expect(loadDesktopPackageEnvironment('win32', { DSH_DESKTOP_LAN_FEED_URL: 'http://stale.example/feeds/' }, directory).DSH_DESKTOP_LAN_FEED_URL)
+        .toBe('http://10.5.60.154:8070/feeds/win-x64/')
+    })
+    expect(() => validateDesktopPackageEnvironment({
+      ...POLICY, DSH_DESKTOP_APP_ID: RELEASE.DSH_DESKTOP_APP_ID, DSH_DESKTOP_LAN_FEED_URL: 'http://10.5.60.154:8070/feeds',
+    }, WINDOWS, { unsigned: true })).toThrow(/DSH_DESKTOP_LAN_FEED_URL/u)
+  })
+
   it('accepts unsigned macOS configuration without Apple or update policy settings while keeping release validation', () => {
     const local = localMacOSPackageEnvironment({})
     expect(() => { validateDesktopPackageEnvironment(local, MACOS, { unsigned: true }) }).not.toThrow()

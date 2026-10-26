@@ -65,6 +65,15 @@ export function desktopUpdateMetadataFilename(
 ): string
 
 /**
+ * Resolve the feed directory written into an unsigned Windows package.
+ * @param env - Packaging environment.
+ * @returns Feed directory and channel, when configured.
+ */
+export function resolveDesktopLanFeedUrl(
+  env: NodeJS.ProcessEnv,
+): { url: string, channel: 'nightly' | 'latest' } | undefined
+
+/**
  * Resolve the public updater URL and object prefixes for one release target.
  * @param env - Packaging or upload environment.
  * @param platform - Target Node.js platform.

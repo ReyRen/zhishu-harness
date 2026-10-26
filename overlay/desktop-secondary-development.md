@@ -123,7 +123,7 @@ model 仓库的 `/desktop-entry` 不能要求登录标记。冷启动时 cookie 
 
 下面这些变量在 PowerShell 里用 `$env:名字 = '值'` 设置。它只活在当前这个终端里，关掉窗口就没了。新开一个终端要重新设置。打包或 `pnpm run dev:desktop` 必须在设过变量的那个终端里执行。装好的程序不读这些变量。后台 IP 和 `publicOrigin` 改 `resources/model-gateway.json`，不靠环境变量。
 
-`apps/desktop/.env.windows` 只放应用 ID、更新源这类发布项，从 `.env.windows.example` 复制，Git 忽略。已经复制出来的文件里若还有 `DSH_MODEL_ORIGIN`，留着也不改变安装包里的页面地址。页面地址固定是 `http://127.0.0.1:17321`。
+`apps/desktop/.env.windows` 只放应用 ID、更新源这类发布项，从 `.env.windows.example` 复制，Git 忽略。未签名 Windows 包的局域网更新地址 `DSH_DESKTOP_LAN_FEED_URL` 也写在这个文件里，见「局域网下载和检查更新」。已经复制出来的文件里若还有 `DSH_MODEL_ORIGIN`，留着也不改变安装包里的页面地址。页面地址固定是 `http://127.0.0.1:17321`。
 
 | 变量 | 在哪设 | 作用 |
 |---|---|---|
@@ -255,7 +255,7 @@ if (Test-Path $backup) {
 pnpm run package:desktop:win:x64:unsigned
 ```
 
-先准备 `apps/desktop/.env.windows`（Git 忽略）。从 `.env.windows.example` 复制。未签名打包仍要能通过配置检查，至少包括应用 ID，以及当前更新环境对应的强制更新源。`DSH_MODEL_ORIGIN` 可以不写。
+先准备 `apps/desktop/.env.windows`（Git 忽略）。从 `.env.windows.example` 复制。未签名打包仍要能通过配置检查，至少包括应用 ID，以及当前更新环境对应的强制更新源。要让装好的程序检查局域网更新，再写 `DSH_DESKTOP_LAN_FEED_URL`。`DSH_MODEL_ORIGIN` 可以不写。
 
 这台打包机还需要：
 
@@ -272,6 +272,26 @@ pnpm run package:desktop:win:x64:unsigned
 文件名里的 `-unsigned` 表示不能当作正式发布包上传。Windows 会提示未签名。
 
 装出来的对话界面已经换成 overlay，只说明 `resources/overlay` 打进去了。标题栏的「会话 / 业务」在壳的预加载脚本里（`apps/desktop/src/preload-menu.ts`），一开始是隐藏的，要等 model 登录状态送到这个页面。Harness 页经常比登录门更早打开，进入会话时那次通知会落在即将换掉的文档上，按钮就一直不出现。`model-gate.ts` 会在页面加载完、以及进入会话后再补发状态；标题栏在按钮还藏着时会自己再问。这两处都在壳源码里，改完要重新打包才会进安装包。
+
+## 局域网下载和检查更新
+
+局域网交付用未签名 Windows 包，不办正式包的代码签名证书。未签名包没有发布者证书，原先的更新器会拒绝安装结果，所以装好之后不能检查更新。现在的未签名包可以带上局域网更新源。签名打包不读这个地址，默认渠道仍是 `nightly`，更新协议仍是 HTTPS，签名校验也保持原样。
+
+给人下载的页面和给应用检查更新的清单放在同一台静态站点，仓库是 `zhishu-desktop-site`。页面链到 `/download/zhishu-windows-x64.exe`。应用不读网页，只请求 feed 目录里的 `nightly.yml`，再按清单下载同一目录中的安装包。部署、nginx 容器和拷贝后的 `chmod` 写在该仓库的 README。当前生产地址是 `http://172.18.127.67:8070/`。容器内监听 80，宿主机映射 `8070:80`，只用 HTTP，不配证书。
+
+打包前在 `apps/desktop/.env.windows` 写入：
+
+```text
+DSH_DESKTOP_LAN_FEED_URL=http://172.18.127.67:8070/feeds/win-x64/
+```
+
+地址必须是其他电脑能访问的绝对 `http` 或 `https` URL，路径以 `/` 结尾，不能带账号、查询参数或锚点。然后仍执行 `pnpm run package:desktop:win:x64:unsigned`。没写这个变量时，未签名包不带更新源。
+
+这个地址在打包时写进 `resources/app-update.yml`。装好的程序不再读 `.env.windows`。换服务器要重新打包，已经装上的程序仍访问原来的地址。第一份给别人安装的包必须已经带上这个地址，从产品页手工安装。之后提高版本再发布，应用里的检查更新才能看到新版本。
+
+通道由 `DSH_DESKTOP_UPDATE_CHANNEL` 决定，不写就是 `nightly`，不会因为版本号变成稳定版就自动改成 `latest`。版本号里带 `-` 时不能选 `latest`。已经装好的 `nightly` 包只读 `nightly.yml`。未签名局域网包会写入 `dshDesktopVerifyUpdateSignature: false`，下载后的安装包不再核对发布者证书。正式包不写这个字段，仍然校验签名。
+
+检查和安装仍分开。应用不会自动下载，也不会在退出时自动安装，要等使用者确认。Windows 对未签名安装包仍可能弹出风险提示。
 
 ## 准备运行时在 pnpm 结束后失败
 

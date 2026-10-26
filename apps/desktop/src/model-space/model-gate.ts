@@ -7,6 +7,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { app, BrowserWindow, ipcMain, net, session, shell, WebContentsView, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron'
+import { classifyModelAddress } from './model-address.ts'
 import { MODEL_SITE_ORIGIN } from './model-gateway.ts'
 import { MODEL_SPACE_IPC, type ModelSpace, type ModelSpaceState, type PlatformAccount } from './model-space.ts'
 import { WINDOWS_TITLEBAR_HEIGHT } from '../windows-layout.ts'
@@ -64,13 +65,6 @@ function readPlatformAccount(value: unknown): PlatformAccount | undefined {
   return { userAccount, userName }
 }
 
-function isLoginGatePath(pathname: string): boolean {
-  return pathname === '/login'
-    || pathname === '/register'
-    || pathname === '/desktop-entry'
-    || pathname === '/complete-identity'
-}
-
 /**
  * Hosts the model site in one persistent partition and tells the shell when
  * the platform session is allowed into the Harness workspace.
@@ -98,6 +92,7 @@ export class ModelPlatformGate {
   private authenticated = false
   private account: PlatformAccount | null = null
   private publishGeneration = 0
+  private addressGeneration = 0
   private readonly onAuthenticated: () => Promise<void>
 
   /**
@@ -202,9 +197,12 @@ export class ModelPlatformGate {
       if (url.startsWith('https://') || url.startsWith('http://')) void shell.openExternal(url)
       return { action: 'deny' }
     })
-    const follow = (_event: unknown, url: string): void => { this.onAddress(url) }
-    view.webContents.on('did-navigate', follow)
-    view.webContents.on('did-navigate-in-page', follow)
+    // In-page events also fire for iframes. Those addresses must not uncover
+    // the conversation while the main frame is still the login page.
+    view.webContents.on('did-navigate', (_event, url) => { this.settleAddress(url) })
+    view.webContents.on('did-navigate-in-page', (_event, url, isMainFrame) => {
+      if (isMainFrame) this.settleAddress(url)
+    })
     window.contentView.addChildView(view)
     // The caption asks for state as soon as its document loads. That is often before
     // this gate exists, and a later reload drops the in-flight event. Send again
@@ -507,33 +505,49 @@ export class ModelPlatformGate {
     cover.setVisible(this.coverWanted())
   }
 
-  private onAddress(url: string): void {
+  /**
+   * Apply a main-frame address, then read that frame again. `/desktop-entry`
+   * can pass through `/smartChat` before the platform sends the view back to
+   * login; the conversation stays covered until a workspace path is still there.
+   */
+  private settleAddress(url: string): void {
+    this.onAddress(url, false)
+    const generation = ++this.addressGeneration
+    const view = this.view
+    for (const delay of [400, 1200, 3000]) {
+      setTimeout(() => {
+        if (this.addressGeneration !== generation) return
+        if (view === undefined || view.webContents.isDestroyed()) return
+        this.onAddress(view.webContents.getURL(), true)
+      }, delay)
+    }
+  }
+
+  private onAddress(url: string, confirm: boolean): void {
     const window = this.window
     const view = this.view
     if (window === undefined || window.isDestroyed() || view === undefined || view.webContents.isDestroyed()) return
-    let parsed: URL
-    try { parsed = new URL(url) } catch { return }
-    if (parsed.origin !== this.origin) return
-    const path = parsed.pathname
-    if (path === '/login' || path === '/register') {
-      this.authenticated = false
+    const decision = classifyModelAddress(url, this.origin)
+    if (decision === 'ignore') return
+    if (decision === 'signed-in') {
+      // Login's own success route is /smartChat, same as the website. Open Harness
+      // only after that path is still the main frame. A later login path closes it.
+      if (this.authenticated || !confirm) return
+      this.authenticated = true
+      this.show('conversation')
+      void this.loadAccount()
+      void this.onAuthenticated()
+      return
+    }
+    const entered = this.authenticated
+    this.authenticated = false
+    if (entered) {
       this.account = null
       this.publishAccount()
-      this.show('business')
-      if (!window.isDestroyed() && window.isVisible()) window.show()
-      return
     }
-    // Identity completion and the cold-start entry stay on this page. Login's own
-    // success route is /smartChat, same as the website; reaching it opens Harness.
-    if (isLoginGatePath(path)) {
-      if (!this.authenticated) this.show('business')
-      return
-    }
-    if (this.authenticated) return
-    this.authenticated = true
-    this.show('conversation')
-    void this.loadAccount()
-    void this.onAuthenticated()
+    // Repeated observations of the same login page must not republish the caption.
+    if (entered || this.active !== 'business') this.show('business')
+    if (decision === 'signed-out' && entered && !window.isDestroyed() && window.isVisible()) window.show()
   }
 
   /** Ask the platform who is logged in, then tell the conversation page. */
