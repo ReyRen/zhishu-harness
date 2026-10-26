@@ -1,3 +1,4 @@
+import { SHIPPED_LOCALE_IDS } from '../../../scripts/shipped-locales.ts'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -51,6 +52,7 @@ describe('desktop macOS release signature', () => {
     expect(config.protocols).toEqual([{ name: 'Zhishu Harness', schemes: ['dsh'] }])
     expect(portablePath(config.directories.output)).toContain('/.desktop-build/targets/mac-arm64/artifacts')
     expect(config.mac.extendInfo.NSMicrophoneUsageDescription).toContain('microphone')
+    expect(config.mac.extendInfo.CFBundleLocalizations).toEqual(SHIPPED_LOCALE_IDS.map(id => id === 'zh' ? 'zh_CN' : id))
     expect(config.mac.entitlementsInherit).toBe(config.mac.entitlements)
     const entitlements = readFileSync(config.mac.entitlements, 'utf8')
     for (const key of ['com.apple.security.cs.allow-jit', 'com.apple.security.cs.allow-unsigned-executable-memory',
@@ -200,7 +202,7 @@ describe('desktop macOS release signature', () => {
       DSH_DESKTOP_UNSIGNED: '1',
     }, 'darwin', arch)
     expect(portablePath(config.directories.output)).toContain(`/targets/mac-${arch}/unsigned-artifacts`)
-    expect(config.artifactName).toBe('deepseek-harness-${version}-${os}-${arch}-unsigned.${ext}')
+    expect(config.artifactName).toBe('zhishu-${version}-${os}-${arch}-unsigned.${ext}')
     expect(config.mac).toMatchObject({ identity: '-', forceCodeSigning: false, notarize: false, target: ['dmg'] })
     expect(config.dmg).toMatchObject({ sign: false, writeUpdateInfo: false })
     expect(config.publish).toBeNull()

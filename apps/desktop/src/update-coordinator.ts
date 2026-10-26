@@ -79,7 +79,7 @@ export class DesktopUpdateCoordinator {
       const signatureOwner = this.updater as AppUpdater & {
         verifyUpdateCodeSignature: (publisherName: string[], path: string) => Promise<string | null>
       }
-      signatureOwner.verifyUpdateCodeSignature = async () => null
+      signatureOwner.verifyUpdateCodeSignature = () => Promise.resolve(null)
     }
     this.updater.on('download-progress', this.onProgress)
     this.updater.on('update-downloaded', this.onDownloaded)
