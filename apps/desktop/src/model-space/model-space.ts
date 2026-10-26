@@ -10,6 +10,7 @@ export const MODEL_SPACE_IPC = {
   accountChanged: 'zhishu-model:account-changed',
   logout: 'zhishu-model:logout',
   businessSidebarToggle: 'zhishu-model:business-sidebar-toggle',
+  bootReady: 'zhishu-model:boot-ready',
 } as const
 
 /** Which surface covers the main window. `business` is the whole model site. */

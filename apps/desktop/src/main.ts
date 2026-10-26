@@ -32,7 +32,7 @@ import { DESKTOP_IPC, SCHEME, assertDesktopSender, type DesktopUpdateState } fro
 import { readDeviceInfo } from './device-info.ts'
 import { desktopUpdateReadyConfirmation, formatDesktopMessage, resolveDesktopLocale, resolveDesktopStartupLocale } from './locale.ts'
 import { claimDesktopSingleInstance } from './single-instance.ts'
-import { desktopUpdateChannel } from './update-channel.ts'
+import { desktopUpdateChannel, desktopUpdateVerifiesCodeSignature } from './update-channel.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
 import { DesktopCommandManager } from './command-management.ts'
 import { serveWebDocument, authenticateWebHost, forwardWebRequest } from './web-document.ts'
@@ -68,7 +68,7 @@ let stopForRecovery = async (): Promise<void> => {}
 let shuttingDown = false
 /**
  * Set by quit entries that must not ask: crash recovery exit and restart, and the
- * development restart command. The installer handoff has its own before-quit branch.
+ * application-menu restart command. The installer handoff has its own before-quit branch.
  */
 let skipQuitConfirmation = false
 let windowsLanguage: string | undefined
@@ -641,6 +641,7 @@ async function main(): Promise<void> {
     undefined, undefined, undefined,
     (success, reason) => { void track('desktop_upgrade_download_result', { is_success: success, ...reason === undefined ? {} : { error_reason: reason } }) },
     updateChannel,
+    desktopUpdateVerifiesCodeSignature(manifest),
   )
 
   const updateSchedule = new DesktopUpdateSchedule(updates, resolveDesktopUpdateScheduleConfig(process.env))
@@ -654,7 +655,6 @@ async function main(): Promise<void> {
     // A confirmation on a hidden window would go unseen, so it waits for the next show; the mandatory
     // flow keeps its own taskbar and Dock attention instead.
     if (!isMandatory()) await windowShown()
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- A quit can begin while the show is awaited.
     if (quitting) return state
     return updates.install(version)
   }
@@ -963,15 +963,20 @@ async function main(): Promise<void> {
     { label: currentDesktopLocale().messages.checkUpdatesMenu, click: () => { void openUpdatePrompt(true) } },
     ...process.platform === 'darwin' || process.platform === 'win32'
       ? [{ label: currentDesktopLocale().messages.cliCommandMenu, click: () => { void commandManager.show() } }] : [],
-    ...development ? [
-      { type: 'separator' as const },
-      { label: currentDesktopLocale().messages.reloadPageMenu, role: 'reload' as const },
-      { label: currentDesktopLocale().messages.restartAppHostMenu, click: () => {
-        if (quitting) return
-        app.relaunch()
-        quitWithoutConfirmation()
-      } },
-    ] : [],
+    { type: 'separator' },
+    { label: currentDesktopLocale().messages.reloadPageMenu, accelerator: 'CmdOrCtrl+R', click: () => {
+      // Start the model page before the conversation document. Reloading the
+      // window document first keeps the main process inside that navigation,
+      // so the visible business page does not begin until it returns.
+      modelGate?.reload()
+      const window = mainWindow
+      if (window !== undefined && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.reload()
+    } },
+    { label: currentDesktopLocale().messages.restartAppHostMenu, click: () => {
+      if (quitting) return
+      app.relaunch()
+      quitWithoutConfirmation()
+    } },
     { type: 'separator' },
     ...hideCommands,
     { role: 'quit', ...(darwin ? { label: currentDesktopLocale().messages.quitApplication }

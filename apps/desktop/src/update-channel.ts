@@ -15,3 +15,18 @@ export function desktopUpdateChannel(manifest: unknown): DesktopUpdateChannel {
   if (channel !== 'nightly' && channel !== 'latest') throw new Error('desktop update: invalid packaged channel')
   return channel
 }
+
+/**
+ * Unsigned Windows packages opt out because they have no publisher certificate.
+ * Older and signed manifests keep verification.
+ * @param manifest Parsed application manifest.
+ * @returns Whether the downloaded installer must match a publisher signature.
+ */
+export function desktopUpdateVerifiesCodeSignature(manifest: unknown): boolean {
+  if (typeof manifest !== 'object' || manifest === null) throw new Error('desktop update: invalid application manifest')
+  if (!('dshDesktopVerifyUpdateSignature' in manifest)) return true
+  if (typeof manifest.dshDesktopVerifyUpdateSignature !== 'boolean') {
+    throw new Error('desktop update: invalid packaged signature verification')
+  }
+  return manifest.dshDesktopVerifyUpdateSignature
+}

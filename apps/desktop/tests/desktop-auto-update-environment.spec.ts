@@ -5,6 +5,7 @@ import {
   resolveDesktopAutoUpdateConfig,
   resolveDesktopAutoUpdateEnvironment,
   resolveDesktopAutoUpdateTarget,
+  resolveDesktopLanFeedUrl,
   resolveDesktopUploadConfig,
 } from '../scripts/desktop-auto-update-environment.mjs'
 
@@ -109,6 +110,28 @@ describe('desktop auto-update environment', () => {
     })).toThrow(/test.*production/u)
     expect(() => resolveDesktopAutoUpdateTarget('linux', 'x64')).toThrow(/unsupported target/u)
     expect(() => desktopBuildRecordFilename('linux-x64' as 'mac-arm64')).toThrow(/unsupported target/u)
+  })
+
+  it('accepts an unsigned LAN feed directory and keeps the selected channel', () => {
+    expect(resolveDesktopLanFeedUrl({})).toBeUndefined()
+    expect(resolveDesktopLanFeedUrl({ DSH_DESKTOP_LAN_FEED_URL: '  ' })).toBeUndefined()
+    expect(resolveDesktopLanFeedUrl({
+      DSH_DESKTOP_LAN_FEED_URL: 'http://10.5.60.154:8070/feeds/win-x64/',
+    })).toEqual({ url: 'http://10.5.60.154:8070/feeds/win-x64/', channel: 'nightly' })
+    expect(resolveDesktopLanFeedUrl({
+      DSH_DESKTOP_LAN_FEED_URL: 'https://updates.lan/feeds/win-x64/',
+      DSH_DESKTOP_UPDATE_CHANNEL: 'latest',
+    })).toEqual({ url: 'https://updates.lan/feeds/win-x64/', channel: 'latest' })
+  })
+
+  it.each([
+    '10.5.60.154:8070/feeds/win-x64/',
+    'http://10.5.60.154:8070/feeds/win-x64',
+    'http://user:secret@10.5.60.154:8070/feeds/win-x64/',
+    'http://10.5.60.154:8070/feeds/win-x64/?cache=1',
+    'ftp://10.5.60.154/feeds/win-x64/',
+  ])('rejects LAN feed URL %j', (url) => {
+    expect(() => resolveDesktopLanFeedUrl({ DSH_DESKTOP_LAN_FEED_URL: url })).toThrow(/DSH_DESKTOP_LAN_FEED_URL/u)
   })
 
   it('uses Nightly metadata for stable and prerelease Desktop versions', () => {

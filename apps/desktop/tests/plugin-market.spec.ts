@@ -42,16 +42,16 @@ describe('desktop plugin market', () => {
     directories.push(storage)
     const packages = pluginMarketPackages(join(SOURCE, 'plugins.json'))
     expect(packages.map(item => `${item.name}@${item.version}`)).toEqual([
-      'open-sea-skin@1.2.5',
+      'open-sea-skin@1.2.6',
     ])
     seedPluginMarketStorage(storage, join(SOURCE, 'tarballs'), packages)
     const metadata = JSON.parse(readFileSync(join(storage, 'open-sea-skin', 'package.json'), 'utf8')) as {
       versions: Record<string, { dist: { tarball: string } }>
       'dist-tags': { latest: string }
     }
-    expect(metadata['dist-tags'].latest).toBe('1.2.5')
-    expect(metadata.versions['1.2.5']?.dist.tarball).toBe('http://127.0.0.1:4873/open-sea-skin/-/open-sea-skin-1.2.5.tgz')
-    expect(readFileSync(join(storage, 'open-sea-skin', 'open-sea-skin-1.2.5.tgz')).byteLength).toBeGreaterThan(0)
+    expect(metadata['dist-tags'].latest).toBe('1.2.6')
+    expect(metadata.versions['1.2.6']?.dist.tarball).toBe('http://127.0.0.1:4873/open-sea-skin/-/open-sea-skin-1.2.6.tgz')
+    expect(readFileSync(join(storage, 'open-sea-skin', 'open-sea-skin-1.2.6.tgz')).byteLength).toBeGreaterThan(0)
     const index = JSON.parse(readFileSync(join(storage, '.verdaccio-db.json'), 'utf8')) as { list: string[]; secret: string }
     expect(index.list).toEqual(['open-sea-skin'])
     expect(index.secret).toHaveLength(32)
