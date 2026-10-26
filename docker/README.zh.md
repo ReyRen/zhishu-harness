@@ -18,7 +18,7 @@
 
 ## 构建镜像
 
-只在带标签的 Worker 上，从已合并的干净 `main` 工作树构建。[发布指南](../docs/cookbook/updating-platform-fork.zh.md)列出了命令和 Image ID 切换步骤。Docker 会复用未变化的依赖层；`DSH_CLIENT_COMMIT_HASH` 把准确源码版本写入前端。
+只在带标签的 Worker 上，从已合并的干净 `main` 工作树构建。[发布指南](../docs/cookbook/updating-platform-fork.zh.md)列出了命令和 Image ID 切换步骤。Docker 会复用未变化的依赖层；`DSH_CLIENT_COMMIT_HASH` 把准确源码版本写入前端及镜像的 `org.opencontainers.image.revision` 标签。
 
 ## 用户工作区
 

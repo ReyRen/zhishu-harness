@@ -6,14 +6,17 @@
   en: a6cc1e2e88760f1d
   zh: 4aff44d564ccc018
 /update-upstream-and-publish-the-platform-image/branch-and-merge-rules:
-  en: 52576fa687077279
-  zh: bfdf98a4268e0a2f
+  en: 3390af6bf4f98ca4
+  zh: 90eb773ac3aa0bee
+/update-upstream-and-publish-the-platform-image/0-reconcile-pending-work-before-fetching:
+  en: a0488724a30dfd46
+  zh: a79df56b240084ff
 /update-upstream-and-publish-the-platform-image/1-fetch-and-fast-forward-fork-master:
-  en: 71f11882c8ab3ec6
-  zh: 1d6e99ee58844556
+  en: e2aa9af923779960
+  zh: 1a27153009e1c389
 /update-upstream-and-publish-the-platform-image/2-integrate-and-validate-outside-mutagen:
-  en: e7960a63d600130d
-  zh: 520e977d0c18575d
+  en: c66d25d40cc1dbec
+  zh: ffb5318819e43eee
 /update-upstream-and-publish-the-platform-image/3-update-the-canonical-build-checkout:
   en: 9efe769ae8849922
   zh: c71079d9880961cc

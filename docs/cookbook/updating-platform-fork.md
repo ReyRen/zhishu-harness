@@ -11,6 +11,25 @@ Use this procedure for `ReyRen/zhishu-harness` and the GCS deployment. Commands 
 - Merge on a temporary branch outside Mutagen's synchronized directory. Review textual and semantic conflicts individually. Official behavior replaces incompatible platform designs; retain compatible per-user workspaces, JFS boundaries, native Web, Desktop and market features.
 - Authenticated non-loopback browsers must be able to persist settings to their own Host. Official remote-access support now implements this; do not fake loopback identity. If future upstream behavior truly conflicts, stop for a user decision.
 - No force pushes, hard resets, whole-file ours/theirs resolutions or ZIP overlays. Unknown changes, failed tests or unavailable hosts block release.
+- If Issues are disabled in `ReyRen/zhishu-harness`, a platform PR records its upstream/main baselines, scope and validation without an Issue reference. Do not enable Issues or open one in the official repository to satisfy a contribution-template requirement.
+
+## 0. Reconcile pending work before fetching
+
+Every run reads live official/Fork refs, the canonical checkouts, pending worktrees/PRs, images and running containers. Evaluate these conditions independently:
+
+| Condition | Required work |
+|---|---|
+| Official master is ahead of Fork master | Fast-forward Fork master |
+| Fork main does not contain the official target | Resume or create the reviewed upstream merge |
+| Main changed, or a target lacks a validated image for main | Build and smoke-test that target |
+| A configured Worker runs an older image or stale specification | Roll out the validated image |
+| A previous run stopped before completion | Recheck its evidence and resume the pending step |
+
+Only report no change when none of these conditions holds. Equal official/Fork master refs do not establish that main, images or deployment are current. Main-only development updates trigger builds independently. Unknown uncommitted work is reported and preserved, not published automatically.
+
+Keep recovery checkpoints in `$CODEX_HOME/automations/dsh/release-state.json`: target refs, owned review worktree, completed checks, built images and each Worker's deployed result. Save each successful phase with a temporary file and rename; record failures and pending work. Never store credentials. The file is a recovery aid, not authority: verify its claims against live state, and reconstruct it when absent.
+
+The enabled automatic release target is x86 on `172.18.36.230`, controlled by Master `172.18.29.80`. Also report ARM source/image drift on `172.18.127.43` and `172.18.127.44`; publish ARM only when explicitly enabled. Record architecture, commit, image name and local Image ID separately. Do not compare IDs across architectures or Docker image backends, or claim that an x86 release updated ARM.
 
 ## 1. Fetch and fast-forward fork master
 
@@ -30,11 +49,11 @@ test "$(git rev-parse HEAD)" = "$(git rev-parse upstream/master)"
 git push origin master
 ```
 
-If there are no new official commits, do not change state or send routine notifications. Record the official and fork-main commit IDs when an update exists.
+If official master is unchanged, skip only its fast-forward. Continue the independent checks in step 0, including an unfinished merge or main-only update. Stay silent only when there is no pending work or new result requiring attention.
 
 ## 2. Integrate and validate outside Mutagen
 
-Keep the synchronized checkout on main. In a separate worktree, create a fresh branch from current origin/main and merge master without committing first.
+Keep the synchronized checkout on main. Reuse a known owned pending worktree instead of discarding its resolutions. Before integrating a newer origin/main, preserve a resolved merge checkpoint with the normal commit hooks, then merge the new main and recheck affected behavior. For a new integration, create a branch from current origin/main and merge master without committing first.
 
 ```bash
 git switch -c sync-upstream-YYYY-MM-DD origin/main

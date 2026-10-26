@@ -45,8 +45,9 @@ export class DesktopUpdateCoordinator {
    * @param updater - Process-owned Electron updater, replaceable at the network/platform test boundary.
    * @param enabled - Whether this process has a packaged update source.
    * @param currentVersion - Actual installed application version.
-   * @param channel - Installed package channel; omitted test/local callers retain nightly.
    * @param downloadResult - Once per completed download attempt, including platform preparation failures.
+   * @param channel - Installed package channel; omitted test/local callers retain nightly.
+   * @param verifySignature - Whether Windows must verify the downloaded installer publisher.
    */
   constructor(
     private readonly publish: (state: DesktopUpdateState) => DesktopUpdateState,
@@ -56,6 +57,7 @@ export class DesktopUpdateCoordinator {
     private readonly currentVersion: () => string = () => app.getVersion(),
     private readonly downloadResult?: (success: boolean, reason?: string) => void,
     private readonly channel: 'nightly' | 'latest' = 'nightly',
+    private readonly verifySignature = true,
   ) {
     if (updater === autoUpdater) {
       // electron-updater omits this internal transport property from its public declarations.
@@ -72,6 +74,13 @@ export class DesktopUpdateCoordinator {
     this.updater.allowPrerelease = channel === 'nightly'
     // Selecting a channel can enable downgrade in electron-updater.
     this.updater.allowDowngrade = false
+    if (!this.verifySignature) {
+      // Returning null accepts the file. Unsigned LAN packages have no publisherName to check.
+      const signatureOwner = this.updater as AppUpdater & {
+        verifyUpdateCodeSignature: (publisherName: string[], path: string) => Promise<string | null>
+      }
+      signatureOwner.verifyUpdateCodeSignature = () => Promise.resolve(null)
+    }
     this.updater.on('download-progress', this.onProgress)
     this.updater.on('update-downloaded', this.onDownloaded)
     this.updater.on('error', this.onError)

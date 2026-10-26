@@ -11,6 +11,25 @@
 - 在 Mutagen 同步目录外建临时分支，逐处分析文本和语义冲突。官方行为替代不兼容二开；保留兼容的每用户工作区、JFS 边界、原生 Web、桌面端和市场能力。
 - 已认证的非 loopback 浏览器必须能够向自身 Host 持久化设置。官方远程访问机制现在已支持此能力，不再伪造 loopback 身份。若以后真正冲突，暂停并请用户决策。
 - 不强推、不硬重置、不整文件接受 ours/theirs、不用 ZIP 覆盖。未知改动、测试失败、主机不可用时停止发布。
+- `ReyRen/zhishu-harness` 关闭 Issues 时，平台 PR 记录上游/main 基线、范围和验证证据，不要求 Issue 引用。不得为满足贡献模板而开启 Issues，或到官方仓库创建 Issue。
+
+## 0. 拉取前核对待办
+
+每轮读取实时官方/Fork 引用、正式检出、待处理 worktree/PR、镜像和运行容器。分别判断以下条件：
+
+| 条件 | 所需操作 |
+|---|---|
+| 官方 master 领先 Fork master | 快进 Fork master |
+| Fork main 未包含官方目标 | 恢复或新建经审查的上游合并 |
+| Main 更新，或某目标缺少对应 main 的已验证镜像 | 构建并烟测该目标 |
+| 配置 Worker 运行旧镜像或过期规格 | 滚动更新为已验证镜像 |
+| 上次执行未完成 | 核实证据并恢复待办步骤 |
+
+仅当所有条件均不成立时，才判定无变化。官方/Fork master 相同不能说明 main、镜像或部署已更新。仅有 main 二开更新也独立触发构建。未知的未提交工作须报告并保留，不能自动发布。
+
+在 `$CODEX_HOME/automations/dsh/release-state.json` 保存恢复点：目标引用、已知归属的审查 worktree、完成的检查、构建镜像及各 Worker 的部署结果。每阶段成功后通过临时文件和重命名保存；失败记录原因与待办，不存凭据。该文件仅供恢复，仍须以实时状态核实，缺失时重建。
+
+当前启用的自动发布目标为 `172.18.36.230` 的 x86，由 `172.18.29.80` Master 控制。同时报告 `172.18.127.43`、`172.18.127.44` 上 ARM 源码/镜像差异，只有明确启用时才发布 ARM。分别记录架构、提交、镜像名及本机 Image ID；不跨架构或 Docker 镜像后端比较 ID，也不能声称 x86 发布更新了 ARM。
 
 ## 1. 拉取并快进 Fork master
 
@@ -30,11 +49,11 @@ test "$(git rev-parse HEAD)" = "$(git rev-parse upstream/master)"
 git push origin master
 ```
 
-官方没有新提交时，不修改状态，也不发送例行通知。有更新时记录官方及 Fork main 的提交 ID。
+官方 master 未变化时，仅跳过其快进。仍须执行步骤 0 的独立检查，包括未完成合并及仅 main 更新；只有没有待办、也没有需处理的新结果时才保持安静。
 
 ## 2. 在 Mutagen 之外整合验证
 
-同步目录保持 main。在独立 worktree 中从最新 origin/main 建分支，先合并但不提交。
+同步目录保持 main。已有明确归属的待办 worktree 应复用，不能丢弃冲突处理结果。整合更新的 origin/main 前，通过正常提交钩子保存已解决的合并检查点，再合入新 main 并复验受影响行为。全新整合则从最新 origin/main 建分支，先合并 master 但不提交。
 
 ```bash
 git switch -c sync-upstream-YYYY-MM-DD origin/main

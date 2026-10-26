@@ -158,6 +158,41 @@ describe('desktop macOS release signature', () => {
       win: { forceCodeSigning: false, signtoolOptions: { sign: undefined } },
       publish: null,
     })
+    expect(config.extraMetadata.dshDesktopVerifyUpdateSignature).toBeUndefined()
+  })
+
+  it('writes a LAN generic feed into unsigned Windows packages without a publisher check', async () => {
+    const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
+    const config = createElectronBuilderConfig({
+      DSH_DESKTOP_APP_ID: RELEASE_ENVIRONMENT.DSH_DESKTOP_APP_ID,
+      DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://policy.example.com',
+      DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: JSON.stringify({ allowedAuthOrigins: ['https://login.example.com'] }),
+      DSH_DESKTOP_TARGET_PLATFORM: 'win32',
+      DSH_DESKTOP_UNSIGNED: '1',
+      DSH_DESKTOP_LAN_FEED_URL: 'http://10.5.60.154:8070/feeds/win-x64/',
+    }, 'win32', 'x64')
+    expect(config.publish).toEqual([{
+      provider: 'generic', url: 'http://10.5.60.154:8070/feeds/win-x64/', channel: 'nightly',
+    }])
+    expect(config.extraMetadata).toMatchObject({
+      dshDesktopUpdateChannel: 'nightly',
+      dshDesktopVerifyUpdateSignature: false,
+    })
+    expect(config.win.forceCodeSigning).toBe(false)
+    expect(config.win.signtoolOptions.publisherName).toBeUndefined()
+  })
+
+  it('rejects a latest LAN feed for the current prerelease version', async () => {
+    const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
+    expect(() => createElectronBuilderConfig({
+      DSH_DESKTOP_APP_ID: RELEASE_ENVIRONMENT.DSH_DESKTOP_APP_ID,
+      DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://policy.example.com',
+      DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: JSON.stringify({ allowedAuthOrigins: ['https://login.example.com'] }),
+      DSH_DESKTOP_TARGET_PLATFORM: 'win32',
+      DSH_DESKTOP_UNSIGNED: '1',
+      DSH_DESKTOP_UPDATE_CHANNEL: 'latest',
+      DSH_DESKTOP_LAN_FEED_URL: 'http://10.5.60.154:8070/feeds/win-x64/',
+    }, 'win32', 'x64')).toThrow(/latest requires a stable version/u)
   })
 
   it.each(['arm64', 'x64'])('builds local macOS %s DMGs without release credentials or update metadata', async (arch) => {
@@ -167,7 +202,7 @@ describe('desktop macOS release signature', () => {
       DSH_DESKTOP_UNSIGNED: '1',
     }, 'darwin', arch)
     expect(portablePath(config.directories.output)).toContain(`/targets/mac-${arch}/unsigned-artifacts`)
-    expect(config.artifactName).toBe('deepseek-harness-${version}-${os}-${arch}-unsigned.${ext}')
+    expect(config.artifactName).toBe('zhishu-${version}-${os}-${arch}-unsigned.${ext}')
     expect(config.mac).toMatchObject({ identity: '-', forceCodeSigning: false, notarize: false, target: ['dmg'] })
     expect(config.dmg).toMatchObject({ sign: false, writeUpdateInfo: false })
     expect(config.publish).toBeNull()

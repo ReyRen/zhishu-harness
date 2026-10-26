@@ -6,10 +6,12 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { app, BrowserWindow, ipcMain, net, session, shell, WebContentsView, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, ipcMain, net, session, shell, WebContentsView, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron'
+import { classifyModelAddress } from './model-address.ts'
 import { MODEL_SITE_ORIGIN } from './model-gateway.ts'
 import { MODEL_SPACE_IPC, type ModelSpace, type ModelSpaceState, type PlatformAccount } from './model-space.ts'
 import { WINDOWS_TITLEBAR_HEIGHT } from '../windows-layout.ts'
+import { modelReloadDocument } from './reload-screen.ts'
 import { workspaceMenuDocument } from './workspace-menu.ts'
 
 const PARTITION = 'persist:zhishu-model'
@@ -63,13 +65,6 @@ function readPlatformAccount(value: unknown): PlatformAccount | undefined {
   return { userAccount, userName }
 }
 
-function isLoginGatePath(pathname: string): boolean {
-  return pathname === '/login'
-    || pathname === '/register'
-    || pathname === '/desktop-entry'
-    || pathname === '/complete-identity'
-}
-
 /**
  * Hosts the model site in one persistent partition and tells the shell when
  * the platform session is allowed into the Harness workspace.
@@ -77,6 +72,18 @@ function isLoginGatePath(pathname: string): boolean {
 export class ModelPlatformGate {
   private readonly origin = modelPlatformOrigin()
   private view: WebContentsView | undefined
+  private bootCover: WebContentsView | undefined
+  private bootContents: WebContents | undefined
+  private bootTimer: ReturnType<typeof setTimeout> | undefined
+  private bootReadyListener: ((event: IpcMainEvent) => void) | undefined
+  private bootLoadListener: (() => void) | undefined
+  private bootFailListener: ((
+    event: Electron.Event,
+    code: number,
+    description: string,
+    url: string,
+    isMainFrame: boolean,
+  ) => void) | undefined
   private menuView: WebContentsView | undefined
   private menuDone: (() => void) | undefined
   private menuArmed = false
@@ -85,6 +92,7 @@ export class ModelPlatformGate {
   private authenticated = false
   private account: PlatformAccount | null = null
   private publishGeneration = 0
+  private addressGeneration = 0
   private readonly onAuthenticated: () => Promise<void>
 
   /**
@@ -148,6 +156,24 @@ export class ModelPlatformGate {
     })
   }
 
+  /**
+   * Reload the model site. The conversation page is the window's own document,
+   * so a window reload never reaches this view. The model document stays white
+   * while its head scripts run, so the spinner is a separate view kept up
+   * until that page has mounted.
+   */
+  reload(): void {
+    const contents = this.view?.webContents
+    if (contents === undefined || contents.isDestroyed()) return
+    const current = contents.getURL()
+    if (current === '' || current.startsWith('about:') || current.startsWith('data:')) {
+      contents.reload()
+      return
+    }
+    this.showBootCover(contents)
+    contents.reload()
+  }
+
   /** @param window - main window that owns both the Harness page and this view. */
   attach(window: BrowserWindow): void {
     if (this.window === window && this.view !== undefined) return
@@ -163,13 +189,20 @@ export class ModelPlatformGate {
     })
     this.view = view
     view.setBackgroundColor('#ffffff')
+    // The window document reloads in the same action. Leave this page at full
+    // speed while that document is busy, or its own reload sits until the
+    // conversation page finishes.
+    view.webContents.setBackgroundThrottling(false)
     view.webContents.setWindowOpenHandler(({ url }) => {
       if (url.startsWith('https://') || url.startsWith('http://')) void shell.openExternal(url)
       return { action: 'deny' }
     })
-    const follow = (_event: unknown, url: string): void => { this.onAddress(url) }
-    view.webContents.on('did-navigate', follow)
-    view.webContents.on('did-navigate-in-page', follow)
+    // In-page events also fire for iframes. Those addresses must not uncover
+    // the conversation while the main frame is still the login page.
+    view.webContents.on('did-navigate', (_event, url) => { this.settleAddress(url) })
+    view.webContents.on('did-navigate-in-page', (_event, url, isMainFrame) => {
+      if (isMainFrame) this.settleAddress(url)
+    })
     window.contentView.addChildView(view)
     // The caption asks for state as soon as its document loads. That is often before
     // this gate exists, and a later reload drops the in-flight event. Send again
@@ -370,6 +403,75 @@ export class ModelPlatformGate {
     if (view !== undefined && !view.webContents.isDestroyed()) view.webContents.send(MODEL_SPACE_IPC.changed, state)
   }
 
+  /**
+   * Cover the model page with the spinner. The page underneath reloads, and
+   * the cover stays until that document drops its own boot marker.
+   */
+  private showBootCover(contents: WebContents): void {
+    this.dismissBootCover()
+    const window = this.window
+    if (window === undefined || window.isDestroyed()) return
+    const cover = new WebContentsView({
+      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+    })
+    cover.setBackgroundColor('#ffffff')
+    this.bootCover = cover
+    void cover.webContents.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(modelReloadDocument())}`)
+    let armed = false
+    let pending = false
+    const onReady = (event: IpcMainEvent): void => {
+      if (event.sender !== contents) return
+      if (!armed) {
+        pending = true
+        return
+      }
+      this.dismissBootCover()
+    }
+    const onLoad = (): void => {
+      armed = true
+      if (pending) this.dismissBootCover()
+    }
+    const onFail = (_event: Electron.Event, code: number, _description: string, _url: string, isMainFrame: boolean): void => {
+      if (isMainFrame && code !== -3) this.dismissBootCover()
+    }
+    this.bootContents = contents
+    this.bootReadyListener = onReady
+    this.bootLoadListener = onLoad
+    this.bootFailListener = onFail
+    ipcMain.on(MODEL_SPACE_IPC.bootReady, onReady)
+    contents.on('did-finish-load', onLoad)
+    contents.on('did-fail-load', onFail)
+    this.bootTimer = setTimeout(() => { this.dismissBootCover() }, 30_000)
+    this.fit()
+  }
+
+  /** Remove the reload spinner. Safe to call when none is showing. */
+  private dismissBootCover(): void {
+    if (this.bootTimer !== undefined) {
+      clearTimeout(this.bootTimer)
+      this.bootTimer = undefined
+    }
+    if (this.bootReadyListener !== undefined) {
+      ipcMain.removeListener(MODEL_SPACE_IPC.bootReady, this.bootReadyListener)
+      this.bootReadyListener = undefined
+    }
+    if (this.bootContents !== undefined && !this.bootContents.isDestroyed()) {
+      if (this.bootLoadListener !== undefined) this.bootContents.removeListener('did-finish-load', this.bootLoadListener)
+      if (this.bootFailListener !== undefined) this.bootContents.removeListener('did-fail-load', this.bootFailListener)
+    }
+    this.bootContents = undefined
+    this.bootLoadListener = undefined
+    this.bootFailListener = undefined
+    const window = this.window
+    const cover = this.bootCover
+    this.bootCover = undefined
+    if (cover === undefined) return
+    if (window !== undefined && !window.isDestroyed() && window.contentView.children.includes(cover)) {
+      window.contentView.removeChildView(cover)
+    }
+    if (!cover.webContents.isDestroyed()) cover.webContents.close()
+  }
+
   /** Take the platform view off the window so minimize can reach the taskbar. */
   private parkCover(): void {
     const window = this.window
@@ -377,6 +479,10 @@ export class ModelPlatformGate {
     if (window === undefined || window.isDestroyed() || view === undefined || view.webContents.isDestroyed()) return
     view.setVisible(false)
     if (window.contentView.children.includes(view)) window.contentView.removeChildView(view)
+    const cover = this.bootCover
+    if (cover === undefined || cover.webContents.isDestroyed()) return
+    cover.setVisible(false)
+    if (window.contentView.children.includes(cover)) window.contentView.removeChildView(cover)
   }
 
   private fit(): void {
@@ -392,35 +498,56 @@ export class ModelPlatformGate {
     if (!window.contentView.children.includes(view)) window.contentView.addChildView(view)
     view.setBounds({ x: 0, y: top, width, height: height - top })
     view.setVisible(this.coverWanted())
+    const cover = this.bootCover
+    if (cover === undefined || cover.webContents.isDestroyed()) return
+    if (!window.contentView.children.includes(cover)) window.contentView.addChildView(cover)
+    cover.setBounds({ x: 0, y: top, width, height: height - top })
+    cover.setVisible(this.coverWanted())
   }
 
-  private onAddress(url: string): void {
+  /**
+   * Apply a main-frame address, then read that frame again. `/desktop-entry`
+   * can pass through `/smartChat` before the platform sends the view back to
+   * login; the conversation stays covered until a workspace path is still there.
+   */
+  private settleAddress(url: string): void {
+    this.onAddress(url, false)
+    const generation = ++this.addressGeneration
+    const view = this.view
+    for (const delay of [400, 1200, 3000]) {
+      setTimeout(() => {
+        if (this.addressGeneration !== generation) return
+        if (view === undefined || view.webContents.isDestroyed()) return
+        this.onAddress(view.webContents.getURL(), true)
+      }, delay)
+    }
+  }
+
+  private onAddress(url: string, confirm: boolean): void {
     const window = this.window
     const view = this.view
     if (window === undefined || window.isDestroyed() || view === undefined || view.webContents.isDestroyed()) return
-    let parsed: URL
-    try { parsed = new URL(url) } catch { return }
-    if (parsed.origin !== this.origin) return
-    const path = parsed.pathname
-    if (path === '/login' || path === '/register') {
-      this.authenticated = false
+    const decision = classifyModelAddress(url, this.origin)
+    if (decision === 'ignore') return
+    if (decision === 'signed-in') {
+      // Login's own success route is /smartChat, same as the website. Open Harness
+      // only after that path is still the main frame. A later login path closes it.
+      if (this.authenticated || !confirm) return
+      this.authenticated = true
+      this.show('conversation')
+      void this.loadAccount()
+      void this.onAuthenticated()
+      return
+    }
+    const entered = this.authenticated
+    this.authenticated = false
+    if (entered) {
       this.account = null
       this.publishAccount()
-      this.show('business')
-      if (!window.isDestroyed() && window.isVisible()) window.show()
-      return
     }
-    // Identity completion and the cold-start entry stay on this page. Login's own
-    // success route is /smartChat, same as the website; reaching it opens Harness.
-    if (isLoginGatePath(path)) {
-      if (!this.authenticated) this.show('business')
-      return
-    }
-    if (this.authenticated) return
-    this.authenticated = true
-    this.show('conversation')
-    void this.loadAccount()
-    void this.onAuthenticated()
+    // Repeated observations of the same login page must not republish the caption.
+    if (entered || this.active !== 'business') this.show('business')
+    if (decision === 'signed-out' && entered && !window.isDestroyed() && window.isVisible()) window.show()
   }
 
   /** Ask the platform who is logged in, then tell the conversation page. */

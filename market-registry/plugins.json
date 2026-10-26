@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-15",
+  "updated": "2026-10-21",
   "count": 1,
   "categories": {
     "theme": {
@@ -18,7 +18,7 @@
         "en": "Realtime WebGPU ocean skin with quick controls for waves, daylight, glass opacity, and an automatic day cycle."
       },
       "npm": "open-sea-skin",
-      "version": "1.2.5",
+      "version": "1.2.6",
       "install": "dsh plugin --profile web add open-sea-skin",
       "added": "2026-08-17"
     }

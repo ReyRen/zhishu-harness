@@ -146,6 +146,11 @@ FROM runtime AS validated
 RUN --network=none node /opt/dsh/docker/smoke-office.mjs \
   && node /opt/dsh/docker/smoke-market.mjs
 
+ARG DSH_CLIENT_COMMIT_HASH
+
+LABEL org.opencontainers.image.source="https://github.com/ReyRen/zhishu-harness" \
+  org.opencontainers.image.revision="${DSH_CLIENT_COMMIT_HASH}"
+
 WORKDIR /storage-root-jfs/user
 
 VOLUME ["/storage-root-jfs/user"]

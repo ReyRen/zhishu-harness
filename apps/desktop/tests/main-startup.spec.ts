@@ -87,6 +87,8 @@ const harness = await vi.hoisted(async () => {
     readonly webContents = Object.assign(new EventEmitter(), {
       id: 42,
       setWindowOpenHandler: vi.fn(),
+      setBackgroundThrottling: vi.fn(),
+      reload: vi.fn(),
       insertCSS: vi.fn(async () => 'blur'),
       removeInsertedCSS: vi.fn(async () => {}),
       openDevTools: vi.fn(),
@@ -320,6 +322,7 @@ vi.mock('electron', () => ({
   ipcMain: {
     on: harness.ipcOn,
     removeAllListeners: vi.fn(),
+    removeListener: vi.fn(),
     handle: (channel: string, handler: InvokeHandler) => {
       if (harness.handlers.has(channel)) throw new Error(`duplicate IPC handler ${channel}`)
       harness.handlers.set(channel, handler)
@@ -1017,7 +1020,8 @@ describe('desktop main startup', () => {
     expect(() => handler(event, 'application', NaN, 34)).toThrow('invalid popup request')
     const application = handler(event, 'application', 48, 34)
     expect(harness.menu.buildFromTemplate.mock.lastCall![0].map(item => item.label ?? item.type)).toEqual([
-      '关于 Zhishu Harness', 'separator', '检查更新…', '管理 dsh 命令…', 'separator', '退出',
+      '关于 Zhishu Harness', 'separator', '检查更新…', '管理 dsh 命令…', 'separator',
+      '刷新页面', '重启应用与 Host', 'separator', '退出',
     ])
     expect(harness.popup.mock.lastCall![0]).toMatchObject({ window, x: 48, y: 34 })
     expect(harness.popup.mock.lastCall![0].callback).toBeTypeOf('function')
@@ -1054,8 +1058,9 @@ describe('desktop main startup', () => {
       : ['Application', 'editMenu'])
     const application = template[0]!.submenu as MenuItemConstructorOptions[]
     expect(application.filter(item => item.visible !== false).map(describeItem)).toEqual(platform === 'darwin'
-      ? ['about', 'separator', en.checkUpdatesMenu, en.cliCommandMenu, 'separator', 'hide', 'hideOthers', 'unhide', 'separator', 'quit']
-      : ['about', 'separator', en.checkUpdatesMenu, 'separator', 'quit'])
+      ? ['about', 'separator', en.checkUpdatesMenu, en.cliCommandMenu, 'separator', en.reloadPageMenu,
+        en.restartAppHostMenu, 'separator', 'hide', 'hideOthers', 'unhide', 'separator', 'quit']
+      : ['about', 'separator', en.checkUpdatesMenu, 'separator', en.reloadPageMenu, en.restartAppHostMenu, 'separator', 'quit'])
     expect(harness.menu.setApplicationMenu).toHaveBeenCalledOnce()
   })
 

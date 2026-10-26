@@ -108,6 +108,33 @@ function requiredEnvironmentValue(env, name) {
 }
 
 /**
+ * Resolve the feed directory written into an unsigned Windows package.
+ * Signed packages ignore this setting and keep the test or production HTTPS feed.
+ * @param {NodeJS.ProcessEnv} env Packaging environment.
+ * @returns {{ url: string, channel: 'nightly' | 'latest' } | undefined} Feed directory and channel, when configured.
+ */
+export function resolveDesktopLanFeedUrl(env) {
+  const raw = env.DSH_DESKTOP_LAN_FEED_URL?.trim()
+  if (raw === undefined || raw === '') return undefined
+  let parsed
+  try {
+    parsed = new URL(raw)
+  }
+  catch {
+    throw new Error('desktop auto-update: DSH_DESKTOP_LAN_FEED_URL must be an absolute HTTP or HTTPS feed URL')
+  }
+  if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:')
+    || parsed.username !== ''
+    || parsed.password !== ''
+    || parsed.search !== ''
+    || parsed.hash !== ''
+    || !parsed.pathname.endsWith('/')) {
+    throw new Error('desktop auto-update: DSH_DESKTOP_LAN_FEED_URL must be an absolute HTTP or HTTPS URL ending with /, without credentials, query, or fragment')
+  }
+  return { url: parsed.href, channel: resolveDesktopUpdateChannel(env) }
+}
+
+/**
  * Normalize an HTTPS origin and reject paths or credentials.
  * @param {string} value - Candidate origin.
  * @param {string} name - Environment variable used in diagnostics.
