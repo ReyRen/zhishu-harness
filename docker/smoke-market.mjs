@@ -57,6 +57,7 @@ async function startWeb() {
   assert.ok(cookie, 'Native Web must create an authenticated browser cookie')
   headers = { host: authority, cookie }
   const page = await webRequest('/')
+  assert.ok(page.body.includes('meow-memory/client'), 'Native Web must preload the default memory UI')
   assert.equal(page.status, 200)
   const html = page.body
   assert.match(html, /<!doctype html>/iu)
@@ -67,11 +68,23 @@ async function startWeb() {
     assert.equal(response.status, 200)
     assert.ok(response.body.length > 1_000)
   }
+  // The plugin registers optional Web routes after its service becomes visible.
+  // Wait for that route, and fail immediately on authentication/server errors.
+  const memoryDeadline = Date.now() + 30_000
+  let memory = await webRequest('/meow-memory/dreamed-sessions')
+  while (memory.status === 404 && Date.now() < memoryDeadline) {
+    await delay(100, undefined, { signal: owner.signal })
+    memory = await webRequest('/meow-memory/dreamed-sessions')
+  }
+  assert.equal(memory.status, 200, 'Default memory routes must become ready')
+  assert.deepEqual(Object.keys(JSON.parse(memory.body)).sort(), ['dreamingIds', 'sessionIds'])
 }
 
 try {
   await mkdir(env.DSH_DEFAULT_WORKSPACE)
   await startWeb()
+  assert.equal((await webRequest('/meow-memory/dreamed-sessions', { extraHeaders: { cookie: '' } })).status, 401)
+  assert.equal((await webRequest('/meow-memory/dreamed-sessions', { extraHeaders: { host: 'undeclared.invalid' } })).status, 403)
   const response = await fetch('http://127.0.0.1:4874/plugins.json')
   assert.equal(response.status, 200)
   const catalog = await response.json()

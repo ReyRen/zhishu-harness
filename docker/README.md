@@ -38,6 +38,20 @@ The image build runs [smoke-office.mjs](smoke-office.mjs) without network access
 docker run --rm --init --network none --entrypoint node "$IMAGE" /opt/dsh/docker/smoke-office.mjs
 ```
 
+<a id="default-memory"></a>
+
+## Default memory
+
+Every Web profile loads the pinned [meow-memory 0.32.1](https://github.com/Phant0Meow/dsh-meow-memory) package from the installation. Existing user profiles receive it when their container restarts; startup does not install or compile packages. If a profile already owns the bundle, its installed copy takes precedence and only one instance loads.
+
+The image's Node 24 provides `node:sqlite`; BM25 search needs no vector service, downloaded model or external database. The default global state is under `DSH_HOME/storages/meow-memory`; each Workspace's database is `.dsh-meow/memory.db`. The managed default Workspace therefore stores memories at `/storage-root-jfs/user-<userID>/workspace/.dsh-meow/memory.db` on the Worker. These paths survive container replacement. Reflection and dream consolidation use the configured DSH model, which must be available inside the offline site's network.
+
+The build runs [smoke-memory.mjs](smoke-memory.mjs) without networking. It exercises real registered memory tools, SQLite integrity, retrieval after Web restarts, independent users and a profile that already owns the bundle:
+
+```bash
+docker run --rm --init --network none --entrypoint node "$IMAGE" /opt/dsh/docker/smoke-memory.mjs
+```
+
 ## Offline plugin market
 
 The image includes the same [private catalog and community tarballs](../market-registry/README.md) as Desktop, plus Verdaccio and its locked Linux dependencies. Startup imports every bundled tarball, then starts the registry at `127.0.0.1:4873` and the catalog at `127.0.0.1:4874` before Web. Both listeners remain inside each container; no host ports or extra proxy routes are needed. Publishing is disabled and missing packages do not fall back to public npm. A failed service stops the container rather than leaving Web connected to a broken market.

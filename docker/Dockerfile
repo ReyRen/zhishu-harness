@@ -144,7 +144,8 @@ COPY --chmod=0755 docker/bwrap /usr/local/bin/bwrap
 FROM runtime AS validated
 
 RUN --network=none node /opt/dsh/docker/smoke-office.mjs \
-  && node /opt/dsh/docker/smoke-market.mjs
+  && node /opt/dsh/docker/smoke-market.mjs \
+  && node /opt/dsh/docker/smoke-memory.mjs
 
 ARG DSH_CLIENT_COMMIT_HASH
 
