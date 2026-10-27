@@ -1,0 +1,6 @@
+# Keep the plugin's instance state inside each user's persistent DSH home.
+- insert:
+    - id: meow-memory
+      name: meow-memory
+      config:
+        homeDir: dsh-storage

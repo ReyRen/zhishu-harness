@@ -57,6 +57,7 @@ async function startWeb() {
   assert.ok(cookie, 'Native Web must create an authenticated browser cookie')
   headers = { host: authority, cookie }
   const page = await webRequest('/')
+  assert.ok(page.body.includes('meow-memory/client'), 'Native Web must preload the default memory UI')
   assert.equal(page.status, 200)
   const html = page.body
   assert.match(html, /<!doctype html>/iu)
@@ -72,6 +73,9 @@ async function startWeb() {
 try {
   await mkdir(env.DSH_DEFAULT_WORKSPACE)
   await startWeb()
+  assert.equal((await webRequest('/meow-memory/dreamed-sessions')).status, 200)
+  assert.equal((await webRequest('/meow-memory/dreamed-sessions', { extraHeaders: { cookie: '' } })).status, 401)
+  assert.equal((await webRequest('/meow-memory/dreamed-sessions', { extraHeaders: { host: 'undeclared.invalid' } })).status, 403)
   const response = await fetch('http://127.0.0.1:4874/plugins.json')
   assert.equal(response.status, 200)
   const catalog = await response.json()

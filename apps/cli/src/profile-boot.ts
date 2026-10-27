@@ -37,6 +37,7 @@ import { installProxyFromEnvironment } from '@deepseek-ai/dsh-http-proxy'
 import { DSH_LAUNCH_ENVIRONMENT_KEY, type LaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { provideCmdline, type AppReady } from '@deepseek-ai/dsh-cmdline'
 import { createProcessShutdown, type ProcessShutdown } from './process-shutdown.ts'
+import { profileOwnsOverlayBundle } from './preinstalled-overlays.ts'
 
 const NAME = 'dsh'
 
@@ -208,10 +209,6 @@ interface ComposedProfile {
   overlays: PatchOptions[]
 }
 
-/** Overlay directory whose insert uses the same Cordis id as the market bundle. */
-const PREINSTALLED_MARKET_OVERLAY = 'dsh-market'
-/** Package name of that bundle. A profile copy inserts the id itself. */
-const PREINSTALLED_MARKET_PACKAGE = 'dshmarket'
 /** Profile booted by the desktop shell. Container web keeps the name `web`. */
 const DESKTOP_PROFILE = 'desktop'
 /**
@@ -253,14 +250,11 @@ function zhishuOverlayPatches(profile: Profile): string[] {
     || !profile.layers.some(layer => layer.packageName === '@deepseek-ai/dsh-web-app')) return []
   const dir = zhishuOverlayDirectory()
   if (dir === undefined) return []
-  const profileOwnsMarket = profile.layers.some(layer => layer.packageName === PREINSTALLED_MARKET_PACKAGE)
   const desktopAccount = profile.name === DESKTOP_PROFILE
   const files: string[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue
-    // The profile bundle's own patch already inserts id dsh-market. Loading
-    // this overlay as well would register that id twice.
-    if (profileOwnsMarket && entry.name === PREINSTALLED_MARKET_OVERLAY) continue
+    if (profileOwnsOverlayBundle(join(dir, entry.name), profile.layers)) continue
     if (!desktopAccount && DESKTOP_ONLY_OVERLAYS.has(entry.name)) continue
     const patch = join(dir, entry.name, 'cordis.patch.yml')
     if (existsSync(patch)) files.push(patch)

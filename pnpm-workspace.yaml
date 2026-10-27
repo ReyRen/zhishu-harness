@@ -110,6 +110,8 @@ minimumReleaseAgeExclude:
   - pnpm@11.28.5
   # Desktop packaging requires this Electron fingerprint with node-addon-require-builtin 0.1.9.
   - electron@44.7.0
+  # Audited MIT bundle: prebuilt JS, Node SQLite and no runtime downloads.
+  - meow-memory@0.32.1
 patchedDependencies:
   '@botiverse/oar@0.67.0': patches/@botiverse__oar@0.67.0.patch
   '@earendil-works/pi-ai@1.3.0': patches/@earendil-works__pi-ai@1.3.0.patch
