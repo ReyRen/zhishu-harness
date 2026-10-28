@@ -1,31 +1,13 @@
 {
-  "updated": "2026-10-27",
-  "count": 2,
+  "updated": "2026-10-21",
+  "count": 1,
   "categories": {
-    "memory": {
-      "zh": "记忆",
-      "en": "Memory"
-    },
     "theme": {
       "zh": "主题",
       "en": "Theme"
     }
   },
   "plugins": [
-    {
-      "name": "meow-memory",
-      "owner": "Phant0Meow",
-      "url": "https://github.com/Phant0Meow/dsh-meow-memory",
-      "category": "memory",
-      "description": {
-        "zh": "本地 SQLite 跨会话记忆、BM25 检索及反思整理；自动整理复用当前会话模型。",
-        "en": "Local SQLite memory across sessions, BM25 retrieval, and consolidation through the current session model."
-      },
-      "npm": "meow-memory",
-      "version": "0.32.1",
-      "install": "dsh plugin --profile web add meow-memory",
-      "added": "2026-10-27"
-    },
     {
       "name": "open-sea-skin",
       "owner": "d-dev0101",

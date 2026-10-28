@@ -54,11 +54,36 @@
 
 它不是 profile 里的组合包。插件页没有开关，也不能卸载。代码在镜像里，不访问外网。换镜像之后，已经在用的用户下一次启动就会加载。品牌替换 `overlay/brand/` 就是这样：关掉 `ui-brand-official`，插入侧栏标识。新增能力时复制这个目录，不要把补丁写进官方 `cordis.patch.yml`。
 
-插件市场同样预装，但源码不放在 `overlay/`。`third-party/dshmarket` 是社区 dshmarket 1.66.22 的源码和已编译的 `host/`，`apps/cli` 用 `workspace:*` 依赖它。`overlay/dsh-market/cordis.patch.yml` 只插入这一行，并设置 `allowRestart: false`。因此版本跟着安装包或镜像走，不进用户 profile，插件页「已安装」里不会出现。用户若再从插件页安装同名包，`zhishuOverlayPatches()` 会跳过这条插入，避免同一个 id 出现两次。这份包不发布到私有源；本地 `pnpm dsh web` 直接调试仓库里的副本。
+插件市场同样预装，源码不放进仓库。`apps/cli` 依赖锁定版本 `dshmarket@1.66.22`，构建安装包或镜像时从公网 npm 装进安装目录。`overlay/dsh-market/cordis.patch.yml` 只插入这一行，并设置 `allowRestart: false`。因此版本跟着安装包或镜像走，不进用户 profile，插件页「已安装」里不会出现。用户若再从插件页安装同名包，`profileOwnsOverlayBundle()` 会跳过这条插入，避免同一个 id 出现两次。这份包不发布到私有源。
+
+`meow-memory` 也是 `apps/cli` 的锁定版本依赖。`overlay/meow-memory/cordis.patch.yml` 插入并指定 `homeDir: dsh-storage`。它不进私有源。profile 里已有同名包时，用的是上面同一条跳过判断。
 
 市场里列出的其他插件默认仍是公网目录。私有源在 `market-registry/`，说明见 [README.zh.md](../market-registry/README.zh.md)。`pnpm market:registry` 启动没有公网代理的 Verdaccio 和本地目录；`pnpm dsh:private` 把市场指到这两处。目前目录里是从社区拷入的 `open-sea-skin`。桌面安装包会带上同一份源，并在本机自己启动；开发时的 `pnpm run dev:desktop` 仍要先执行 `pnpm market:registry`。
 
 `overlay/` 只在没有 `VITEST` 环境变量时加载，官方测试仍走原组合。
+
+### 预装第三方包的两种拿法
+
+上面两个预装包现在都是锁定 npm 版本。全员预装、不进用户 profile、不进私有源，这两点两种拿法相同。差别是构建时字节从哪来，以及以后能不能在本仓库改这份代码。
+
+| | 锁定 npm 版本 | 源码拷进仓库 |
+| --- | --- | --- |
+| 适用 | 原样使用社区已发布的包，构建机可以访问公网 npm | 要改这个插件自己的代码，改动随安装包和镜像发布 |
+| 依赖 | `apps/cli` 写死版本，如 `dshmarket@1.66.22`、`meow-memory@0.32.1` | `workspace:*`。源码放进仓库，并写进 `pnpm-workspace.yaml` |
+| 构建 | 构建机按锁文件从公网 npm 拉一次。完整性哈希钉住字节。pnpm store 里已有时不再下载 | 字节在 git 里。构建不必再向 npm 要这个包 |
+| 用户运行 | 安装目录里已有这份包，启动不下载 | 同样在安装目录里，启动不下载 |
+| 改代码 | 本仓库不改它。要改行为就改回右列，或等上游发新版本后再改锁定的版本号 | 直接改仓库里的副本，自己负责合入上游后续版本 |
+| 当前 | `dshmarket`、`meow-memory` | 插件市场曾经放在 `third-party/dshmarket`。没有功能分叉，已改成锁定版本 |
+
+预装仍由 `overlay/<名称>/cordis.patch.yml` 插入。旁边的 `package.json` 只给 `profileOwnsOverlayBundle()` 读包名，用来跳过 profile 里已有的同名包，它本身不是安装包。
+
+### 私有源里的社区插件
+
+私有源不是预装。`market-registry/tarballs/` 里的压缩包是用户从市场装进自己 profile 的。现在的做法是社区包原样拷进来：不改代码，只让局域网安装不访问公网 npm。意图和锁定版本一样，用的是上游字节；字节放在仓库的 tarball 里，因为私有源没有公网回退，用户安装时不能再去 npm 拉。
+
+要对这份插件做二次开发，开发副本按上一节的「源码拷进仓库」来放，改完再打包。新 tarball 放回 `market-registry/tarballs/`，`plugins.json` 的版本调高。成品仍给用户安装，不改成 `apps/cli` 的锁定版本。只有目的变成全员预装时，才改成锁定版本或源码依赖，并从私有源目录去掉，避免市场里再出现一份。只改压缩包、不留源码，下次对不上上游，也没法继续改。
+
+升级和回滚见下一节。
 
 ### 私有源插件的升级和回滚
 

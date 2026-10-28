@@ -109,7 +109,7 @@
     "@deepseek-ai/dsh-cua-bundle": "workspace:*",
     "@deepseek-ai/dsh-experimental-plugin-market-bundle": "workspace:*",
     "@deepseek-ai/dsh-personalized-recommendations": "workspace:*",
-    "dshmarket": "workspace:*",
+    "dshmarket": "1.66.22",
     "meow-memory": "0.32.1"
   },
   "devDependencies": {

@@ -11,7 +11,6 @@ There is no public-registry proxy. A package absent from Verdaccio fails to inst
 | Package | Version | Source |
 | --- | --- | --- |
 | `open-sea-skin` | 1.2.6 | Community npm; tarball in `tarballs/` |
-| `meow-memory` | 0.32.1 | Community npm; also preinstalled in every Web profile |
 
 `plugins.json` is the catalog and `tarballs/` holds its packages. Startup publishes a tarball to Verdaccio if `storage/` does not already contain that version.
 

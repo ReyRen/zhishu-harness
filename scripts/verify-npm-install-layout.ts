@@ -15,8 +15,9 @@ const CORDIS_PACKAGE = '@deepseek-ai/cordis'
 const NESTED_DSH_ALIAS = 'dsh-previous'
 const NESTED_DSH_PATH = `node_modules/${NESTED_DSH_ALIAS}`
 const DEPENDENCY_FIELDS = ['dependencies', 'optionalDependencies', 'peerDependencies'] as const
-// Bundled workspace plugins have DSH peers and must follow each synthetic host release.
-const BUNDLED_DSH_PLUGINS = new Set(['dshmarket'])
+// Preinstalled community plugins are pinned npm packages, not workspace members.
+// Add a name here only when a plugin is built in this repo and must follow each synthetic host release.
+const BUNDLED_DSH_PLUGINS = new Set<string>()
 
 /**
  * Resolution work accepted from the dual-release graph, in
