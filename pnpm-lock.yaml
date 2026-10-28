@@ -530,8 +530,8 @@ importers:
         specifier: ^15.0.0
         version: 15.0.0
       dshmarket:
-        specifier: workspace:*
-        version: link:../../third-party/dshmarket
+        specifier: 1.66.22
+        version: 1.66.22(@deepseek-ai/cordis@vendor+cordis)(@deepseek-ai/dsh-settings@packages+settings+settings)(@deepseek-ai/schemastery@vendor+schemastery)
       js-yaml:
         specifier: ^4.3.2
         version: 4.3.2
@@ -17513,24 +17513,6 @@ importers:
         specifier: link:../../vendor/schemastery
         version: link:../../vendor/schemastery
 
-  third-party/dshmarket:
-    dependencies:
-      '@deepseek-ai/cordis':
-        specifier: workspace:~
-        version: link:../../vendor/cordis
-      '@deepseek-ai/dsh-settings':
-        specifier: workspace:*
-        version: link:../../packages/settings/settings
-      '@deepseek-ai/schemastery':
-        specifier: link:../../vendor/schemastery
-        version: link:../../vendor/schemastery
-      js-yaml:
-        specifier: ^4.3.2
-        version: 4.3.2
-      undici:
-        specifier: ^7.29.1
-        version: 7.29.1
-
   vendor/cordis:
     dependencies:
       '@deepseek-ai/cordis-plugin-include':
@@ -21986,6 +21968,18 @@ packages:
   dotenv@16.6.1:
     resolution: {integrity: sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow==}
     engines: {node: '>=12'}
+
+  dshmarket@1.66.22:
+    resolution: {integrity: sha512-q+fEuZlL3xB9ubgCfunWfhdw84kIOxOlThVMCd4rwoy6sr7uMFDuD/XC0iPH2/Dq36kWI9KRU69HQYN92+Xjrg==}
+    peerDependencies:
+      '@deepseek-ai/cordis': ^4.0.1
+      '@deepseek-ai/dsh-settings': ^0.1.0-rc.7 || ^0.1.1-rc.2 || ^0.1.2-alpha.2 || ^0.2.0-rc.1
+      '@deepseek-ai/schemastery': ^3.18.1
+    peerDependenciesMeta:
+      '@deepseek-ai/dsh-settings':
+        optional: true
+      '@deepseek-ai/schemastery':
+        optional: true
 
   dts-resolver@3.0.0:
     resolution: {integrity: sha512-1T1f+z+4tl9XD+m+0HBgWoL/nm0bOIffyWaUuUSBlFg/86IWvfx+wjNaO/ybU0AJzG9/Mi5hBUgGV6zCmWEN7Q==}
@@ -29511,6 +29505,15 @@ snapshots:
       dotenv: 16.6.1
 
   dotenv@16.6.1: {}
+
+  dshmarket@1.66.22(@deepseek-ai/cordis@vendor+cordis)(@deepseek-ai/dsh-settings@packages+settings+settings)(@deepseek-ai/schemastery@vendor+schemastery):
+    dependencies:
+      '@deepseek-ai/cordis': link:vendor/cordis
+      js-yaml: 4.3.2
+      undici: 7.29.1
+    optionalDependencies:
+      '@deepseek-ai/dsh-settings': link:packages/settings/settings
+      '@deepseek-ai/schemastery': link:vendor/schemastery
 
   dts-resolver@3.0.0(oxc-resolver@11.20.0):
     optionalDependencies:
