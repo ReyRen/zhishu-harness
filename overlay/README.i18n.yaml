@@ -3,5 +3,5 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write overlay/README.md
 /overlay:
-  en: c8e9bcea7fe98095
-  zh: 27ca9b28e5c7155d
+  en: f1a66d69d3e3e9f7
+  zh: e4099a9807ce9b7e

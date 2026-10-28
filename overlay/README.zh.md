@@ -33,6 +33,6 @@ overlay/
 
 `dsh-market` 里没有市场实现。实现在 `third-party/dshmarket`（社区 dshmarket 1.66.22，编译结果在 `host/`），并由 `apps/cli` 依赖带进安装目录，所以本地 `pnpm dsh web` 直接用这份源码。它不写入用户 profile，左侧「已安装」里看不到。如果用户之后又在插件页安装了同名包，启动时会跳过这条插入，避免 Cordis id `dsh-market` 注册两次。
 
-`meow-memory` 为所有 Web profile 加载 `apps/cli` 中固定版本的依赖。全局状态使用 DSH-home 存储，项目数据库留在各工作区中。overlay 的标准 `package.json` 组合包声明允许 profile 自行安装的组合包替代默认插入，不会重复注册。市场 overlay 也使用同样的声明。持久化位置和离线验证见[容器记忆说明](../docker/README.zh.md#default-memory)。
+`meow-memory` 为所有 Web profile 加载 `apps/cli` 中固定版本的依赖。全局状态使用 DSH-home 存储，项目数据库留在各工作区中。overlay 的标准 `package.json` 组合包声明允许 profile 自行安装的组合包替代默认插入，不会重复注册。市场 overlay 也使用同样的声明。它不写入私有源目录。持久化位置和离线验证见[容器记忆说明](../docker/README.zh.md#default-memory)。
 
 新增能力时可沿用此目录结构，不要把补丁写进官方的 `cordis.patch.yml`。官方界面如何区分插件，以及无外网部署时应把插件放在哪里，见 [plugin-secondary-development.md](./plugin-secondary-development.md)。桌面壳登录、工作空间、Windows 打包，以及网页和桌面的会话落在哪，见 [desktop-secondary-development.md](./desktop-secondary-development.md)。
