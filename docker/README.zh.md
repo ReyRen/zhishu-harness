@@ -38,6 +38,20 @@
 docker run --rm --init --network none --entrypoint node "$IMAGE" /opt/dsh/docker/smoke-office.mjs
 ```
 
+<a id="default-memory"></a>
+
+## 默认记忆
+
+所有 Web profile 从安装目录加载固定版本的 [meow-memory 0.32.1](https://github.com/Phant0Meow/dsh-meow-memory)。已有用户在容器重启后即可加载；启动时不安装或编译包。如果 profile 已持有此组合包，则使用用户安装的副本，只加载一个实例。
+
+镜像内的 Node 24 提供 `node:sqlite`；BM25 检索不需要向量服务、下载模型或外部数据库。默认全局状态位于 `DSH_HOME/storages/meow-memory`，各工作区的数据库位于 `.dsh-meow/memory.db`。因此，托管默认工作区的记忆在 Worker 上存为 `/storage-root-jfs/user-<userID>/workspace/.dsh-meow/memory.db`。替换容器不会丢失这些路径中的数据。反思和梦境整理使用已配置的 DSH 模型，离线现场须在内网提供可访问的模型服务。
+
+构建时断网执行 [smoke-memory.mjs](smoke-memory.mjs)，验证实际注册的记忆工具、SQLite 完整性、Web 重启后检索、独立用户，以及已持有该组合包的 profile：
+
+```bash
+docker run --rm --init --network none --entrypoint node "$IMAGE" /opt/dsh/docker/smoke-memory.mjs
+```
+
 ## 离线插件市场
 
 镜像包含与桌面端相同的[私有目录和社区安装包](../market-registry/README.zh.md)，以及 Verdaccio 和锁定的 Linux 依赖。启动时导入全部随包 tarball，先在 `127.0.0.1:4873` 启动包仓库、在 `127.0.0.1:4874` 启动目录，再启动 Web。两个地址都留在各自容器内部，不需要宿主机端口或额外代理规则。禁止发布包；缺包不会回退到公网 npm。任一服务失败会停止容器，不让 Web 继续连接失效的市场。

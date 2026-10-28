@@ -535,6 +535,9 @@ importers:
       js-yaml:
         specifier: ^4.3.2
         version: 4.3.2
+      meow-memory:
+        specifier: 0.32.1
+        version: 0.32.1(@deepseek-ai/dsh-llm@packages+llm+llm)(@deepseek-ai/schemastery@vendor+schemastery)
       node-addon-require-builtin:
         specifier: ^0.1.9
         version: 0.1.9
@@ -23336,6 +23339,15 @@ packages:
     resolution: {integrity: sha512-yz3xRaG20c6/BOzvYoDaGtPmGscs7YivItZEEqe6GbwNfHuxu9YNmvnEkMzKldAGY4/80pRcQRZSEnhquk9XuQ==}
     engines: {node: '>= 0.8'}
 
+  meow-memory@0.32.1:
+    resolution: {integrity: sha512-C1ghy9UOzgtO4YCuSrFqtgw6Xfkbxp5KD/lZBl9XU2P2cC2eZeb38NUu2YlqJZnp4qzI3QTcfaOxPFR1s8E3+Q==}
+    peerDependencies:
+      '@deepseek-ai/dsh-llm': '*'
+      '@deepseek-ai/schemastery': ^3.18.1
+    peerDependenciesMeta:
+      '@deepseek-ai/dsh-llm':
+        optional: true
+
   merge-descriptors@2.0.0:
     resolution: {integrity: sha512-Snk314V5ayFLhp3fkUREub6WtjBfPdCPY1Ln8/8munuLuiYhsABgBVWsozAG+MWMbVEvcdcpbi9R7ww22l9Q3g==}
     engines: {node: '>=18'}
@@ -31128,6 +31140,12 @@ snapshots:
   mdn-data@2.27.1: {}
 
   media-typer@1.1.1: {}
+
+  meow-memory@0.32.1(@deepseek-ai/dsh-llm@packages+llm+llm)(@deepseek-ai/schemastery@vendor+schemastery):
+    dependencies:
+      '@deepseek-ai/schemastery': link:vendor/schemastery
+    optionalDependencies:
+      '@deepseek-ai/dsh-llm': link:packages/llm/llm
 
   merge-descriptors@2.0.0: {}
 

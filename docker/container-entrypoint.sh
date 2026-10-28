@@ -5,6 +5,7 @@ set -euo pipefail
 workspace_root="${DSH_WORKSPACE_ROOT:-/storage-root-jfs/user}"
 default_workspace="${DSH_DEFAULT_WORKSPACE:-${workspace_root}/workspace}"
 primary_runtime="${DSH_PRIMARY_RUNTIME:?DSH_PRIMARY_RUNTIME is required}"
+export MEOW_MEMORY_HOME="${MEOW_MEMORY_HOME:-${DSH_HOME}/storages/meow-memory}"
 
 test -f "${primary_runtime}/runtime.json"
 test -x "${primary_runtime}/dependencies/python/bin/python3"

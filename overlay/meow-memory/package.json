@@ -1,0 +1,9 @@
+{
+  "name": "meow-memory",
+  "private": true,
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
