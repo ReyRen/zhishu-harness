@@ -1,4 +1,4 @@
-# Preinstalled market. apps/cli depends on the pinned npm package dshmarket,
+# Preinstalled market. The private platform assemblies pin npm package dshmarket,
 # so the running copy is the installation copy. This row
 # is skipped when the user profile already has a dshmarket bundle layer,
 # because that layer inserts the same id.

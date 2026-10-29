@@ -1,9 +1,38 @@
 /** Installed bundles and preinstalled overlays must not duplicate their Loader rows. */
-import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync, readFileSync, realpathSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { profileOwnsOverlayBundle } from '../src/preinstalled-overlays.ts'
+
+describe('platform plugin distribution', () => {
+  const root = new URL('../../../', import.meta.url)
+  const cli = new URL('apps/cli/package.json', root)
+  const cliRequire = createRequire(cli)
+  const hostRequire = createRequire(new URL('apps/desktop-host/package.json', root))
+  const source = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'))
+  const host = JSON.parse(readFileSync(new URL('apps/desktop-host/package.json', root), 'utf8'))
+  const published = JSON.parse(readFileSync(cli, 'utf8'))
+
+  it.each([['dshmarket', '1.66.22'], ['meow-memory', '0.32.1']])(
+    'ships %s through platform assemblies and shares the Host runtime', (name, version) => {
+      expect(source.devDependencies[name]).toBe(version)
+      expect(host.dependencies[name]).toBe(version)
+      expect(published.dependencies[name]).toBeUndefined()
+      for (const resolveFrom of [cliRequire, hostRequire]) {
+        const installed = resolveFrom.resolve(`${name}/package.json`)
+        expect(JSON.parse(readFileSync(installed, 'utf8')).version).toBe(version)
+        const pluginRequire = createRequire(installed)
+        for (const peer of name === 'dshmarket'
+          ? ['@deepseek-ai/cordis', '@deepseek-ai/schemastery', '@deepseek-ai/dsh-settings']
+          : ['@deepseek-ai/schemastery', '@deepseek-ai/dsh-llm']) {
+          expect(realpathSync(pluginRequire.resolve(peer))).toBe(realpathSync(cliRequire.resolve(peer)))
+        }
+      }
+    },
+  )
+})
 
 function directory(manifest?: object): string {
   const root = mkdtempSync(join(tmpdir(), 'dsh-preinstalled-overlay-'))
