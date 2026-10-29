@@ -1,19 +1,41 @@
 /** Installed bundles and preinstalled overlays must not duplicate their Loader rows. */
 import { mkdirSync, mkdtempSync, writeFileSync, rmSync, readFileSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
+import { createRuntimeResolution } from '@deepseek-ai/dsh-app-boot'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { profileOwnsOverlayBundle } from '../src/preinstalled-overlays.ts'
+
+interface Manifest {
+  version: string
+  dependencies: Record<string, string>
+  devDependencies: Record<string, string>
+}
+
+function manifest(path: URL | string): Manifest {
+  return JSON.parse(readFileSync(path, 'utf8')) as Manifest
+}
 
 describe('platform plugin distribution', () => {
   const root = new URL('../../../', import.meta.url)
   const cli = new URL('apps/cli/package.json', root)
   const cliRequire = createRequire(cli)
   const hostRequire = createRequire(new URL('apps/desktop-host/package.json', root))
-  const source = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'))
-  const host = JSON.parse(readFileSync(new URL('apps/desktop-host/package.json', root), 'utf8'))
-  const published = JSON.parse(readFileSync(cli, 'utf8'))
+  const source = manifest(new URL('package.json', root))
+  const host = manifest(new URL('apps/desktop-host/package.json', root))
+  const published = manifest(cli)
+
+  it.each(['dshmarket', 'meow-memory'])('includes %s in the private installation table only', async (name) => {
+    const home = directory()
+    const platform = await createRuntimeResolution({
+      installAnchor: fileURLToPath(new URL('apps/desktop-host/package.json', root)), home,
+    })
+    const publicCLI = await createRuntimeResolution({ installAnchor: fileURLToPath(cli), home })
+    expect(platform.entries.find(entry => entry.name === name)?.scope).toBe('installation')
+    expect(publicCLI.entries.find(entry => entry.name === name)).toBeUndefined()
+  })
 
   it.each([['dshmarket', '1.66.22'], ['meow-memory', '0.32.1']])(
     'ships %s through platform assemblies and shares the Host runtime', (name, version) => {
@@ -22,7 +44,7 @@ describe('platform plugin distribution', () => {
       expect(published.dependencies[name]).toBeUndefined()
       for (const resolveFrom of [cliRequire, hostRequire]) {
         const installed = resolveFrom.resolve(`${name}/package.json`)
-        expect(JSON.parse(readFileSync(installed, 'utf8')).version).toBe(version)
+        expect(manifest(installed).version).toBe(version)
         const pluginRequire = createRequire(installed)
         for (const peer of name === 'dshmarket'
           ? ['@deepseek-ai/cordis', '@deepseek-ai/schemastery', '@deepseek-ai/dsh-settings']
