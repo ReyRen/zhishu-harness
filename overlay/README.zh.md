@@ -35,4 +35,4 @@ overlay/
 
 `meow-memory` 为所有 Web profile 加载 `apps/cli` 中固定版本的依赖。全局状态使用 DSH-home 存储，项目数据库留在各工作区中。overlay 的标准 `package.json` 组合包声明允许 profile 自行安装的组合包替代默认插入，不会重复注册。市场 overlay 也使用同样的声明。它不写入私有源目录。持久化位置和离线验证见[容器记忆说明](../docker/README.zh.md#default-memory)。
 
-新增能力时可沿用此目录结构，不要把补丁写进官方的 `cordis.patch.yml`。官方界面如何区分插件，以及无外网部署时应把插件放在哪里，见 [plugin-secondary-development.md](./plugin-secondary-development.md)。桌面壳登录、工作空间、Windows 打包，以及网页和桌面的会话落在哪，见 [desktop-secondary-development.md](./desktop-secondary-development.md)。
+新增能力时可沿用此目录结构，不要把补丁写进官方的 `cordis.patch.yml`。官方界面如何区分插件，以及无外网部署时应把插件放在哪里，见 [plugin-secondary-development.md](./plugin-secondary-development.md)。桌面壳登录、工作空间、Windows 打包，以及网页和桌面的会话落在哪，见 [desktop-secondary-development.md](./desktop-secondary-development.md)。在官方 Harness 内增加工作台时的概念和边界，见 [workbench-concept.md](./workbench-concept.md)。
