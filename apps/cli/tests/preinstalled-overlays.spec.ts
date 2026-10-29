@@ -2,7 +2,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync, rmSync, readFileSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
-import { createRuntimeResolution } from '@deepseek-ai/dsh-app-boot'
+import { createRuntimeResolution, loadProfileDirectory } from '@deepseek-ai/dsh-app-boot'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, onTestFinished } from 'vitest'
@@ -26,6 +26,18 @@ describe('platform plugin distribution', () => {
   const source = manifest(new URL('package.json', root))
   const host = manifest(new URL('apps/desktop-host/package.json', root))
   const published = manifest(cli)
+
+  it('resolves the Web bundles again from the private anchor during profile reload', () => {
+    const dir = directory()
+    const bundles = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({
+      name: 'platform-profile-test', private: true, dsh: { profile: { bundles } },
+    }))
+    const profile = loadProfileDirectory('dsh', dir,
+      fileURLToPath(new URL('apps/desktop-host/package.json', root)), { userLayer: false })
+    expect(profile.layers.map(layer => layer.packageName)).toEqual(bundles)
+    expect(profile.skippedBundles).toEqual([])
+  })
 
   it.each(['dshmarket', 'meow-memory'])('includes %s in the private installation table only', async (name) => {
     const home = directory()
