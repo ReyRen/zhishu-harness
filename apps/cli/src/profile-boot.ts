@@ -203,6 +203,8 @@ export function prepareProfile(name: string, userLayer = true, fromDefaultProfil
 /** One profile's patch layers, in application order. */
 interface ComposedProfile {
   profile: Profile
+  /** Private platform assembly or public CLI owning the installation graph. */
+  installAnchor: string
   /** Immutable runtime resolution computed before any plugin imports. */
   resolution: RuntimeResolution
   /** Command-line overlay contents, frozen for this invocation. */
@@ -284,10 +286,14 @@ async function composeProfile(
 ): Promise<ComposedProfile> {
   const profile = resolvedProfile?.profile ?? prepareProfile(name, true, fromDefaultProfile)
   if (resolvedProfile !== undefined) writeFileSync(join(profile.dir, PROFILE_ROOT_FILENAME), PROFILE_ROOT_CONFIG)
-  const resolutionOptions = { installAnchor: resolvedProfile?.installAnchor ?? INSTALL_ANCHOR, profile }
+  const platformPatches = zhishuOverlayPatches(profile)
+  const installAnchor = resolvedProfile?.installAnchor ?? (platformPatches.length === 0
+    ? INSTALL_ANCHOR
+    : fileURLToPath(new URL('../../desktop-host/package.json', import.meta.url)))
+  const resolutionOptions = { installAnchor, profile }
   const resolution = await createRuntimeResolution(resolutionOptions)
-  const overlays = [...zhishuOverlayPatches(profile), ...patchFiles].flatMap(file => loadOverlayPatches(NAME, resolve(file)))
-  return { profile, resolution, overlays }
+  const overlays = [...platformPatches, ...patchFiles].flatMap(file => loadOverlayPatches(NAME, resolve(file)))
+  return { profile, installAnchor, resolution, overlays }
 }
 
 /** An application-owned profile and its independent installation fallback. */
@@ -370,7 +376,7 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
       name: options.profile,
       ...(options.packageManager === undefined ? {} : { packageManager: options.packageManager }),
       dir: composed.profile.dir, patchPath: composed.profile.patchPath,
-      installAnchor: options.resolvedProfile?.installAnchor ?? INSTALL_ANCHOR,
+      installAnchor: composed.installAnchor,
       startedBundles: composed.profile.layers.map(layer => layer.packageName),
       cwd: process.cwd(), home: resolveDshHome(),
       overlays: composed.overlays, telemetryDisabledEnv: process.env.DSH_TELEMETRY_DISABLED,
