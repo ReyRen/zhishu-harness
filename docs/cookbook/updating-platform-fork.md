@@ -157,6 +157,8 @@ Do not restart until both copies agree. The configured workers list contains exp
 
 Query each Worker's `GET /internal/v1/state` with `X-GCS-Worker-Token` loaded privately from the shared token file. For each existing user, sequentially POST `/internal/v1/containers/{userID}/rollout` with `{"imageID":"sha256:..."}`. The Worker stops and retains the old container, starts the replacement, waits for healthy and verifies its internal login credential; a failed replacement is stopped before the old container restarts. Stop release on the first failure. Never log credentials or send Worker/DSH tokens to the frontend.
 
+Every image update includes both the Master's default-image configuration and the existing-user rollouts. Building or retagging alone does not complete a release. Before reporting success, confirm the configured default and every current user's actual image ID match the new image, so the next Web launch uses it; keep each user's existing JFS directory.
+
 For the one-time migration from old user Swarm Services, stop Master briefly to prevent new launches. Scale each old user Service to zero and verify its tasks have stopped **before** starting the ordinary container on the same JFS path. Keep stopped old specifications/images for rollback. Never delete a running user Service or start both generations against the same storage.
 
 ## 6. Verify, recover and clean up

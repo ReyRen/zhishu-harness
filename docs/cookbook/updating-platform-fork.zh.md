@@ -157,6 +157,8 @@ curl --fail --silent http://127.0.0.1:18088/healthz
 
 私下从共享 Token 文件读取 `X-GCS-Worker-Token`，查询各 Worker 的 `GET /internal/v1/state`。逐个用户 POST `/internal/v1/containers/{userID}/rollout`，请求体为 `{"imageID":"sha256:..."}`。Worker 停止并保留旧容器，启动新容器，等待 healthy 并验证内部登录凭据；新版本失败先停新容器，再重启旧容器。首个失败就停止发布。不要记录凭据或将 Worker/DSH Token 返回前端。
 
+每次镜像更新都包括 Master 默认镜像配置更新和现有用户容器替换。仅构建或重新打标签不算发布完成。报告成功前，确认配置中的默认镜像与每个当前用户实际运行的 Image ID 都指向新镜像，保证下次 Web launch 使用新版；各用户继续使用原 JFS 目录。
+
 从旧用户 Swarm Service 进行一次性迁移时，短暂停止 Master 防止新 launch。每个旧用户 Service 先缩容为零，确认任务已停止，**然后**才能在同一 JFS 路径启动普通容器。保留停止的旧规格和镜像以便回滚。不删除运行中的用户 Service，不允许两代进程同时写同一目录。
 
 ## 6. 验证、恢复及清理
