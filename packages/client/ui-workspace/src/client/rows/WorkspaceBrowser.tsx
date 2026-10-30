@@ -933,6 +933,8 @@ export function WorkspaceBrowser({
   useHostInfo,
   useShortcuts,
   useWorkspaceShortcuts,
+  useSessionVisibility,
+  isSessionVisible,
   requestSearch,
   requestAddWorkspace,
   closeAddWorkspace,
@@ -946,7 +948,19 @@ export function WorkspaceBrowser({
   const addShortcut = shortcuts.find(row => row.id === 'workspace.add')
   const shortcutState = useWorkspaceShortcuts(state => state)
   // Ordering remains live while the rail or search replaces the list body.
-  const list = useSessions(state => state)
+  const sourceList = useSessions(state => state)
+  const sessionVisibility = useSessionVisibility(revision => revision)
+  // Scope the whole list before grouping. Filtering only a workspace's own
+  // session ids lets hidden sessions fall through into the ungrouped bucket.
+  const list = useMemo(() => {
+    const ids = sourceList.ids.filter(id => isSessionVisible(id))
+    const byId: SessionListState['byId'] = {}
+    for (const id of ids) {
+      const session = sourceList.byId[id]
+      if (session !== undefined) byId[id] = session
+    }
+    return { ...sourceList, ids, byId }
+  }, [isSessionVisible, sessionVisibility, sourceList])
   const storedWorkspaces = useWorkspaces(state => state.items)
   // The resolved name, not `t`, is the memo dependency: the bound seat keeps
   // its identity across a language switch.
@@ -990,8 +1004,8 @@ export function WorkspaceBrowser({
     : undefined
   const ungroupedMemberIds = useMemo(() => {
     const accounted = new Set(workspaces.flatMap(workspace => workspace.sessionIds))
-    return list.ids.filter(id => list.byId[id] !== undefined && !accounted.has(id))
-  }, [list, workspaces])
+    return list.ids.filter(id => list.byId[id] !== undefined && !accounted.has(id) && isSessionVisible(id))
+  }, [isSessionVisible, list, sessionVisibility, workspaces])
   const orderState = useMemo(
     () => ({ pinnedSessionIds, archivedSessionIds }),
     [archivedSessionIds, pinnedSessionIds],
@@ -1000,9 +1014,12 @@ export function WorkspaceBrowser({
     () => ({ ...orderState, archivedFilter }),
     [orderState, archivedFilter],
   )
-  const flatMemberIds = useMemo(() => sessionMemberIds(list), [list])
+  const flatMemberIds = useMemo(
+    () => sessionMemberIds(list).filter(id => isSessionVisible(id)),
+    [isSessionVisible, list, sessionVisibility],
+  )
   const orderedWorkspaces = useMemo(() => workspaces.map((workspace) => {
-    const memberIds = workspace.sessionIds
+    const memberIds = workspace.sessionIds.filter(id => isSessionVisible(id))
     const baseOrder = orderBy === 'updated'
       ? orderByRecency(memberIds, list.byId)
       : reconcileManualOrder(memberIds, sessionOrderByAccount[workspace.workspaceId], list.byId, orderState)
@@ -1013,7 +1030,7 @@ export function WorkspaceBrowser({
         currentBlank !== undefined && memberIds.includes(currentBlank) ? currentBlank : undefined,
       ),
     }
-  }), [currentBlank, list.byId, orderBy, orderState, sessionOrderByAccount, workspaces])
+  }), [currentBlank, isSessionVisible, list.byId, orderBy, orderState, sessionOrderByAccount, sessionVisibility, workspaces])
   const orderedUngroupedSessionIds = useMemo(() => {
     const baseOrder = orderBy === 'updated'
       ? orderByRecency(ungroupedMemberIds, list.byId)

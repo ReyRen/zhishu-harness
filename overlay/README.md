@@ -27,8 +27,13 @@ overlay/
 │   └── client.js          Browser: replace the running status and hide the extra bar
 ├── dsh-market/            Preinstalled plugin market (insert only)
 │   └── cordis.patch.yml   Insert `dshmarket` with restart disabled
-└── meow-memory/           Preinstalled memory with persistent DSH-home state
-    └── cordis.patch.yml   Insert `meow-memory` with homeDir: dsh-storage
+├── meow-memory/           Preinstalled memory with persistent DSH-home state
+│   └── cordis.patch.yml   Insert `meow-memory` with homeDir: dsh-storage
+└── workbenches/           Workbench host: switcher, local list, session ownership, conversation frame
+    ├── cordis.patch.yml   Insert this plugin
+    ├── package.json       Declare dsh.client
+    ├── index.js           Host: state file and ownership
+    └── client.js          Browser: market, switcher, and frame
 ```
 
 `dsh-market` does not contain the market implementation. The private repository root and Desktop Host pin `dshmarket@1.66.22` for source/container and packaged Desktop installations respectively. Both assemblies provide their own selected Cordis, Schemastery and DSH peers. The public CLI package carries no platform-only plugin dependencies. The market is not written into the user profile. If a profile later installs `dshmarket` itself, startup skips this insert so the Cordis id `dsh-market` is registered once.

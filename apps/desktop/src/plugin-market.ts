@@ -2,7 +2,7 @@
 
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
@@ -75,6 +75,41 @@ export function pluginMarketPackages(catalogPath: string): PluginMarketPackage[]
 }
 
 /**
+ * Read the workbench packages a catalog file offers. The display name is not a package name.
+ * @param catalogPath - `workbenches.json` shipped with the registry.
+ * @returns Package name and version pairs from each entry's `npm` field.
+ */
+export function workbenchMarketPackages(catalogPath: string): PluginMarketPackage[] {
+  const parsed: unknown = JSON.parse(readFileSync(catalogPath, 'utf8'))
+  if (typeof parsed !== 'object' || parsed === null || !('workbenches' in parsed) || !Array.isArray(parsed.workbenches)) {
+    throw new Error('desktop plugin market: workbenches.json has no workbenches list')
+  }
+  return parsed.workbenches.map((entry: unknown) => {
+    if (typeof entry !== 'object' || entry === null) throw new Error('desktop plugin market: a workbench entry is not an object')
+    const record = entry as { npm?: unknown; version?: unknown }
+    if (typeof record.npm !== 'string' || record.npm === '' || typeof record.version !== 'string' || record.version === '') {
+      throw new Error('desktop plugin market: a workbench entry needs an npm package and a version')
+    }
+    return { name: record.npm, version: record.version }
+  })
+}
+
+/**
+ * Read every packed package in a tarball directory, including runtime dependencies that are not catalog entries.
+ * @param tarballsDir - Directory of npm-pack tarballs.
+ * @returns Package name and version pairs in filename order.
+ */
+export function tarballMarketPackages(tarballsDir: string): PluginMarketPackage[] {
+  return readdirSync(tarballsDir).filter(filename => filename.endsWith('.tgz')).sort().map((filename) => {
+    const manifest = readPackedManifest(readFileSync(join(tarballsDir, filename)))
+    if (typeof manifest.name !== 'string' || manifest.name === '' || typeof manifest.version !== 'string' || manifest.version === '') {
+      throw new Error(`desktop plugin market: ${filename} has no package name or version`)
+    }
+    return { name: manifest.name, version: manifest.version }
+  })
+}
+
+/**
  * Copy any catalog tarball that is not already in Verdaccio's storage and write its metadata.
  * @param storageDir - Writable Verdaccio storage directory.
  * @param tarballsDir - Directory of npm-pack tarballs, with scoped names flattened to `scope-name-version.tgz`.
@@ -140,8 +175,14 @@ export function stopPackagedPluginMarket(): void {
 async function runPackagedPluginMarket(root: string, userData: string, node: string): Promise<void> {
   const state = join(userData, 'market-registry')
   const storage = join(state, 'storage')
-  const packages = pluginMarketPackages(join(root, 'plugins.json'))
-  seedPluginMarketStorage(storage, join(root, 'tarballs'), packages)
+  const tarballs = join(root, 'tarballs')
+  const workbenches = join(root, 'workbenches.json')
+  const packages = uniquePackages([
+    ...pluginMarketPackages(join(root, 'plugins.json')),
+    ...existsSync(workbenches) ? workbenchMarketPackages(workbenches) : [],
+    ...tarballMarketPackages(tarballs),
+  ])
+  seedPluginMarketStorage(storage, tarballs, packages)
   const htpasswd = join(state, 'htpasswd')
   if (!existsSync(htpasswd)) writeFileSync(htpasswd, '')
   const config = join(state, 'verdaccio.yaml')
@@ -176,7 +217,26 @@ async function runPackagedPluginMarket(root: string, userData: string, node: str
     }
   }
   if (isRetired()) return
-  if (!await probe(PLUGIN_MARKET_CATALOG)) catalog = await listenCatalog(readFileSync(join(root, 'plugins.json')))
+  if (!await probe(PLUGIN_MARKET_CATALOG)) {
+    const files: Record<string, Buffer> = {
+      '/plugins.json': readFileSync(join(root, 'plugins.json')),
+    }
+    const workbenches = join(root, 'workbenches.json')
+    if (existsSync(workbenches)) files['/workbenches.json'] = readFileSync(workbenches)
+    catalog = await listenCatalog(files)
+  }
+}
+
+function uniquePackages(packages: readonly PluginMarketPackage[]): PluginMarketPackage[] {
+  const seen = new Set<string>()
+  const unique: PluginMarketPackage[] = []
+  for (const item of packages) {
+    const key = `${item.name}@${item.version}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    unique.push(item)
+  }
+  return unique
 }
 
 function verdaccioConfig(storage: string, htpasswd: string): string {
@@ -285,9 +345,10 @@ function field(header: Buffer, start: number, end: number): string {
   return header.subarray(start, end).toString('utf8').replace(/\0.*$/su, '').trim()
 }
 
-function listenCatalog(body: Buffer): Promise<Server> {
+function listenCatalog(files: Readonly<Record<string, Buffer>>): Promise<Server> {
   const server = createServer((request, response) => {
-    if (request.url?.split('?')[0] !== '/plugins.json') {
+    const body = files[request.url?.split('?')[0] ?? '']
+    if (body === undefined) {
       response.writeHead(404)
       response.end()
       return

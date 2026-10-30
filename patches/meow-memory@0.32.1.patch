@@ -1,0 +1,26 @@
+diff --git a/lib/client.js b/lib/client.js
+index 74f898209ef865ab00d8975ad4412f13c40eb82c..396d5a256c4985b56ccbe89a1a82d5cf4c956e79 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -2452,7 +2452,9 @@ function applySettingsPage(ctx, opts) {
+   const mountWithScope = (scope) => {
+     injectSettingsCss();
+     let disposeEntry = null;
++    let slotReady = false;
+     const registerSection = () => {
++      if (!slotReady) return;
+       try {
+         disposeEntry?.();
+       } catch {
+@@ -2468,7 +2470,10 @@ function applySettingsPage(ctx, opts) {
+         MemorySettingsSection
+       );
+     };
+-    const disposeInjection = ctx.slots.inject("settings.section", registerSection);
++    const disposeInjection = ctx.slots.inject("settings.section", () => {
++      slotReady = true;
++      registerSection();
++    });
+     const unsubscribeLocale = onUiLocaleChange(registerSection);
+     return () => {
+       unsubscribeLocale();

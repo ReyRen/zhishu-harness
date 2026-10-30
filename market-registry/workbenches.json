@@ -1,0 +1,94 @@
+{
+  "updated": "2026-10-30",
+  "count": 4,
+  "categories": {
+    "productivity": {
+      "zh": "效率",
+      "en": "Productivity"
+    },
+    "research": {
+      "zh": "研究",
+      "en": "Research"
+    },
+    "content": {
+      "zh": "内容",
+      "en": "Content"
+    }
+  },
+  "workbenches": [
+    {
+      "name": "产品更新追踪",
+      "owner": "wisdomqin",
+      "url": "https://github.com/wisdomqin/product-update-tracker",
+      "category": "research",
+      "description": {
+        "zh": "每天追踪 GitHub 仓库和公开网页的内容变化，以月历和中文日报集中呈现多个产品的更新。",
+        "en": "Track daily changes across GitHub repositories and public web pages, with a monthly calendar and Chinese update reports."
+      },
+      "npm": "deepseek-harness-daily",
+      "version": "0.4.10",
+      "stars": 3,
+      "downloads": 415,
+      "updatedAt": "2026-10-27T11:50:43.000Z",
+      "screenshots": [
+        "https://raw.githubusercontent.com/wisdomqin/product-update-tracker/main/docs/images/overview.webp"
+      ]
+    },
+    {
+      "name": "DSH 思维导图工作台",
+      "owner": "andoaidlaksldk",
+      "url": "https://github.com/andoaidlaksldk/dsh-mind-workbench",
+      "category": "productivity",
+      "description": {
+        "zh": "在工作台里创建、编辑和导出思维导图。完整画布支持节点、主题、结构和多种导出格式，文档保存在 DSH 数据目录。",
+        "en": "Create, edit and export mind maps inside the workbench. Documents are stored in the DSH data directory."
+      },
+      "npm": "dsh-mind-workbench",
+      "version": "1.0.15",
+      "stars": 0,
+      "downloads": 311,
+      "updatedAt": "2026-10-21T06:20:44.000Z",
+      "screenshots": [
+        "https://raw.githubusercontent.com/andoaidlaksldk/dsh-mind-workbench/screenshots/docs/screenshots/overview.png",
+        "https://raw.githubusercontent.com/andoaidlaksldk/dsh-mind-workbench/screenshots/docs/screenshots/radial.png"
+      ]
+    },
+    {
+      "name": "小红书笔记创作",
+      "owner": "sara2398",
+      "url": "https://github.com/sara2398/xiaohongshu-note-workbench",
+      "category": "content",
+      "description": {
+        "zh": "根据主题和素材生成小红书笔记的标题、正文与话题标签，并支持编辑、保存和复制定稿。",
+        "en": "Turn topics and source material into Xiaohongshu note titles, body copy, and hashtags, with editing, local saving, and copy-ready drafts."
+      },
+      "npm": "dsh-xiaohongshu-note-workbench",
+      "version": "0.1.1",
+      "stars": 0,
+      "downloads": 0,
+      "updatedAt": "2026-10-14T09:29:25.000Z",
+      "screenshots": [
+        "https://raw.githubusercontent.com/sara2398/xiaohongshu-note-workbench/main/docs/images/overview.png",
+        "https://raw.githubusercontent.com/sara2398/xiaohongshu-note-workbench/main/docs/images/result.png"
+      ]
+    },
+    {
+      "name": "编曲工作台",
+      "owner": "cinderzhan",
+      "url": "https://github.com/cinderzhan/bianqu-workbench",
+      "category": "content",
+      "description": {
+        "zh": "随手记录旋律动机、和声走向与歌词片段的编曲灵感库，支持搜索、类型与标签筛选和归档，需要时可打开 AI 对话继续创作。",
+        "en": "An idea library for music arrangers to capture melody motifs, chord progressions and lyric snippets, with search, type and tag filters, archiving, and an on-demand AI conversation."
+      },
+      "npm": "dsh-bianqu-workbench",
+      "version": "0.1.1",
+      "stars": 0,
+      "downloads": 0,
+      "updatedAt": "2026-10-15T09:13:48.000Z",
+      "screenshots": [
+        "https://raw.githubusercontent.com/cinderzhan/bianqu-workbench/main/docs/images/overview.webp"
+      ]
+    }
+  ]
+}

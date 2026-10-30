@@ -17,8 +17,9 @@ const MODULE_CACHE = join(APP_ROOT, '.desktop-build', 'downloads', 'market-regis
 function main(): void {
   const manifest = join(SOURCE, 'package.json')
   const catalog = join(SOURCE, 'plugins.json')
+  const workbenches = join(SOURCE, 'workbenches.json')
   const tarballs = join(SOURCE, 'tarballs')
-  for (const path of [manifest, catalog, tarballs]) {
+  for (const path of [manifest, catalog, workbenches, tarballs]) {
     if (!existsSync(path)) throw new Error(`desktop plugin market: missing ${path}`)
   }
   const modules = ensureModules(manifest)
@@ -28,6 +29,7 @@ function main(): void {
   cpSync(manifest, join(output, 'package.json'))
   cpSync(modules, join(output, 'node_modules'), { recursive: true })
   cpSync(catalog, join(output, 'plugins.json'))
+  cpSync(workbenches, join(output, 'workbenches.json'))
   cpSync(tarballs, join(output, 'tarballs'), { recursive: true })
   const bin = join(output, 'node_modules', 'verdaccio', 'bin', 'verdaccio')
   if (!existsSync(bin)) throw new Error(`desktop plugin market: verdaccio was not installed at ${bin}`)

@@ -27,8 +27,13 @@ overlay/
 │   └── client.js          Browser: replace the running status and hide the extra bar
 ├── dsh-market/            Preinstalled plugin market (insert only)
 │   └── cordis.patch.yml   Insert `dshmarket` with restart disabled
-└── meow-memory/           Preinstalled memory with persistent DSH-home state
-    └── cordis.patch.yml   Insert `meow-memory` with homeDir: dsh-storage
+├── meow-memory/           Preinstalled memory with persistent DSH-home state
+│   └── cordis.patch.yml   Insert `meow-memory` with homeDir: dsh-storage
+└── workbenches/           Workbench host: switcher, local list, session ownership, conversation frame
+    ├── cordis.patch.yml   Insert this plugin
+    ├── package.json       Declare dsh.client
+    ├── index.js           Host: state file and ownership
+    └── client.js          Browser: market, switcher, and frame
 ```
 
 `dsh-market` 里没有市场实现。私有仓库根目录和 Desktop Host 分别为源码/容器与桌面安装包锁定 `dshmarket@1.66.22`。两个装配环境各自提供选定的 Cordis、Schemastery 和 DSH peer 依赖。公开 CLI 包不携带平台专用插件依赖。市场不写入用户 profile。如果用户之后又在插件页安装了同名包，启动时会跳过这条插入，避免 Cordis id `dsh-market` 注册两次。

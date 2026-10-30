@@ -20,6 +20,7 @@ patchedDependencies:
   exceljs@4.4.0: c1bf8ac8f319dab382f08e3a669b715e691d46c703ac5a4163eb383fbedd1d48
   lexical@0.49.0: 54c4413db208cf234cb68c6a837f2523d3b319aa17911f1da385af08362e1356
   mdast-util-gfm-autolink-literal@2.0.1: 7fa6fc7927128a45c3f148d31faf388806895e2de39c14a144200edbc1e7aaa0
+  meow-memory@0.32.1: e139c52623c937a90e8edf6a0f2452be8cfc44612d61c11a1b726a226297c385
   micromark-extension-gfm-autolink-literal@2.1.0: 906ae7c0cd1f69e7ee308a41bc0542e0085276ac7517e56e96f0ccaf5a89327d
   node-pty@1.2.0-beta.15: 9d30053266d0f39d3debe894c675867f6782da6bcadbc94a693b3cfb9eff8ed0
 
@@ -194,7 +195,7 @@ importers:
         version: 4.18.0
       dshmarket:
         specifier: 1.66.22
-        version: 1.66.22(@deepseek-ai/cordis@vendor+cordis)(@deepseek-ai/dsh-settings@packages+settings+settings)
+        version: 1.66.22(@deepseek-ai/cordis@vendor+cordis)(@deepseek-ai/dsh-settings@packages+settings+settings)(@deepseek-ai/schemastery@vendor+schemastery)
       eslint-plugin-sonarjs:
         specifier: ^4.2.0
         version: 4.2.0(eslint@10.5.0(jiti@2.7.0)(supports-color@9.4.0))
@@ -236,7 +237,7 @@ importers:
         version: 3.1.0(supports-color@9.4.0)
       meow-memory:
         specifier: 0.32.1
-        version: 0.32.1(@deepseek-ai/dsh-llm@packages+llm+llm)(@deepseek-ai/schemastery@vendor+schemastery)
+        version: 0.32.1(patch_hash=e139c52623c937a90e8edf6a0f2452be8cfc44612d61c11a1b726a226297c385)(@deepseek-ai/dsh-llm@packages+llm+llm)(@deepseek-ai/schemastery@vendor+schemastery)
       mermaid:
         specifier: 11.17.2
         version: 11.17.2
@@ -916,13 +917,13 @@ importers:
         version: link:../../vendor/schemastery
       dshmarket:
         specifier: 1.66.22
-        version: 1.66.22(@deepseek-ai/cordis@vendor+cordis)(@deepseek-ai/dsh-settings@packages+settings+settings)
+        version: 1.66.22(@deepseek-ai/cordis@vendor+cordis)(@deepseek-ai/dsh-settings@packages+settings+settings)(@deepseek-ai/schemastery@vendor+schemastery)
       koffi:
         specifier: 3.1.1
         version: 3.1.1
       meow-memory:
         specifier: 0.32.1
-        version: 0.32.1(@deepseek-ai/dsh-llm@packages+llm+llm)(@deepseek-ai/schemastery@vendor+schemastery)
+        version: 0.32.1(patch_hash=e139c52623c937a90e8edf6a0f2452be8cfc44612d61c11a1b726a226297c385)(@deepseek-ai/dsh-llm@packages+llm+llm)(@deepseek-ai/schemastery@vendor+schemastery)
     devDependencies:
       '@deepseek-ai/cordis-plugin-include':
         specifier: workspace:~
@@ -22651,8 +22652,11 @@ packages:
     peerDependencies:
       '@deepseek-ai/cordis': ^4.0.1
       '@deepseek-ai/dsh-settings': ^0.1.0-rc.7 || ^0.1.1-rc.2 || ^0.1.2-alpha.2 || ^0.2.0-rc.1
+      '@deepseek-ai/schemastery': ^3.18.1
     peerDependenciesMeta:
       '@deepseek-ai/dsh-settings':
+        optional: true
+      '@deepseek-ai/schemastery':
         optional: true
 
   dts-resolver@3.0.0:
@@ -30230,14 +30234,14 @@ snapshots:
 
   dotenv@16.6.1: {}
 
-  dshmarket@1.66.22(@deepseek-ai/cordis@vendor+cordis)(@deepseek-ai/dsh-settings@packages+settings+settings):
+  dshmarket@1.66.22(@deepseek-ai/cordis@vendor+cordis)(@deepseek-ai/dsh-settings@packages+settings+settings)(@deepseek-ai/schemastery@vendor+schemastery):
     dependencies:
       '@deepseek-ai/cordis': link:vendor/cordis
-      '@deepseek-ai/schemastery': link:vendor/schemastery
       js-yaml: 4.3.2
       undici: 7.29.1
     optionalDependencies:
       '@deepseek-ai/dsh-settings': link:packages/settings/settings
+      '@deepseek-ai/schemastery': link:vendor/schemastery
 
   dts-resolver@3.0.0(oxc-resolver@11.20.0):
     optionalDependencies:
@@ -31889,7 +31893,7 @@ snapshots:
 
   media-typer@1.1.1: {}
 
-  meow-memory@0.32.1(@deepseek-ai/dsh-llm@packages+llm+llm)(@deepseek-ai/schemastery@vendor+schemastery):
+  meow-memory@0.32.1(patch_hash=e139c52623c937a90e8edf6a0f2452be8cfc44612d61c11a1b726a226297c385)(@deepseek-ai/dsh-llm@packages+llm+llm)(@deepseek-ai/schemastery@vendor+schemastery):
     dependencies:
       '@deepseek-ai/schemastery': link:vendor/schemastery
     optionalDependencies:

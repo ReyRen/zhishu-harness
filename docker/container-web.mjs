@@ -35,9 +35,13 @@ try {
     'log:', '  type: stdout', '  format: pretty', '  level: warn',
     'listen: 127.0.0.1:4873', '',
   ].join('\n'), { mode: 0o600 })
-  const body = await readFile(join(market, 'plugins.json'))
+  const files = {
+    '/plugins.json': await readFile(join(market, 'plugins.json')),
+    '/workbenches.json': await readFile(join(market, 'workbenches.json')),
+  }
   catalog = createServer((request, response) => {
-    if (request.method !== 'GET' || request.url?.split('?')[0] !== '/plugins.json') {
+    const body = request.method === 'GET' ? files[request.url?.split('?')[0]] : undefined
+    if (body === undefined) {
       response.writeHead(404).end()
       return
     }
@@ -52,6 +56,7 @@ try {
     '--config', join(state, 'verdaccio.yaml')])
   await waitForService(`${registry}/-/ping`, owner.signal)
   await waitForService('http://127.0.0.1:4874/plugins.json', owner.signal)
+  await waitForService('http://127.0.0.1:4874/workbenches.json', owner.signal)
   const { DSH_WEB_PORT: webPort = '3080', DSH_INTERNAL_PORT: internalPort = '3081', DSH_PUBLIC_AUTHORITY: authority } = process.env
   if (!authority) throw new Error('DSH_PUBLIC_AUTHORITY is required')
   owner.start('socat', [`TCP-LISTEN:${internalPort},fork,reuseaddr,bind=0.0.0.0`, `TCP:127.0.0.1:${webPort}`])

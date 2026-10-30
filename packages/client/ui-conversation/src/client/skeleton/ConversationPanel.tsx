@@ -7,6 +7,7 @@ import type {} from '../contract/slots.ts'
  * @param props - main-slot inputs and the declared Conversation renderer.
  * @returns the Conversation subtree.
  */
-export function ConversationPanel({ renderSlot }: PropsRuntime<'main'> & PropsRenderSlots<'main.conversation'>) {
-  return renderSlot('main.conversation', {})
+export function ConversationPanel({ renderSlot }: PropsRuntime<'main'> & PropsRenderSlots<'main.conversation' | 'desktop.workbench.frame'>) {
+  const conversation = renderSlot('main.conversation', {})
+  return renderSlot('desktop.workbench.frame', { conversation }, { fallback: conversation })
 }

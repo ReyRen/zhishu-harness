@@ -220,6 +220,15 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     }
     /** Conversation shell beneath its root-scoped main-panel entry. */
     'main.conversation': { kind: 'single'; scope: 'session-maybe' }
+    /**
+     * Frame around the single native Conversation. With no occupant, the
+     * panel renders the Conversation itself.
+     */
+    'desktop.workbench.frame': {
+      kind: 'single'
+      scope: 'root'
+      owner: { conversation: ReactNode }
+    }
     /** Strict per-Session Conversation body. */
     'conversation.session': {
       kind: 'single'

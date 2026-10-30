@@ -114,11 +114,11 @@ Harness 里用户能看到的界面是官方 React 18 客户端。Web 和桌面�
 
 智枢现在的业务空间是 model 站点盖在对话页上，cookie 和存储与 Harness 分开。工作台若要做，业务界面跑在 Harness 页面内部，和会话共用同一棵前端，并用会话归属把对话隔开。两条路解决的问题不同，不要把平台整站塞进一个工作台面板，也不要为了工作台改掉现有的登录和站点切换。
 
-后续如果在本仓库实现宿主，增量放在 `overlay/`，用自己的 `cordis.patch.yml` 插入，不要改官方 `cordis.patch.yml`。官方包只有在没有对应插槽时才补插槽，规则见 [plugin-secondary-development.md](./plugin-secondary-development.md)。市场目录、安装来源和是否预装哪些业务包，按当时的部署（公网、内网、一用户一容器）另定，不要默认采用 `dsh-desktop` 的公网市场地址。
+宿主放在 `overlay/workbenches/`，用自己的 `cordis.patch.yml` 插入，不改官方 `cordis.patch.yml`。官方包只有在没有对应插槽时才补插槽：侧栏的 `sidebar.quickSwitcher`、会话外的 `desktop.workbench.frame`，以及侧栏按工作台过滤会话用的 `uiWorkspace` 过滤接口。规则见 [plugin-secondary-development.md](./plugin-secondary-development.md)。市场列表读私有目录 `workbenches.json`，安装包从同一套私有 npm 源下载，再交给官方 Plugin Manager。目录地址用 `ZHISHU_WORKBENCH_CATALOG_URL`，安装源用已有的 `DSHM_NPM_MIRROR`；以后换成内网地址时，目录仍要给出 npm 包名和版本。不要默认采用 `dsh-desktop` 的公网市场地址，那份目录里的安装包指向 GitHub Release，不会走私有源。本机绝对路径安装仍然保留。一个业务面板渲染失败只停在自己的区域。启动时整个业务包加载失败，仍走官方的启动检查，还没有单独改成非致命错误。
 
 ## 实施顺序
 
-在智枢里做同类工作台，分成两段，必须先做宿主。本仓库的官方界面里还没有 `sidebar.quickSwitcher`、`desktop.workbench.frame` 和 `desktopWorkbenches`。业务包要调用 `register()`，这些不存在就注册不上，侧栏也不会出现「工作台」。
+在智枢里做同类工作台，分成两段，必须先做宿主。宿主和它用的 `sidebar.quickSwitcher`、`desktop.workbench.frame`、`desktopWorkbenches` 现在在 `overlay/workbenches/` 和对应的官方插槽里。业务包要调用 `register()`，这些不存在就注册不上，侧栏也不会出现「工作台」。
 
 **第一段是宿主。** 侧栏上的「工作台」点开后是市场列表，这是宿主画的入口，不是某一个业务面板。这一段要一起做完：
 
