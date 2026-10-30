@@ -15,8 +15,8 @@
   en: e2aa9af923779960
   zh: 1a27153009e1c389
 /update-upstream-and-publish-the-platform-image/2-integrate-and-validate-outside-mutagen:
-  en: c66d25d40cc1dbec
-  zh: ffb5318819e43eee
+  en: 1559982fe288947a
+  zh: 1d74dcd85eb96639
 /update-upstream-and-publish-the-platform-image/3-update-the-canonical-build-checkout:
   en: 9efe769ae8849922
   zh: c71079d9880961cc
@@ -24,8 +24,8 @@
   en: b8ee42fc381f0253
   zh: 4d770b2063476457
 /update-upstream-and-publish-the-platform-image/5-roll-out-through-master-and-worker:
-  en: 54de774348365792
-  zh: a07691dc42aab9e4
+  en: cffecc08a91b2a2f
+  zh: b7e85a8b49ff4269
 /update-upstream-and-publish-the-platform-image/6-verify-recover-and-clean-up:
   en: 06ed1ef4672474a3
   zh: 523feb1af769b82e

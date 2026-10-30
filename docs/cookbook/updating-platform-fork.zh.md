@@ -64,7 +64,7 @@ git diff origin/master -- docker packages/api/workspace-controller packages/host
 
 自动合并也要审查：默认工作区、用户目录边界、已认证设置、完整 Web 和插件代理路径、运行时及 Office skills、锁文件、桌面打包。官方已替代的适配应删除。官方实验性市场仍默认关闭，不因两个包并存就删除已安装的第三方市场。
 
-遵循仓库提交前检查及文档技能，按实际变更选择测试，不能关闭失败检查。双语文档改动后重新记录配对元数据。
+遵循仓库提交前检查及文档技能，按实际变更选择测试，不能关闭失败的平台发布检查。双语文档改动后重新记录配对元数据。
 
 ```bash
 pnpm install --frozen-lockfile
@@ -84,6 +84,8 @@ git push -u origin sync-upstream-YYYY-MM-DD
 使用生产镜像进行 Linux 验证时设置 `NODE_ENV=test`，清除继承的 DSH home/workspace/runtime 环境变量。复用含已移除包产物的 worktree 时执行 `pnpm run clean`。
 
 合并前构建独立标签的验证镜像，实际测试 bubblewrap 命令、Web 登录/设置/插件及 Office 渲染；验证镜像不算生产 main 镜像。**仅向 ReyRen/zhishu-harness:main 提 PR**。无未解决冲突且关键检查通过后才合并。若 fork 检查需要官方专用 runner 或凭据，核实具体原因并提供等效 Linux 证据，不能将真实代码失败当作通过。
+
+Fork main 将[官方 CI](../../.github/workflows/ci.yml) 的触发器及任务条件保留为仅 `workflow_dispatch`。平台发布不自动执行或重跑它，不等待其结果，也不为此要求登录 GitHub 浏览器。合并上游时保留此设置；Fork master 仍镜像官方源码。这个可选 workflow 的历史失败继续如实记录，不改阈值，也不称为通过，但不阻断平台发布；上述构建、类型、文档、依赖、存储隔离、沙箱、Office、原生 Web 及离线市场检查仍须通过。其他 workflow 的触发器保持原样。
 
 ## 3. 更新正式构建检出
 
@@ -154,6 +156,8 @@ curl --fail --silent http://127.0.0.1:18088/healthz
 两份配置一致后才能重启。workers 列表显式填写节点地址。Master 只支持单实例；任一配置 Worker 不可达就拒绝调度，防止第二个 JFS 写入者。删除节点配置前必须排空用户。
 
 私下从共享 Token 文件读取 `X-GCS-Worker-Token`，查询各 Worker 的 `GET /internal/v1/state`。逐个用户 POST `/internal/v1/containers/{userID}/rollout`，请求体为 `{"imageID":"sha256:..."}`。Worker 停止并保留旧容器，启动新容器，等待 healthy 并验证内部登录凭据；新版本失败先停新容器，再重启旧容器。首个失败就停止发布。不要记录凭据或将 Worker/DSH Token 返回前端。
+
+每次镜像更新都包括 Master 默认镜像配置更新和现有用户容器替换。仅构建或重新打标签不算发布完成。报告成功前，确认配置中的默认镜像与每个当前用户实际运行的 Image ID 都指向新镜像，保证下次 Web launch 使用新版；各用户继续使用原 JFS 目录。
 
 从旧用户 Swarm Service 进行一次性迁移时，短暂停止 Master 防止新 launch。每个旧用户 Service 先缩容为零，确认任务已停止，**然后**才能在同一 JFS 路径启动普通容器。保留停止的旧规格和镜像以便回滚。不删除运行中的用户 Service，不允许两代进程同时写同一目录。
 
