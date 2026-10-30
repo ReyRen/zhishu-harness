@@ -128,6 +128,7 @@ export interface UiWorkspace {
   /**
    * Whether the sidebar scope currently lists this Session.
    * @param sessionId - candidate Session.
+   * @returns whether the Session is visible in the current sidebar scope.
    */
   isSessionVisible(sessionId: SessionId): boolean
   /** Bumps when a session filter is registered, replaced, or asks for a redraw. */
