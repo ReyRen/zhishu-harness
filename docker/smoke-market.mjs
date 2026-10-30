@@ -128,12 +128,25 @@ try {
     const manifest = JSON.parse(await readFile(join(env.DSH_HOME, 'profiles/web/node_modules', name, 'package.json'), 'utf8'))
     assert.equal(manifest.version, item.version)
   }
+  const installedWorkbenches = []
   for (const item of workbenches.workbenches) {
-    await promisify(execFile)(process.execPath, ['/opt/dsh/apps/cli/lib/bin.js', 'plugin', '--profile', 'web',
+    const install = () => promisify(execFile)(process.execPath, ['/opt/dsh/apps/cli/lib/bin.js', 'plugin', '--profile', 'web',
       'add', '--registry', registry, '--save-exact', `${item.npm}@${item.version}`],
     { env, cwd: env.DSH_DEFAULT_WORKSPACE, timeout: 120_000, maxBuffer: 2 * 1024 * 1024 })
+    // This pinned community release explicitly excludes the current DSH host.
+    // Its catalog presence must not bypass the official compatibility guard.
+    if (item.npm === 'deepseek-harness-daily' && item.version === '0.4.10') {
+      await assert.rejects(install, error => error.code === 1
+        && error.stderr.includes('is incompatible with dsh')
+        && error.stderr.includes('restored package.json, pnpm-lock.yaml, and node_modules'))
+      const profile = JSON.parse(await readFile(join(env.DSH_HOME, 'profiles/web/package.json'), 'utf8'))
+      assert.equal(profile.dependencies?.[item.npm], undefined)
+      continue
+    }
+    await install()
     const manifest = JSON.parse(await readFile(join(env.DSH_HOME, 'profiles/web/node_modules', item.npm, 'package.json'), 'utf8'))
     assert.equal(manifest.version, item.version)
+    installedWorkbenches.push(item)
   }
   const missing = await fetch(`${registry}/dsh-intentionally-missing-offline-package`)
   assert.equal(missing.status, 404)
@@ -145,7 +158,7 @@ try {
   await forbidden.body?.cancel()
   await owner.close()
   await startWeb()
-  for (const item of [...catalog.plugins, ...workbenches.workbenches]) {
+  for (const item of [...catalog.plugins, ...installedWorkbenches]) {
     const name = item.npm ?? item.name
     const manifest = JSON.parse(await readFile(join(env.DSH_HOME, 'profiles/web/node_modules', name, 'package.json'), 'utf8'))
     assert.equal(manifest.version, item.version)
@@ -157,7 +170,7 @@ try {
   await startWeb()
   const separate = JSON.parse((await webRequest('/api/desktop-workbenches/state')).body)
   assert.deepEqual(separate.state.sessionBindings, {})
-  console.log('Offline market: cold-cache plugins/workbenches, native Web, ownership conflict/restart/isolation and read-only registry passed')
+  console.log('Offline market: compatible cold-cache plugins/workbenches, incompatible-release rejection, native Web, ownership conflict/restart/isolation and read-only registry passed')
 } catch (error) {
   console.error(logs.replace(/([?&]token=)[\w-]+/gu, '$1<redacted>'))
   throw error
