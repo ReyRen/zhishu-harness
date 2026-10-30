@@ -6,20 +6,23 @@
   en: 041dc0aa3468985a
   zh: 8c70ae4d8b0d89c6
 /private-plugin-registry/available-packages:
-  en: 36d12eab1a92899c
-  zh: cdc015551b2ec4a0
+  en: b3957275699e870b
+  zh: 2e970bd3d3d0d92f
+/private-plugin-registry/environment-variables:
+  en: 295be952e5aa3a5d
+  zh: 3281a31b7169cae4
 /private-plugin-registry/start:
-  en: b464d489c90c160d
-  zh: 641e09a66341d218
+  en: 72e5d4b576cb09f3
+  zh: 898a8c44944e7d44
 /private-plugin-registry/mirror-another-community-plugin:
   en: 082f5b41dcec48e1
   zh: 4938d02af5669ebe
 /private-plugin-registry/move-to-another-machine:
-  en: 956e4ef79ca804d0
-  zh: e1e26cfdba3160d5
+  en: c722fc223a84eaeb
+  zh: 441820db30bd1c6a
 /private-plugin-registry/desktop-installation-package:
-  en: ceeb3761d9ed92ea
-  zh: 1b88cfe46d171bbd
+  en: a86823f6a5e64050
+  zh: 0bfcac34ad276402
 /private-plugin-registry/container-web-image:
-  en: d892a9b76a0084b4
-  zh: 46601fd94026cbdc
+  en: ef7bf4bcce410eee
+  zh: c10a970eb617d63d

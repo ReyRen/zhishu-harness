@@ -30,6 +30,12 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'sidebar.brand.name': { kind: 'single'; scope: 'root'; owner: SidebarBrandNameOwnerProps }
     /**
+     * Compact switch between native sessions and a workbench. Declared by
+     * this package's `sidebar` entry; the shell only supplies column state
+     * and the native New Session action.
+     */
+    'sidebar.quickSwitcher': { kind: 'single'; scope: 'root'; owner: SidebarQuickSwitcherOwnerProps }
+    /**
      * Global panel icons. Each list id addresses the matching main panel;
      * the sidebar owns the button and resolves its label from list metadata.
      */
@@ -67,6 +73,14 @@ export interface SidebarBrandMarkOwnerProps {
 export interface SidebarBrandNameOwnerProps {
   /** Marker field: the occupant owns its own content and width. */
   children?: never
+}
+
+/** Sidebar state and native New Session action supplied to the mode switcher. */
+export interface SidebarQuickSwitcherOwnerProps {
+  /** Whether the sidebar renders wide content (false = 56px rail). */
+  wide: boolean
+  /** Start a native session. The switcher uses this when leaving a workbench. */
+  startSession: (workspaceId?: WorkspaceId) => void
 }
 
 /** Icon presentation supplied by the global panel row. */
@@ -189,6 +203,7 @@ export type SidebarRootComponentProps =
     | 'sidebar.brand.mark'
     | 'sidebar.brand.name'
     | 'sidebar.toggle.badge'
+    | 'sidebar.quickSwitcher'
     | 'sidebar.panellist'
     | 'sidebar.panellist.actions'
     | 'sidebar.workspaces'

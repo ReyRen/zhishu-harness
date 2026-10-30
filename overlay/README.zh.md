@@ -27,12 +27,17 @@ overlay/
 │   └── client.js          Browser: replace the running status and hide the extra bar
 ├── dsh-market/            Preinstalled plugin market (insert only)
 │   └── cordis.patch.yml   Insert `dshmarket` with restart disabled
-└── meow-memory/           Preinstalled memory with persistent DSH-home state
-    └── cordis.patch.yml   Insert `meow-memory` with homeDir: dsh-storage
+├── meow-memory/           Preinstalled memory with persistent DSH-home state
+│   └── cordis.patch.yml   Insert `meow-memory` with homeDir: dsh-storage
+└── workbenches/           Workbench host: switcher, local list, session ownership, conversation frame
+    ├── cordis.patch.yml   Insert this plugin
+    ├── package.json       Declare dsh.client
+    ├── index.js           Host: state file and ownership
+    └── client.js          Browser: market, switcher, and frame
 ```
 
 `dsh-market` 里没有市场实现。私有仓库根目录和 Desktop Host 分别为源码/容器与桌面安装包锁定 `dshmarket@1.66.22`。两个装配环境各自提供选定的 Cordis、Schemastery 和 DSH peer 依赖。公开 CLI 包不携带平台专用插件依赖。市场不写入用户 profile。如果用户之后又在插件页安装了同名包，启动时会跳过这条插入，避免 Cordis id `dsh-market` 注册两次。
 
 `meow-memory` 为所有 Web profile 加载两个私有装配环境中锁定的同一版本。平台 Web 和 Desktop 使用私有 Host 清单建立官方安装包表，其中包括这些插件及其共享的核心依赖。全局状态使用 DSH-home 存储，项目数据库留在各工作区中。overlay 的标准 `package.json` 组合包声明允许 profile 自行安装的组合包替代默认插入，不会重复注册。市场 overlay 也使用同样的声明。它不写入私有源目录。持久化位置和离线验证见[容器记忆说明](../docker/README.zh.md#default-memory)。
 
-新增能力时可沿用此目录结构，不要把补丁写进官方的 `cordis.patch.yml`。官方界面如何区分插件，以及无外网部署时应把插件放在哪里，见 [plugin-secondary-development.md](./plugin-secondary-development.md)。桌面壳登录、工作空间、Windows 打包，以及网页和桌面的会话落在哪，见 [desktop-secondary-development.md](./desktop-secondary-development.md)。
+新增能力时可沿用此目录结构，不要把补丁写进官方的 `cordis.patch.yml`。官方界面如何区分插件，以及无外网部署时应把插件放在哪里，见 [plugin-secondary-development.md](./plugin-secondary-development.md)。桌面壳登录、工作空间、Windows 打包，以及网页和桌面的会话落在哪，见 [desktop-secondary-development.md](./desktop-secondary-development.md)。在官方 Harness 内增加工作台时的概念和边界，见 [workbench-concept.md](./workbench-concept.md)。

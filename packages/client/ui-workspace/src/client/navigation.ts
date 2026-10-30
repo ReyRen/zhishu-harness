@@ -13,7 +13,7 @@ import type {
 } from '@deepseek-ai/dsh-api-session-controller/client'
 // Type-only: pulls the `agentPreset` Session projection value into this program.
 import type {} from '@deepseek-ai/dsh-agent-preset-registry/types'
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import { createSnapshotStore, type ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { SubagentAddress } from '@deepseek-ai/dsh-subagent/client'
 import type {
   IWorkspaces, WorkspaceId, WorkspaceSnapshot, WorkspaceView,
@@ -43,6 +43,12 @@ export interface UiWorkspace {
    * @param target - known Session identity or durable direct-parent subagent address to display.
    */
   openSession(target: SessionTarget): void
+  /**
+   * Drop the main-view Session selection without opening another. Workbench hosts
+   * use this when entering a business surface that should not keep a leftover
+   * conversation (including one owned by a different workbench) as current.
+   */
+  clearMainView(): void
   /**
    * Connect a Workspace and open its Session unless a later navigation supersedes it.
    * @param workspaceId - target Workspace.
@@ -89,6 +95,43 @@ export interface UiWorkspace {
    * whether existing text or attachments are kept, replaced, or followed by the prompt.
    */
   startSession(workspaceId?: WorkspaceId, options?: StartSessionOptions): void
+  /**
+   * Claim plain New Session clicks. Return true when the handler created or
+   * opened the Session itself; return false to keep the native flow.
+   * @param handler - receives the explicit Workspace, when the click named one.
+   * @returns a disposer. A second registration throws.
+   */
+  registerSessionStarter(handler: (workspaceId?: WorkspaceId) => boolean): () => void
+  /**
+   * Claim a click that opens one Session. Return true when the handler opened
+   * it; return false to keep the native open.
+   * @param handler - the Session the row named.
+   * @returns a disposer. A second registration throws.
+   */
+  registerSessionOpener(handler: (sessionId: SessionId) => boolean): () => void
+  /**
+   * Hide Sessions from the sidebar and from blank reuse. Omitted, every Session stays visible.
+   * @param filter - true keeps the Session in the current sidebar scope.
+   * @param subscribe - tells the browser to redraw when the filter's inputs change.
+   * @returns a disposer. A second registration throws.
+   */
+  registerSessionFilter(
+    filter: (sessionId: SessionId) => boolean,
+    subscribe: (listener: () => void) => () => void,
+  ): () => void
+  /**
+   * Reject a blank Session the native New Session flow would otherwise reuse.
+   * @param handler - false skips that blank and creates another Session.
+   * @returns a disposer. A second registration throws.
+   */
+  registerSessionReuseFilter(handler: (sessionId: SessionId) => boolean): () => void
+  /**
+   * Whether the sidebar scope currently lists this Session.
+   * @param sessionId - candidate Session.
+   */
+  isSessionVisible(sessionId: SessionId): boolean
+  /** Bumps when a session filter is registered, replaced, or asks for a redraw. */
+  readonly sessionVisibility: ObservableSnapshot<number>
   /**
    * Archive a Session and clear it when it is the current selection.
    * @param sessionId - Session to archive.
@@ -175,6 +218,12 @@ class UiWorkspaceService extends Service implements UiWorkspace {
   )
   private mainReference: SessionReference | undefined
   private restorationNavigation: AbortSignal | undefined
+  private sessionStarter: ((workspaceId?: WorkspaceId) => boolean) | null = null
+  private sessionOpener: ((sessionId: SessionId) => boolean) | null = null
+  private sessionFilter: ((sessionId: SessionId) => boolean) | null = null
+  private sessionFilterUnsubscribe: (() => void) | null = null
+  private sessionReuseFilter: ((sessionId: SessionId) => boolean) | null = null
+  readonly sessionVisibility = createSnapshotStore(0)
 
   /**
    * @param ctx - Client root Context.
@@ -240,6 +289,8 @@ class UiWorkspaceService extends Service implements UiWorkspace {
       const listed = summary?.projectionValues?.agentPreset
       return summary !== undefined && summary.blank && summary.cwd === workspace.path
         && workspace.sessionIds.includes(id) && !archived.includes(id)
+        && this.isSessionVisible(id)
+        && this.sessionReuseFilter?.(id) !== false
         && (options.agentPreset === undefined || typeof listed !== 'string' || listed === options.agentPreset)
     })
     return this.createNamed({
@@ -291,7 +342,12 @@ class UiWorkspaceService extends Service implements UiWorkspace {
   }
 
   openSession(target: SessionTarget): void {
+    if (typeof target === 'string' && this.sessionOpener?.(target) === true) return
     this.replaceMain(target, this.lifetime.signal, 'reveal')
+  }
+
+  clearMainView(): void {
+    this.clearMain()
   }
 
   openWorkspace(
@@ -334,7 +390,53 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     })
   }
 
+  registerSessionStarter(handler: (workspaceId?: WorkspaceId) => boolean): () => void {
+    if (this.sessionStarter !== null) throw new Error('uiWorkspace session starter already registered')
+    this.sessionStarter = handler
+    return () => {
+      if (this.sessionStarter === handler) this.sessionStarter = null
+    }
+  }
+
+  registerSessionOpener(handler: (sessionId: SessionId) => boolean): () => void {
+    if (this.sessionOpener !== null) throw new Error('uiWorkspace session opener already registered')
+    this.sessionOpener = handler
+    return () => {
+      if (this.sessionOpener === handler) this.sessionOpener = null
+    }
+  }
+
+  registerSessionFilter(
+    filter: (sessionId: SessionId) => boolean,
+    subscribe: (listener: () => void) => () => void,
+  ): () => void {
+    if (this.sessionFilter !== null) throw new Error('uiWorkspace session filter already registered')
+    this.sessionFilter = filter
+    const invalidate = (): void => { this.sessionVisibility.set(this.sessionVisibility.getSnapshot() + 1) }
+    this.sessionFilterUnsubscribe = subscribe(invalidate)
+    invalidate()
+    return () => {
+      this.sessionFilterUnsubscribe?.()
+      this.sessionFilterUnsubscribe = null
+      if (this.sessionFilter === filter) this.sessionFilter = null
+      invalidate()
+    }
+  }
+
+  registerSessionReuseFilter(handler: (sessionId: SessionId) => boolean): () => void {
+    if (this.sessionReuseFilter !== null) throw new Error('uiWorkspace session reuse filter already registered')
+    this.sessionReuseFilter = handler
+    return () => {
+      if (this.sessionReuseFilter === handler) this.sessionReuseFilter = null
+    }
+  }
+
+  isSessionVisible(sessionId: SessionId): boolean {
+    return this.sessionFilter?.(sessionId) ?? true
+  }
+
   startSession(workspaceId?: WorkspaceId, options?: StartSessionOptions): void {
+    if (options === undefined && this.sessionStarter?.(workspaceId) === true) return
     const { agentPreset, ...draft } = options ?? {}
     const draftOptions = options === undefined ? undefined : draft
     const initializeDraft = draftOptions !== undefined && (draftOptions.prompt !== undefined

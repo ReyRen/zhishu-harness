@@ -139,6 +139,8 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     createWorkspace: vi.fn(async () => workspace('created', [])),
     useDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => true, subscribe: () => () => {} }),
     useHostInfo: selector => selector({ home: undefined, isLoopback: true }),
+    useSessionVisibility: selector => selector(0),
+    isSessionVisible: () => true,
     renderSlot: renderDirectoryFlowOnly,
     t,
     ...overrides,
@@ -154,6 +156,28 @@ function rerender(b: ReturnType<typeof mount>, overrides: Partial<WorkspaceBrows
 }
 
 describe('WorkspaceBrowser', () => {
+  it('keeps sessions owned by another workbench out of the native list and the ungrouped bucket', () => {
+    localStorage.setItem('dsh.workspace.view.v5', JSON.stringify({
+      groupBy: 'workspace',
+      orderBy: 'manual',
+      groupExpansion: { home: true, [UNGROUPED_KEY]: true },
+      sessionOrderByAccount: {},
+      archivedFilter: 'default',
+    }))
+    const native = summary('新会话', 40)
+    const owned = summary('项目管理', 30)
+    const loose = summary('智能体分发梳理', 20)
+    mount({
+      useSessions: hook(sessionState([native, owned, loose])),
+      useWorkspaces: hook(workspaceState([workspace('home', ['新会话', '项目管理'], '默认工作区')])),
+      isSessionVisible: id => id === native.id,
+    })
+    expect(screen.getByText('新会话')).toBeTruthy()
+    expect(screen.queryByText('项目管理')).toBeNull()
+    expect(screen.queryByText('智能体分发梳理')).toBeNull()
+    expect(screen.queryByText('未分组')).toBeNull()
+  })
+
   it.each(['workspace', 'flat', 'ungrouped'] as const)('keeps %s recency independent of arrival order and saved manual positions', (mode) => {
     localStorage.clear()
     const preferences = createWorkspaceViewStore().create()

@@ -8,6 +8,7 @@ import {
   pluginMarketHostEnvironment,
   pluginMarketPackages,
   seedPluginMarketStorage,
+  workbenchMarketPackages,
 } from '../src/plugin-market.ts'
 
 const SOURCE = resolve(import.meta.dirname, '..', '..', '..', 'market-registry')
@@ -55,6 +56,15 @@ describe('desktop plugin market', () => {
     const index = JSON.parse(readFileSync(join(storage, '.verdaccio-db.json'), 'utf8')) as { list: string[]; secret: string }
     expect(index.list).toEqual(['open-sea-skin'])
     expect(index.secret).toHaveLength(32)
+  })
+
+  it('names the workbench packages published from the private catalog', () => {
+    expect(workbenchMarketPackages(join(SOURCE, 'workbenches.json')).map(item => `${item.name}@${item.version}`)).toEqual([
+      'deepseek-harness-daily@0.4.10',
+      'dsh-mind-workbench@1.0.15',
+      'dsh-xiaohongshu-note-workbench@0.1.1',
+      'dsh-bianqu-workbench@0.1.1',
+    ])
   })
 
   it('uses npm-pack filenames for scoped packages', () => {

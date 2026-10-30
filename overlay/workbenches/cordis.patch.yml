@@ -1,0 +1,5 @@
+# Workbench host. The official sidebar and conversation packages declare the
+# slots this client occupies. Business packages register with desktopWorkbenches.
+- insert:
+    - id: zhishu-workbenches
+      name: ./index.js

@@ -354,6 +354,8 @@ export function SidebarRoot({
         </Tooltip>
       )}
 
+      {renderSlot('sidebar.quickSwitcher', { wide, startSession })}
+
       {panels.length > 0 && (
         <nav className={css.panelList} aria-label={t('panels.label')}>
           {panels.filter(({ id }) => id === FIXED_PANEL_ID || !unpinned.includes(id)).map(({ id, label }) => (

@@ -281,7 +281,14 @@ export function apply(ctx: Context): void {
     requestAddWorkspace: shortcutControls.add,
     closeAddWorkspace: shortcutControls.closeAdd,
     setDirectoryBusy: shortcutControls.directoryBusy,
-    hooks: { directoryFlow: browserFlowSource, hostInfo, workspaceShortcuts: shortcutControls.state, shortcuts: ctx.shortcuts.catalog },
+    isSessionVisible: sessionId => uiWorkspace.isSessionVisible(sessionId),
+    hooks: {
+      directoryFlow: browserFlowSource,
+      hostInfo,
+      workspaceShortcuts: shortcutControls.state,
+      shortcuts: ctx.shortcuts.catalog,
+      sessionVisibility: uiWorkspace.sessionVisibility,
+    },
   })
   const pickerInjected = (): WorkspacePickerInjected => ({
     createWorkspace: input => workspaces.create(input),

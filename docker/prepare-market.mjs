@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process'
 import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { pluginMarketPackages, seedPluginMarketStorage } from '../apps/desktop/src/plugin-market.ts'
+import { pluginMarketPackages, seedPluginMarketStorage, workbenchMarketPackages } from '../apps/desktop/src/plugin-market.ts'
 
 const source = resolve(import.meta.dirname, '../market-registry')
 const output = resolve(process.argv[2])
@@ -31,12 +31,13 @@ try {
     copyFileSync(packed, alias)
     packages.push({ name, version })
   }
-  for (const item of pluginMarketPackages(join(source, 'plugins.json'))) {
+  for (const item of [...pluginMarketPackages(join(source, 'plugins.json')), ...workbenchMarketPackages(join(source, 'workbenches.json'))]) {
     if (!versions.has(`${item.name}@${item.version}`)) throw new Error(`Missing catalog tarball: ${item.name}@${item.version}`)
   }
   mkdirSync(output, { recursive: true })
   seedPluginMarketStorage(join(output, 'storage'), staging, packages)
   copyFileSync(join(source, 'plugins.json'), join(output, 'plugins.json'))
+  copyFileSync(join(source, 'workbenches.json'), join(output, 'workbenches.json'))
   console.log(`Prepared offline registry: ${packages.length} package versions`)
 } finally {
   rmSync(staging, { recursive: true, force: true })

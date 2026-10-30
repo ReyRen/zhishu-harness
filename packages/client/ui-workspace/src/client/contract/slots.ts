@@ -244,7 +244,11 @@ export type WorkspaceBrowserInjected = {
     hostInfo: HostObservable<RemoteHostFacts>
     workspaceShortcuts: HostObservable<WorkspaceShortcutState>
     shortcuts: HostObservable<readonly ShortcutCatalogEntry[]>
+    /** Bumps when the sidebar session scope changes. */
+    sessionVisibility: HostObservable<number>
   }
+  /** True when the Session belongs in the current sidebar scope. */
+  isSessionVisible: (sessionId: SessionId) => boolean
   /** Open the browser search and focus its input. */
   requestSearch: () => void
   /** Request the existing directory picker. */
