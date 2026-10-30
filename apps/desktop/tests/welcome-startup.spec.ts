@@ -77,8 +77,14 @@ vi.mock('electron', () => ({
     on() { return this }
     isDestroyed() { return false }
     getContentSize() { return [1280, 800] as const }
-    contentView = { addChildView: vi.fn(), removeChildView: vi.fn() }
+    contentView = {
+      children: [] as object[],
+      addChildView(view: object) { this.children.push(view) },
+      removeChildView(view: object) { this.children = this.children.filter(child => child !== view) },
+    }
     isMinimized() { return false }
+    isVisible() { return true }
+    hookWindowMessage() {}
     restore = vi.fn()
     focus = state.focusWorkspace
     moveTop = state.moveTopWorkspace
@@ -92,6 +98,8 @@ vi.mock('electron', () => ({
   WebContentsView: class {
     webContents = {
       mainFrame: { url: '' },
+      setBackgroundThrottling: vi.fn(),
+      openDevTools: vi.fn(),
       setWindowOpenHandler: vi.fn(),
       on: vi.fn(),
       send: vi.fn(),
@@ -104,6 +112,7 @@ vi.mock('electron', () => ({
   },
   session: {
     defaultSession: {
+      on: vi.fn(),
       setPermissionCheckHandler: vi.fn(), setPermissionRequestHandler: vi.fn(), webRequest: { onBeforeSendHeaders: vi.fn() },
     },
     fromPartition: () => ({ cookies: { get: async () => [] } }),
@@ -112,6 +121,7 @@ vi.mock('electron', () => ({
   ipcMain: {
     handle: (name: string, callback: (...args: unknown[]) => unknown) => { state.handlers.set(name, callback) },
     removeHandler: (name: string) => { state.handlers.delete(name) },
+    removeAllListeners: (name: string) => { state.listeners.delete(name) },
     on: (name: string, callback: (...args: unknown[]) => void) => { state.listeners.set(name, callback) },
   },
   dialog: { showErrorBox: vi.fn(), showMessageBox: vi.fn() },

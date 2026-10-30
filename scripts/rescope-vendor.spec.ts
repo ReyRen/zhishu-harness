@@ -4,8 +4,8 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it, onTestFinished } from 'vitest'
-import { exactEditState, isRescopeExcluded, readRescopeFiles, rescopeText } from './rescope-vendor.ts'
+import { describe, expect, it } from 'vitest'
+import { exactEditState, isRescopeExcluded, listRescopeFiles, rescopeText } from './rescope-vendor.ts'
 
 const ANCHOR = '\n## Sync procedure'
 const INSERTED = `\n15. **rescope**: one log entry.\n${ANCHOR}`
@@ -16,22 +16,28 @@ function expectRoundTrip(file: string, text: string, scoped: string, lines: numb
   expect(rescopeText(scoped, file, true)).toEqual({ text, lines })
 }
 
-describe('rescope file selection', () => {
-  it('reads the complete tracked corpus when Git output exceeds one MiB', () => {
-    const repository = mkdtempSync(join(tmpdir(), 'dsh-rescope-index-'))
-    onTestFinished(() => { rmSync(repository, { recursive: true, force: true }) })
-    execFileSync('git', ['init', '--quiet', repository])
-    const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], {
-      cwd: repository, input: '', encoding: 'utf8',
-    }).trim()
-    // Populate the real Git index without acquiring thousands of filesystem paths.
-    const files = Array.from({ length: 8_000 }, (_, index) => `packages/${'a'.repeat(150)}/${index}.ts`)
-    const rows = files.map(file => `100644 ${blob}\t${file}\n`).join('')
-    execFileSync('git', ['update-index', '--index-info'], { cwd: repository, input: rows })
-    expect(Buffer.byteLength(files.join('\0'))).toBeGreaterThan(1024 * 1024)
-    expect(readRescopeFiles(repository)).toEqual([...files].sort())
-  })
+it('lists the complete eligible corpus when tracked paths exceed one MiB', () => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-rescope-paths-'))
+  // A Git hook or `git rebase -x` exports these; inherited, they would point the fixture at the caller's repository.
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
+    !['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE'].includes(key.toUpperCase())))
+  try {
+    execFileSync('git', ['init', '--quiet'], { cwd: root, env })
+    const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: root, env, input: '', encoding: 'utf8' }).trim()
+    const paths = Array.from({ length: 12_000 }, (_, i) => `packages/example/src/${String(i).padStart(5, '0')}-${'x'.repeat(80)}.ts`)
+    expect(Buffer.byteLength(paths.join('\0'))).toBeGreaterThan(1024 * 1024)
+    // Index-only entries exercise Git's complete output without creating thousands of source files.
+    const entries = [...paths, 'scripts/dependency-catalog/package-lock.json']
+    execFileSync('git', ['update-index', '--index-info'], {
+      cwd: root, env, input: entries.map(path => `100644 ${blob}\t${path}\n`).join(''),
+    })
+    expect(listRescopeFiles(root, env)).toEqual(paths)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
 
+describe('rescope file selection', () => {
   it('preserves the recorded npm resolution', () => {
     expect(isRescopeExcluded('scripts/dependency-catalog/package-lock.json')).toBe(true)
   })
@@ -82,8 +88,8 @@ describe('product identifiers', () => {
     'apps/cli/tests/optional-bundle-transitions.e2e.ts',
     'apps/web/tests/agent-preset-selection.e2e.ts',
     'apps/web/tests/developer-tools-settings.e2e.ts',
-    'docs/subsystems/schedule.md',
-    'docs/subsystems/schedule.zh.md',
+    'docs/subsystems/extensions.md',
+    'docs/subsystems/extensions.zh.md',
     'docs/upgrade-guide/v0.2.0-rc.2/schedule-bundle-retired/guide.md',
     'docs/upgrade-guide/v0.2.0-rc.2/schedule-bundle-retired/guide.zh.md',
     'docs/user/guide/schedule.md',
@@ -169,7 +175,7 @@ describe('product identifiers', () => {
   })
 
   it('rewrites multiline fenced imports while preserving prose and fenced product data', () => {
-    const file = 'docs/subsystems/schedule.md'
+    const file = 'docs/subsystems/extensions.md'
     const text = "The `cordis` preset.\n```ts\nconst preset = 'cordis'\nimport {\n  Context,\n} from 'cordis'\n```\n"
     const scoped = "The `cordis` preset.\n```ts\nconst preset = 'cordis'\nimport {\n  Context,\n} from '@deepseek-ai/cordis'\n```\n"
     expectRoundTrip(file, text, scoped, 1)
@@ -180,7 +186,7 @@ describe('product identifiers', () => {
     const scoped = `# The 'cordis' preset.\n- name: ${name.replace('cordis', '@deepseek-ai/cordis')} # 'cordis' stays product data\n`
     for (const [file, wrap] of [
       ['packages/bundle/web-app/cordis.patch.yml', (value: string) => value],
-      ['docs/subsystems/schedule.md', (value: string) => `The \`cordis\` preset.\n\`\`\`yaml\n${value}\`\`\`\n`],
+      ['docs/subsystems/extensions.md', (value: string) => `The \`cordis\` preset.\n\`\`\`yaml\n${value}\`\`\`\n`],
     ] as const) {
       expectRoundTrip(file, wrap(text), wrap(scoped), 1)
     }
@@ -207,7 +213,7 @@ describe('product identifiers', () => {
   })
 
   it.each(['```ts\n```\n', "```ts\nimport 'cordis'\n"])('keeps fence line counts without requiring a closing fence', (text) => {
-    const file = 'docs/subsystems/schedule.md'
+    const file = 'docs/subsystems/extensions.md'
     const scoped = text.replace("import 'cordis'", "import '@deepseek-ai/cordis'")
     expectRoundTrip(file, text, scoped, scoped === text ? 0 : 1)
   })

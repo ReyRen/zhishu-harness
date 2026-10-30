@@ -1,10 +1,12 @@
 /** Verify cold-cache installation, native Web assets and persisted plugins with networking disabled. */
 import assert from 'node:assert/strict'
+import { execFile } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
+import { promisify } from 'node:util'
 import { serviceOwner, waitForService } from './services.mjs'
 
 const root = await mkdtemp(join(tmpdir(), 'dsh-offline-market-smoke-'))
@@ -58,6 +60,7 @@ async function startWeb() {
   headers = { host: authority, cookie }
   const page = await webRequest('/')
   assert.ok(page.body.includes('meow-memory/client'), 'Native Web must preload the default memory UI')
+  assert.ok(page.body.includes('@zhishu/dsh-overlay-workbenches/client'), 'Native Web must preload the workbench UI')
   assert.equal(page.status, 200)
   const html = page.body
   assert.match(html, /<!doctype html>/iu)
@@ -89,6 +92,20 @@ try {
   assert.equal(response.status, 200)
   const catalog = await response.json()
   assert.ok(catalog.plugins.length > 0)
+  const workbenches = await (await fetch('http://127.0.0.1:4874/workbenches.json')).json()
+  assert.ok(workbenches.workbenches.length > 0)
+  const offered = await webRequest('/api/desktop-workbenches/catalog')
+  assert.equal(offered.status, 200)
+  assert.deepEqual(JSON.parse(offered.body).workbenches.map(item => item.npm), workbenches.workbenches.map(item => item.npm))
+  assert.equal((await webRequest('/api/desktop-workbenches/state', { extraHeaders: { cookie: '' } })).status, 401)
+  assert.equal((await webRequest('/api/desktop-workbenches/catalog', { extraHeaders: { host: 'undeclared.invalid' } })).status, 403)
+  const initial = JSON.parse((await webRequest('/api/desktop-workbenches/state')).body)
+  const ownership = { ...initial.state, sessionBindings: { 'offline-workbench-session': 'offline-workbench-owner' } }
+  const save = () => webRequest('/api/desktop-workbenches/state/write', { method: 'POST',
+    body: JSON.stringify({ revision: initial.revision, state: ownership }),
+    extraHeaders: { origin: `http://${authority}`, 'content-type': 'application/json' } })
+  assert.equal((await save()).status, 200)
+  assert.equal((await save()).status, 409, 'A stale window must not replace newer workbench ownership')
   const marketResponse = await webRequest('/dsh-market/registry')
   assert.equal(marketResponse.status, 200)
   assert.deepEqual(JSON.parse(marketResponse.body).registry.plugins, catalog.plugins.map(item => ({
@@ -111,6 +128,26 @@ try {
     const manifest = JSON.parse(await readFile(join(env.DSH_HOME, 'profiles/web/node_modules', name, 'package.json'), 'utf8'))
     assert.equal(manifest.version, item.version)
   }
+  const installedWorkbenches = []
+  for (const item of workbenches.workbenches) {
+    const install = () => promisify(execFile)(process.execPath, ['/opt/dsh/apps/cli/lib/bin.js', 'plugin', '--profile', 'web',
+      'add', '--registry', registry, '--save-exact', `${item.npm}@${item.version}`],
+    { env, cwd: env.DSH_DEFAULT_WORKSPACE, timeout: 120_000, maxBuffer: 2 * 1024 * 1024 })
+    // This pinned community release explicitly excludes the current DSH host.
+    // Its catalog presence must not bypass the official compatibility guard.
+    if (item.npm === 'deepseek-harness-daily' && item.version === '0.4.10') {
+      await assert.rejects(install, error => error.code === 1
+        && error.stderr.includes('is incompatible with dsh')
+        && /nothing was installed|restored package\.json, pnpm-lock\.yaml, and node_modules/u.test(error.stderr))
+      const profile = JSON.parse(await readFile(join(env.DSH_HOME, 'profiles/web/package.json'), 'utf8'))
+      assert.equal(profile.dependencies?.[item.npm], undefined)
+      continue
+    }
+    await install()
+    const manifest = JSON.parse(await readFile(join(env.DSH_HOME, 'profiles/web/node_modules', item.npm, 'package.json'), 'utf8'))
+    assert.equal(manifest.version, item.version)
+    installedWorkbenches.push(item)
+  }
   const missing = await fetch(`${registry}/dsh-intentionally-missing-offline-package`)
   assert.equal(missing.status, 404)
   await missing.body?.cancel()
@@ -121,12 +158,19 @@ try {
   await forbidden.body?.cancel()
   await owner.close()
   await startWeb()
-  for (const item of catalog.plugins) {
+  for (const item of [...catalog.plugins, ...installedWorkbenches]) {
     const name = item.npm ?? item.name
     const manifest = JSON.parse(await readFile(join(env.DSH_HOME, 'profiles/web/node_modules', name, 'package.json'), 'utf8'))
     assert.equal(manifest.version, item.version)
   }
-  console.log('Offline market: cold-cache installation, authenticated native Web, restart persistence and read-only registry passed')
+  const restored = JSON.parse((await webRequest('/api/desktop-workbenches/state')).body)
+  assert.deepEqual(restored.state.sessionBindings, ownership.sessionBindings)
+  await owner.close()
+  env.DSH_HOME = join(root, 'other-user-home')
+  await startWeb()
+  const separate = JSON.parse((await webRequest('/api/desktop-workbenches/state')).body)
+  assert.deepEqual(separate.state.sessionBindings, {})
+  console.log('Offline market: compatible cold-cache plugins/workbenches, incompatible-release rejection, native Web, ownership conflict/restart/isolation and read-only registry passed')
 } catch (error) {
   console.error(logs.replace(/([?&]token=)[\w-]+/gu, '$1<redacted>'))
   throw error

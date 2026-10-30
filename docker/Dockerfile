@@ -141,6 +141,11 @@ COPY --from=market-dependencies /opt/dsh/market-registry/node_modules /opt/dsh/m
 COPY --chmod=0755 docker/container-entrypoint.sh /opt/dsh/deploy/container-entrypoint.sh
 COPY --chmod=0755 docker/bwrap /usr/local/bin/bwrap
 
+# Plugin-manager metadata probes use pnpm's own registry configuration too.
+# Keep them on the bundled private source rather than waiting on public npm.
+ENV npm_config_registry=http://127.0.0.1:4873
+ENV pnpm_config_registry=http://127.0.0.1:4873
+
 FROM runtime AS validated
 
 RUN --network=none node /opt/dsh/docker/smoke-office.mjs \
