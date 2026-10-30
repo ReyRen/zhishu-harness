@@ -138,7 +138,7 @@ try {
     if (item.npm === 'deepseek-harness-daily' && item.version === '0.4.10') {
       await assert.rejects(install, error => error.code === 1
         && error.stderr.includes('is incompatible with dsh')
-        && error.stderr.includes('restored package.json, pnpm-lock.yaml, and node_modules'))
+        && /nothing was installed|restored package\.json, pnpm-lock\.yaml, and node_modules/u.test(error.stderr))
       const profile = JSON.parse(await readFile(join(env.DSH_HOME, 'profiles/web/package.json'), 'utf8'))
       assert.equal(profile.dependencies?.[item.npm], undefined)
       continue
