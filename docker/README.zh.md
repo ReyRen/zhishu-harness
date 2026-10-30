@@ -58,7 +58,7 @@ docker run --rm --init --network none --entrypoint node "$IMAGE" /opt/dsh/docker
 
 Host 自动获得 `DSHM_REGISTRY_URL`、`DSHM_NPM_MIRROR`，并关闭 peer 自动安装。工作台列表未单独设置时使用默认的 `http://127.0.0.1:4874/workbenches.json`，构建镜像不必设置 `ZHISHU_WORKBENCH_CATALOG_URL`。变量对照见 [私有源 README](../market-registry/README.zh.md#environment-variables)。用户仍通过原生市场安装插件与工作台。profile、已安装包和设置保存在现有 JFS 挂载中的 `DSH_HOME`；临时仓库数据从镜像重建。新增目录或包版本需要重建镜像，并带上该包全部非宿主运行时依赖。
 
-构建在断网环境执行 [smoke-market.mjs](smoke-market.mjs)：使用全新 profile 和空包缓存安装全部目录插件，认证原生 Web 并获取插件客户端，使用同一 profile 重启 Web，再检查缺包及发布请求被拒绝。不挂载用户数据时可重复检查：
+构建在断网环境执行 [smoke-market.mjs](smoke-market.mjs)：使用全新 profile 和空包缓存安装全部目录插件与工作台，认证原生 Web 并获取插件客户端，检查工作台归属的写入冲突、重启持久化和用户隔离，再检查缺包及发布请求被拒绝。不挂载用户数据时可重复检查：
 
 ```bash
 docker run --rm --init --network none --entrypoint node "$IMAGE" /opt/dsh/docker/smoke-market.mjs

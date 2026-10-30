@@ -58,7 +58,7 @@ The image includes the same [private catalog and community tarballs](../market-r
 
 The Host receives `DSHM_REGISTRY_URL`, `DSHM_NPM_MIRROR` and disabled automatic peer installation. The workbench catalog uses `http://127.0.0.1:4874/workbenches.json` when unset, so building the image does not require `ZHISHU_WORKBENCH_CATALOG_URL`. See the [private-registry README](../market-registry/README.md#environment-variables) for the variable table. Users install plugins and workbenches through the native market. Their profile, installed packages and settings remain under `DSH_HOME` on the existing JFS mount; temporary registry storage is recreated from the image. Rebuild the image to deliver a new catalog or package version, including all of its non-host runtime dependencies.
 
-The build runs [smoke-market.mjs](smoke-market.mjs) with networking disabled: it installs every catalog package into a fresh profile and empty package cache, authenticates native Web and fetches its plugin clients, restarts Web using the same profile, and checks missing-package and publishing rejection. Repeat without user data:
+The build runs [smoke-market.mjs](smoke-market.mjs) with networking disabled: it installs every catalog plugin and workbench into a fresh profile and empty package cache, authenticates native Web and fetches its plugin clients, checks workbench ownership conflicts, restart persistence and user isolation, then rejects missing packages and publishing requests. Repeat without user data:
 
 ```bash
 docker run --rm --init --network none --entrypoint node "$IMAGE" /opt/dsh/docker/smoke-market.mjs

@@ -1,3 +1,4 @@
+import { installFileActions } from './file-actions.ts'
 import type { ProductEventMap, ProductEvent } from '@deepseek-ai/dsh-client-product-analytics/types'
 import { WINDOWS_TITLEBAR_HEIGHT } from './windows-layout.ts'
 /** Electron shell: desktop project ownership, custom protocol, windows, and lifecycle. */
@@ -827,6 +828,7 @@ async function main(): Promise<void> {
       || !event.senderFrame.url.startsWith('dsh-app://app/')) throw new Error('Rejected Platform command')
     return owner
   }
+  installFileActions(assertMainApplication, () => hostUrl)
   ipcMain.on(PLATFORM_IPC.bootstrap, (event) => {
     try { event.returnValue = platformView.bootstrap(event) }
     catch { event.returnValue = null }
@@ -1060,33 +1062,38 @@ async function main(): Promise<void> {
     ...process.platform === 'darwin' || process.platform === 'win32'
       ? [{ label: currentDesktopLocale().messages.cliCommandMenu, click: () => { void commandManager.show() } }] : [],
     { type: 'separator' },
-    { label: currentDesktopLocale().messages.reloadPageMenu, accelerator: 'CmdOrCtrl+R', click: () => {
+    ...development ? [
+      { label: currentDesktopLocale().messages.reloadPageMenu, accelerator: 'CmdOrCtrl+R', click: () => {
       // Start the model page before the conversation document. Reloading the
       // window document first keeps the main process inside that navigation,
       // so the visible business page does not begin until it returns.
-      modelGate?.reload()
-      const window = mainWindow
-      if (window !== undefined && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.reload()
-    } },
-    { label: currentDesktopLocale().messages.restartAppHostMenu, click: () => {
-      if (quitting) return
-      app.relaunch()
-      quitWithoutConfirmation()
-    } },
+        modelGate?.reload()
+        const window = mainWindow
+        if (window !== undefined && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.reload()
+      } },
+      { label: currentDesktopLocale().messages.restartAppHostMenu, click: () => {
+        if (quitting) return
+        app.relaunch()
+        quitWithoutConfirmation()
+      } },
+    ] : [],
+    { role: 'toggleDevTools', label: currentDesktopLocale().messages.toggleDevToolsMenu },
     { type: 'separator' },
     ...hideCommands,
     { role: 'quit', ...(darwin ? { label: currentDesktopLocale().messages.quitApplication }
       : process.platform === 'win32' ? { label: currentDesktopLocale().messages.exitApplication } : {}) },
   ]
-  const devToolsItems: MenuItemConstructorOptions[] = [
+  const devToolsF12Shortcut: MenuItemConstructorOptions = { role: 'toggleDevTools', visible: false, accelerator: 'F12' }
+  const windowsDevToolsShortcuts: MenuItemConstructorOptions[] = [
     { role: 'toggleDevTools', visible: false },
-    { role: 'toggleDevTools', visible: false, accelerator: 'F12' },
+    devToolsF12Shortcut,
   ]
   const refreshApplicationMenu = (): void => {
-    Menu.setApplicationMenu(Menu.buildFromTemplate(process.platform === 'win32' ? devToolsItems : [{
-      label: darwin ? app.name : currentDesktopLocale().messages.application,
-      submenu: [...applicationItems(), ...devToolsItems],
-    }, ...platformMenus()]))
+    Menu.setApplicationMenu(Menu.buildFromTemplate(process.platform === 'win32'
+      ? windowsDevToolsShortcuts : [{
+        label: darwin ? app.name : currentDesktopLocale().messages.application,
+        submenu: [...applicationItems(), devToolsF12Shortcut],
+      }, ...platformMenus()]))
     tray?.relabel()
   }
   refreshApplicationMenu()
