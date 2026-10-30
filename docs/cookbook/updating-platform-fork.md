@@ -64,7 +64,7 @@ git diff origin/master -- docker packages/api/workspace-controller packages/host
 
 Review automatic merges too: default workspace creation, user-root boundaries, authenticated settings, full Web and plugin proxy paths, runtime/Office skills, lockfiles and Desktop packaging. Remove obsolete adaptations when official code replaces them. The optional official experimental market remains disabled by default; do not remove the installed third-party market merely because both packages exist.
 
-Follow the repository's pre-push and documentation skills. Select tests for the actual diff; do not disable failing checks. Re-record paired-document metadata after editing both languages.
+Follow the repository's pre-push and documentation skills. Select tests for the actual diff; do not disable failing platform release checks. Re-record paired-document metadata after editing both languages.
 
 ```bash
 pnpm install --frozen-lockfile
@@ -84,6 +84,8 @@ git push -u origin sync-upstream-YYYY-MM-DD
 When using a production image as a Linux test environment, set `NODE_ENV=test` and unset inherited DSH home/workspace/runtime variables. Use `pnpm run clean` when reusing a worktree that contains outputs from removed packages.
 
 Build a separately tagged verification image and test actual bubblewrap command execution, Web login/settings/plugin loading and Office rendering before merging. Such an image is not a production main image. Open a PR **only to ReyRen/zhishu-harness:main**. Merge only after conflicts are resolved and critical checks pass. If fork checks require official-only runners or credentials, verify that exact cause and provide equivalent Linux evidence; do not excuse real code failures.
+
+Fork main keeps [upstream CI](../../.github/workflows/ci.yml) on `workflow_dispatch` only, including its job conditions. Do not run or retry it automatically, wait for it, or require a GitHub browser login for platform releases. Preserve this setting when merging upstream; Fork master still mirrors official source. Historical failures in this optional workflow remain recorded as failures, without changing thresholds or calling them passes. They do not block platform releases; the build, type, documentation, dependency, storage/isolation, sandbox, Office, native Web and offline-market checks above still must pass. Other workflow triggers remain unchanged.
 
 ## 3. Update the canonical build checkout
 
