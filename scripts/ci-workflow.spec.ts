@@ -481,6 +481,12 @@ describe('CI workflow', () => {
 
     expect(windowsWorkflow.jobs['windows-observational']).toBeUndefined()
     expect(windowsBuild['continue-on-error']).not.toBe(true)
+    const channelCheck = buildCommands.find(step => step.name === 'Verify Desktop updater dependency versions')
+    expect(channelCheck).toMatchObject({ shell: 'pwsh' })
+    expect(channelCheck?.['continue-on-error']).not.toBe(true)
+    expect(channelCheck?.run).toContain('node apps/desktop/tests/updates/electron-updater/check-versions.mjs')
+    expect(buildCommands.indexOf(channelCheck!))
+      .toBeGreaterThan(buildCommands.findIndex(step => step.run === 'pnpm run check:ci:windows-blocking'))
     const observational = buildCommands.find(step => step.id === 'observational')
     expect(observational).toMatchObject({
       run: 'pnpm run check:ci:windows-observational-ready',
@@ -544,7 +550,8 @@ describe('CI workflow', () => {
     expect(windowsAggregate.needs).toEqual(['windows-build', 'windows-native-tests'])
     expect(windowsAggregate.name).toBe('windows checks passed')
     expect(windowsAggregate['runs-on']).toBe(aggregate['runs-on'])
-    expect(windowsAggregate.if).toBe(aggregate.if)
+    expect(windowsAggregate.if).toBe("${{ !cancelled() && github.event_name == 'pull_request' }}")
+    expect(aggregate.if).toBe("${{ !cancelled() && github.event_name == 'workflow_dispatch' }}")
     // The benchmark lane is a required verdict input and runs alone so its
     // wall-clock budgets never share a runner with a concurrent aggregate.
     expect(aggregate.needs).toContain('node-24-bench')
@@ -675,7 +682,7 @@ describe('CI workflow', () => {
     }
   })
 
-  it('runs required benchmarks on a four-vCPU Blacksmith runner and falls back to hosted Linux', () => {
+  it('runs manually requested benchmarks on a four-vCPU Blacksmith runner and falls back to hosted Linux', () => {
     const workflow = loadWorkflow('.github/workflows/ci.yml')
     const benchmark = workflowJob(workflow, 'node-24-bench')
     const aggregate = workflowJob(workflow, 'all-checks-passed')
@@ -688,7 +695,7 @@ describe('CI workflow', () => {
       expect(evaluateRunsOn(benchmark['runs-on'], { vars: { DSH_CI_FAILOVER_LINUX: mode } })).toBe('ubuntu-24.04')
     }
     expect(JSON.stringify(benchmark.steps)).not.toContain('DSH_CI_FAILOVER_LINUX')
-    expect(benchmark.if).toBe("github.event_name == 'pull_request'")
+    expect(benchmark.if).toBe("github.event_name == 'workflow_dispatch'")
     expect(benchmark.needs).toBeUndefined()
     expect(benchmark['continue-on-error']).toBeUndefined()
     expect(benchmark.env).toBeUndefined()
@@ -814,13 +821,21 @@ describe('CI workflow', () => {
 
     // The exact event sets are what keep master-only jobs out of the PR check
     // panel: ci-master triggers only on push(master) + workflow_dispatch and
-    // never on pull_request; ci.yml is exactly pull_request-only. Assert the
+    // never on pull_request; Fork ci.yml is manual-only. Assert the
     // full sets so losing the wrong event, or gaining an extra one, fails.
     if (!isRecord(workflow.on) || !isRecord(prWorkflow.on)) {
       throw new TypeError('both CI workflows must define on')
     }
     expect(Object.keys(workflow.on).sort()).toEqual(['push', 'workflow_dispatch'])
-    expect(Object.keys(prWorkflow.on)).toEqual(['pull_request'])
+    expect(Object.keys(prWorkflow.on)).toEqual(['workflow_dispatch'])
+    for (const [name, job] of Object.entries(prWorkflow.jobs)) {
+      if (!isRecord(job)) throw new TypeError(`${name} must be defined`)
+      expect(job.if, `${name} must remain manual-only`).toBe(
+        name === 'all-checks-passed'
+          ? "${{ !cancelled() && github.event_name == 'workflow_dispatch' }}"
+          : "github.event_name == 'workflow_dispatch'",
+      )
+    }
     const windowsWorkflow = loadWorkflow('.github/workflows/ci-windows.yml')
     if (!isRecord(windowsWorkflow.on)) throw new TypeError('CI Windows workflow must define on')
     expect(Object.keys(windowsWorkflow.on)).toEqual(['pull_request'])
@@ -1772,7 +1787,7 @@ describe('Policy workflow shells', () => {
 describe('Policy workflows', () => {
   const workflows = [
     ['pr-check-on-head-branch.yml', ['master']],
-    ['pr-check-after-approve.yml', ['approve', 'review']],
+    ['pr-check-after-approve.yml', ['approve']],
   ] as const
 
   function stepsOf(job: Record<string, unknown>): Record<string, unknown>[] {
@@ -1793,6 +1808,34 @@ describe('Policy workflows', () => {
       if (check === undefined || !isRecord(check.env)) throw new TypeError(`${file} ${job} must run the check action with env`)
       expect(String(check.env.CHECK_MODE)).toContain('vars.MERGE_POLICY_')
     }
+  })
+
+  it('runs on the release branches as well as master, on both pull requests and base-branch pushes', () => {
+    const branches = ['master', 'release/dsh-[0-9]+.[0-9]+.[0-9]+']
+    for (const file of ['pr-check-on-head-branch.yml', 'pr-check-after-approve.yml']) {
+      const workflow = loadWorkflow('.github/workflows/' + file)
+      const events = workflow.on
+      if (!isRecord(events) || !isRecord(events.pull_request_target)) throw new TypeError(`${file} must trigger on pull_request_target`)
+      expect(events.pull_request_target.branches).toEqual(branches)
+    }
+    const workflow = loadWorkflow('.github/workflows/pr-check-on-base-branch.yml')
+    const events = workflow.on
+    if (!isRecord(events) || !isRecord(events.push)) throw new TypeError('the base-branch workflow must trigger on push')
+    expect(events.push.branches).toEqual(branches)
+  })
+
+  it('decides the review verdict in one Approve Check job that can publish the check run', () => {
+    const workflow = loadWorkflow('.github/workflows/pr-check-after-approve.yml')
+    if (!isRecord(workflow.jobs)) throw new TypeError('the workflow must define jobs')
+    expect(Object.keys(workflow.jobs)).toEqual(['approve'])
+    const job = workflow.jobs.approve
+    if (!isRecord(job) || !isRecord(job.permissions)) throw new TypeError('the approve job must declare permissions')
+    expect(job.name).toBe('Approve Check')
+    expect(job.permissions.checks).toBe('write')
+    const check = stepsOf(job).find(step => typeof step.uses === 'string' && step.uses.startsWith('deepseek-harness/deepseek-harness-check@'))
+    if (check === undefined || !isRecord(check.env)) throw new TypeError('the job must run the check action with env')
+    expect(String(check.env.CHECK_MODE)).toContain('vars.MERGE_POLICY_HEAD_DIFF')
+    expect(JSON.stringify(workflow)).not.toContain('MERGE_POLICY_REVIEW')
   })
 
   it('keeps the pre-merge build behind the merge step, which honours the mode on its failures', () => {

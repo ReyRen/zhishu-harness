@@ -1,4 +1,6 @@
-vi.mock('../src/web-document.ts', () => ({ authenticateWebHost: async () => 'test-cookie', serveWebDocument: vi.fn(), forwardWebRequest: vi.fn() }))
+vi.mock('../src/web-document.ts', () => ({
+  authenticateWebHost: async () => 'test-cookie', serveWebDocument: vi.fn(), forwardWebRequest: vi.fn(), removeLegacyHostCookies: async () => {},
+}))
 /** Welcome startup uses the Host before transitioning to the workspace. */
 
 import { afterEach, expect, it, vi } from 'vitest'
@@ -93,7 +95,6 @@ vi.mock('electron', () => ({
     showInactive = state.showInactiveWorkspace
     async loadURL(url: string) { state.contents = this.webContents; await state.loadWorkspace(url); this.ready?.() }
   },
-  net: { fetch: vi.fn() },
   nativeTheme: state.nativeTheme,
   WebContentsView: class {
     webContents = {
@@ -101,7 +102,7 @@ vi.mock('electron', () => ({
       setBackgroundThrottling: vi.fn(),
       openDevTools: vi.fn(),
       setWindowOpenHandler: vi.fn(),
-      on: vi.fn(),
+      on: vi.fn(), cookies: {},
       send: vi.fn(),
       isDestroyed: () => false,
       loadURL: vi.fn(async (url: string) => { state.modelLoads.push(url) }),
@@ -112,7 +113,7 @@ vi.mock('electron', () => ({
   },
   session: {
     defaultSession: {
-      on: vi.fn(),
+      on: vi.fn(), cookies: {},
       setPermissionCheckHandler: vi.fn(), setPermissionRequestHandler: vi.fn(), webRequest: { onBeforeSendHeaders: vi.fn() },
     },
     fromPartition: () => ({ cookies: { get: async () => [] } }),
@@ -153,7 +154,7 @@ vi.mock('../src/host-process.ts', () => ({
   },
 }))
 vi.mock('../src/welcome-backend.ts', () => ({
-  connectDesktopWelcome: async () => ({
+  connectDesktopWelcome: () => ({
     analyticsEnabled: async () => false,
     readLocalePreference: async () => state.preference,
     read: async () => {
