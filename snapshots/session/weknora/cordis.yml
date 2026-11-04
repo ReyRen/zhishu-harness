@@ -1,0 +1,12 @@
+- id: agent-default-model
+  config: { provider: weknora-smoke, model: weknora-smoke }
+- insert:
+    - id: weknora-snapshot-backend
+      name: ./fixture.mjs
+      config: { model: true }
+    - id: weknora
+      name: ../../../node_modules/@wxg-prc-cpg/dsh-weknora/dist/index.js
+      config:
+        baseUrl: http://weknora.test/api/v1
+        apiKey: snapshot-key
+        resourceUrls: handle

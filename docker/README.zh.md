@@ -54,6 +54,8 @@ docker run --rm --init --network none --entrypoint node "$IMAGE" /opt/dsh/docker
 
 ## 离线插件市场
 
+镜像还为所有 Web 用户携带[内置 WeKnora 工具](../overlay/weknora/README.zh.md)。后端认证需要部署时配置，容器示例透传 `WEKNORA_*` 变量。构建中的 [WeKnora 冒烟验证](smoke-weknora.mjs) 使用模拟后端和确定性模型，不访问外部网络。
+
 镜像包含与桌面端相同的[私有目录和社区安装包](../market-registry/README.zh.md)，以及 Verdaccio 和锁定的 Linux 依赖。启动时导入全部随包 tarball，先在 `127.0.0.1:4873` 启动包仓库、在 `127.0.0.1:4874` 启动目录，再启动 Web。两个地址都留在各自容器内部，不需要宿主机端口或额外代理规则。禁止发布包；缺包不会回退到公网 npm。任一服务失败会停止容器，不让 Web 继续连接失效的市场。
 
 Host 自动获得 `DSHM_REGISTRY_URL`、`DSHM_NPM_MIRROR`，并关闭 peer 自动安装。工作台列表未单独设置时使用默认的 `http://127.0.0.1:4874/workbenches.json`，构建镜像不必设置 `ZHISHU_WORKBENCH_CATALOG_URL`。变量对照见 [私有源 README](../market-registry/README.zh.md#environment-variables)。用户仍通过原生市场安装插件与工作台。profile、已安装包和设置保存在现有 JFS 挂载中的 `DSH_HOME`；临时仓库数据从镜像重建。新增目录或包版本需要重建镜像，并带上该包全部非宿主运行时依赖。

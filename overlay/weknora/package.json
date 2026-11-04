@@ -1,0 +1,9 @@
+{
+  "name": "@wxg-prc-cpg/dsh-weknora",
+  "private": true,
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

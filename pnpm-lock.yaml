@@ -187,6 +187,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.11
         version: 4.1.11(vitest@4.1.11)
+      '@wxg-prc-cpg/dsh-weknora':
+        specifier: 0.1.0
+        version: 0.1.0
       '@yao-pkg/pkg':
         specifier: 6.21.0
         version: 6.21.0(patch_hash=6004ea831bf18a0272276f3308456b7799d5ac32a5e69c138008b6329c1bfb9f)(supports-color@9.4.0)
@@ -915,6 +918,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../vendor/schemastery
         version: link:../../vendor/schemastery
+      '@wxg-prc-cpg/dsh-weknora':
+        specifier: 0.1.0
+        version: 0.1.0
       dshmarket:
         specifier: 1.66.22
         version: 1.66.22(@deepseek-ai/cordis@vendor+cordis)(@deepseek-ai/dsh-settings@packages+settings+settings)(@deepseek-ai/schemastery@vendor+schemastery)
@@ -22086,6 +22092,10 @@ packages:
   '@vueuse/shared@12.8.2':
     resolution: {integrity: sha512-dznP38YzxZoNloI0qpEfpkms8knDtaoQ6Y/sfS0L7Yki4zh40LFHEhur0odJC6xTHG5dxWVPiUWBXn+wCG2s5w==}
 
+  '@wxg-prc-cpg/dsh-weknora@0.1.0':
+    resolution: {integrity: sha512-L6q32rNrDBU3Q8xE0SGYMlieC8sKswrp5GOslGka4UnH+f4boxLXLLMgkceE+Ub/c+C2tQ2rsaHXky9bO3pXlw==}
+    engines: {node: '>=20.11'}
+
   '@xmldom/xmldom@0.8.15':
     resolution: {integrity: sha512-/5NV/vDALVFDXgLmfsy9TRCBlKwO2LNBFzpzvb9iIj+jR+eSc6DLYYvVOdivT/jm7MtU6TebYuRmzEOI7w40UA==}
     engines: {node: '>=10.0.0'}
@@ -29585,6 +29595,8 @@ snapshots:
       vue: 3.5.42(typescript@6.0.3)
     transitivePeerDependencies:
       - typescript
+
+  '@wxg-prc-cpg/dsh-weknora@0.1.0': {}
 
   '@xmldom/xmldom@0.8.15': {}
 

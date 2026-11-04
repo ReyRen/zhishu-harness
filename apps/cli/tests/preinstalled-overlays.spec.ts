@@ -39,7 +39,7 @@ describe('platform plugin distribution', () => {
     expect(profile.skippedBundles).toEqual([])
   })
 
-  it.each(['dshmarket', 'meow-memory'])('includes %s in the private installation table only', async (name) => {
+  it.each(['dshmarket', 'meow-memory', '@wxg-prc-cpg/dsh-weknora'])('includes %s in the private installation table only', async (name) => {
     const home = directory()
     const platform = await createRuntimeResolution({
       installAnchor: fileURLToPath(new URL('apps/desktop-host/package.json', root)), home,
@@ -49,7 +49,7 @@ describe('platform plugin distribution', () => {
     expect(publicCLI.entries.find(entry => entry.name === name)).toBeUndefined()
   })
 
-  it.each([['dshmarket', '1.66.22'], ['meow-memory', '0.32.1']])(
+  it.each([['dshmarket', '1.66.22'], ['meow-memory', '0.32.1'], ['@wxg-prc-cpg/dsh-weknora', '0.1.0']])(
     'ships %s through platform assemblies and shares the Host runtime', (name, version) => {
       expect(source.devDependencies[name]).toBe(version)
       expect(host.dependencies[name]).toBe(version)
@@ -60,7 +60,7 @@ describe('platform plugin distribution', () => {
         const pluginRequire = createRequire(installed)
         for (const peer of name === 'dshmarket'
           ? ['@deepseek-ai/cordis', '@deepseek-ai/schemastery', '@deepseek-ai/dsh-settings']
-          : ['@deepseek-ai/schemastery', '@deepseek-ai/dsh-llm']) {
+          : name === 'meow-memory' ? ['@deepseek-ai/schemastery', '@deepseek-ai/dsh-llm'] : []) {
           expect(realpathSync(pluginRequire.resolve(peer))).toBe(realpathSync(cliRequire.resolve(peer)))
         }
       }
@@ -78,7 +78,7 @@ function directory(manifest?: object): string {
 }
 
 describe('preinstalled bundle ownership', () => {
-  it.each(['dshmarket', 'meow-memory'])('defers to the installed %s bundle', (name) => {
+  it.each(['dshmarket', 'meow-memory', '@wxg-prc-cpg/dsh-weknora'])('defers to the installed %s bundle', (name) => {
     const overlay = directory({ name, dsh: { bundle: { patch: './cordis.patch.yml' } } })
     expect(profileOwnsOverlayBundle(overlay, [{ packageName: name }])).toBe(true)
     expect(profileOwnsOverlayBundle(overlay, [{ packageName: 'another-bundle' }])).toBe(false)
