@@ -183,9 +183,9 @@ describe('desktop macOS release signature', () => {
     expect(config.win.signtoolOptions.publisherName).toBeUndefined()
   })
 
-  it('rejects a stable LAN feed for the current prerelease version', async () => {
+  it('keeps a stable LAN channel independent of the current prerelease version', async () => {
     const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
-    expect(() => createElectronBuilderConfig({
+    const config = createElectronBuilderConfig({
       DSH_DESKTOP_APP_ID: RELEASE_ENVIRONMENT.DSH_DESKTOP_APP_ID,
       DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://policy.example.com',
       DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: JSON.stringify({ allowedAuthOrigins: ['https://login.example.com'] }),
@@ -193,7 +193,15 @@ describe('desktop macOS release signature', () => {
       DSH_DESKTOP_UNSIGNED: '1',
       DSH_DESKTOP_UPDATE_CHANNEL: 'stable',
       DSH_DESKTOP_LAN_FEED_URL: 'http://10.5.60.154:8070/feeds/win-x64/',
-    }, 'win32', 'x64')).toThrow(/stable requires a stable version/u)
+    }, 'win32', 'x64')
+    expect(config.publish).toEqual([{
+      provider: 'generic', url: 'http://10.5.60.154:8070/feeds/win-x64/', channel: 'stable',
+    }])
+    expect(config.extraMetadata).toMatchObject({
+      dshDesktopUpdateChannel: 'stable',
+      dshDesktopVerifyUpdateSignature: false,
+    })
+    expect(config.win.forceCodeSigning).toBe(false)
   })
 
   it.each(['arm64', 'x64'])('builds local macOS %s DMGs without release credentials or update metadata', async (arch) => {
