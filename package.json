@@ -230,6 +230,7 @@
     "@deepseek-ai/dsh-settings": "workspace:*",
     "dshmarket": "1.66.22",
     "meow-memory": "0.32.1",
+    "@wxg-prc-cpg/dsh-weknora": "0.1.0",
     "@deepseek-ai/dsh-hooks-claude-code": "workspace:*",
     "@deepseek-ai/dsh-hooks-codex": "workspace:*",
     "@deepseek-ai/dsh-tool-executor-native": "workspace:*",

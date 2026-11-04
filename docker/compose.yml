@@ -22,6 +22,12 @@ services:
       DSHM_NPM_MIRROR: http://127.0.0.1:4873
       npm_config_auto_install_peers: 'false'
       pnpm_config_auto_install_peers: 'false'
+      WEKNORA_BASE_URL: ${WEKNORA_BASE_URL:-http://localhost:8080/api/v1}
+      WEKNORA_API_KEY: ${WEKNORA_API_KEY:-}
+      WEKNORA_TENANT_ID: ${WEKNORA_TENANT_ID:-}
+      WEKNORA_KNOWLEDGE_BASE_IDS: ${WEKNORA_KNOWLEDGE_BASE_IDS:-}
+      WEKNORA_AGENT_ID: ${WEKNORA_AGENT_ID:-}
+      WEKNORA_RESOURCE_URLS: ${WEKNORA_RESOURCE_URLS:-handle}
       PYTHONDONTWRITEBYTECODE: '1'
       NODE_ENV: production
       TZ: ${TZ:-Asia/Shanghai}

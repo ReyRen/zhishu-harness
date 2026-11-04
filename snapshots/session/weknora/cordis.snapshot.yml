@@ -1,0 +1,13 @@
+- id: llm-deepseek
+  disabled: true
+- id: weknora-snapshot-backend
+  config: { model: false }
+- insert:
+    - id: llm-replay
+      name: '@deepseek-ai/dsh-llm-replay'
+      config:
+        providers:
+          - id: weknora-smoke
+            name: WeKnora snapshot
+            models:
+              - id: weknora-smoke

@@ -32,7 +32,8 @@
     "@deepseek-ai/dsh-workspace": "workspace:*",
     "@deepseek-ai/dsh-plugin-manager": "workspace:*",
     "dshmarket": "1.66.22",
-    "meow-memory": "0.32.1"
+    "meow-memory": "0.32.1",
+    "@wxg-prc-cpg/dsh-weknora": "0.1.0"
   },
   "devDependencies": {
     "@deepseek-ai/cordis-plugin-loader": "workspace:~",

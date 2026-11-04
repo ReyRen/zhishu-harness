@@ -1,0 +1,8 @@
+version: 1
+scenario: weknora
+profile: headless
+composition: weknora
+recording: authored
+header:
+  class: weknora
+  pin: true
