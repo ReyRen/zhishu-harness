@@ -681,18 +681,21 @@ export class ModelPlatformGate {
       hasAccessToken: access !== '',
       contentKeys: content === undefined ? [] : Object.keys(content),
     })
+    const code = typeof record?.code === 'string' || typeof record?.code === 'number' ? String(record.code) : ''
+    const rawMessage = record?.msg ?? record?.message
+    const message = typeof rawMessage === 'string' ? rawMessage : ''
     if (!payload.ok) {
-      throw new Error(`desktop model login: SSO token unavailable (HTTP ${String(payload.status)}, code=${String(record?.code ?? '')}, msg=${String(record?.msg ?? record?.message ?? '')})`)
+      throw new Error(`desktop model login: SSO token unavailable (HTTP ${String(payload.status)}, code=${code}, msg=${message})`)
     }
     if (!access) {
-      throw new Error(`desktop model login: SSO token unavailable (code=${String(record?.code ?? '')}, msg=${String(record?.msg ?? record?.message ?? 'missing access_token')})`)
+      throw new Error(`desktop model login: SSO token unavailable (code=${code}, msg=${message || 'missing access_token'})`)
     }
     const refresh = typeof content?.refresh_token === 'string' ? content.refresh_token : undefined
     const userId = content?.user_id ?? content?.userId ?? content?.userID
     return {
       access_token: access,
       ...(refresh ? { refresh_token: refresh } : {}),
-      ...(userId != null && String(userId) !== '' ? { user_id: String(userId) } : {}),
+      ...((typeof userId === 'string' && userId !== '') || typeof userId === 'number' ? { user_id: String(userId) } : {}),
     }
   }
 
