@@ -59,7 +59,8 @@ type PanelRowProps =
   Pick<SidebarPanelMetadata, 'id' | 'label'>
   & Pick<SidebarSectionOwnerProps, 'wide'>
   & Pick<PropsRuntime<'sidebar'>, 'usePanelInfo'>
-  & Pick<InjectFace<SidebarRootInjected>, 'selectPanel' | 'trackEntryClick' | 'setPinned'>
+  & Pick<InjectFace<SidebarRootInjected>, 'openPanel' | 'trackEntryClick' | 'setPinned'>
+  & Pick<SidebarRootComponentProps, 'useSoftActivePanels'>
   & { readonly unpinLabel: string; readonly unpinTooltip: string; readonly canUnpin: boolean }
   & PropsRenderFactories
 
@@ -71,9 +72,12 @@ function officialEntry(id: string): 'plugin' | 'cron' | undefined {
 
 /** Each panel row subscribes only to its own selection state. */
 function PanelRow({
-  id, label, wide, unpinLabel, unpinTooltip, canUnpin, usePanelInfo, selectPanel, setPinned, trackEntryClick, renderFactorySlot,
+  id, label, wide, unpinLabel, unpinTooltip, canUnpin,
+  usePanelInfo, useSoftActivePanels, openPanel, setPinned, trackEntryClick, renderFactorySlot,
 }: PanelRowProps) {
-  const active = usePanelInfo(info => info.activePanelId === id)
+  const panelActive = usePanelInfo(info => info.activePanelId === id)
+  const softActive = useSoftActivePanels(ids => ids.includes(id))
+  const active = panelActive || softActive
   return (
     <div className={clsx(css.panelEntry, wide && css.panelEntryWide, active && css.panelEntryActive)}>
       <Tooltip label={label} delayMs={500} disabled={wide}>
@@ -85,7 +89,7 @@ function PanelRow({
           onClick={() => {
             const entry = officialEntry(id)
             if (entry !== undefined) trackEntryClick({ menu_name: entry, position: 'sidebar' })
-            selectPanel(id)
+            openPanel(id)
           }}
         >
           <span className={css.panelGlyph} aria-hidden="true">
@@ -154,7 +158,7 @@ export function SidebarRoot({
   drawer,
   startSession,
   toggleSidebar,
-  selectPanel,
+  openPanel,
   setPinned,
   trackEntryClick,
   useRemoteAccess,
@@ -163,12 +167,14 @@ export function SidebarRoot({
   useEntryActions,
   useShortcuts,
   usePanelInfo,
+  useSoftActivePanels,
   t,
   renderSlot,
   renderFactorySlot,
 }: SidebarRootComponentProps) {
   const panels = usePanels(snapshot => snapshot)
   const unpinned = useEntryPins(ids => ids)
+  const softActivePanels = useSoftActivePanels(ids => ids)
   const activePanelId = usePanelInfo(info => info.activePanelId)
   const hasEntryActions = useEntryActions(registered => registered)
   const shortcut = useShortcuts(rows => rows.find(row => row.id === 'sidebar.left.toggle'))
@@ -422,7 +428,8 @@ export function SidebarRoot({
                   canUnpin={hasEntryActions && id !== FIXED_PANEL_ID}
                   setPinned={setPinned}
                   usePanelInfo={usePanelInfo}
-                  selectPanel={selectPanel}
+                  useSoftActivePanels={useSoftActivePanels}
+                  openPanel={openPanel}
                   trackEntryClick={trackEntryClick}
                   renderFactorySlot={renderFactorySlot}
                 />
@@ -432,12 +439,17 @@ export function SidebarRoot({
                   wide={wide}
                   label={t('panels.more')}
                   entries={panels.filter(({ id }) => id !== FIXED_PANEL_ID)
-                    .map(({ id, label }) => ({ id, label, pinned: !unpinned.includes(id), active: id === activePanelId }))}
+                    .map(({ id, label }) => ({
+                      id,
+                      label,
+                      pinned: !unpinned.includes(id),
+                      active: id === activePanelId || softActivePanels.includes(id),
+                    }))}
                   onOpen={(id) => {
                     const entry = officialEntry(id)
                     if (entry !== undefined) trackEntryClick({ menu_name: entry, position: 'sidebar_more' })
                     const panel = panels.find(candidate => candidate.id === id)
-                    if (panel !== undefined) selectPanel(panel.id)
+                    if (panel !== undefined) openPanel(panel.id)
                   }}
                   onPinnedChange={setPinned}
                   trackEntryClick={trackEntryClick}

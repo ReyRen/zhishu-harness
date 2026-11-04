@@ -136,6 +136,11 @@ if (location.protocol === `${SCHEME}:` && location.hostname === 'app') {
       ipcRenderer.on(MODEL_SPACE_IPC.accountChanged, handler)
       return () => { ipcRenderer.off(MODEL_SPACE_IPC.accountChanged, handler) }
     },
+    getSsoToken: (clientId: string) => ipcRenderer.invoke(MODEL_SPACE_IPC.ssoToken, clientId) as Promise<{
+      access_token: string
+      refresh_token?: string
+      user_id?: string
+    }>,
     logout: () => ipcRenderer.invoke(MODEL_SPACE_IPC.logout) as Promise<void>,
   })
   contextBridge.exposeInMainWorld('dshModelSpace', {

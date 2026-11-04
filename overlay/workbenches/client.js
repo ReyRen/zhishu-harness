@@ -2665,12 +2665,57 @@ ${ACCEPTANCE_READING}先确认要公开的仓库和内容，不得公开密钥�
             h('div', { style: { display: entry && !hasCurrentSession ? 'none' : 'contents' } }, !customFrame && conversationMount)),
           ...loaded.filter((item) => !item.customFrame).map((item) => h(HeaderHost, { as: 'aside', entry: item, key: item.id, className: 'dshWbBusiness', 'data-side': item.layout?.businessSide, 'data-embedded': item.embedded === true, hidden: id !== item.id, 'aria-label': item.panelTitle }, h(PanelBoundary, { service }, h(item.Component, { service, entry: item }))))))
     }
+    function createSidebarSoftPanels() {
+      const listeners = new Set()
+      const EMPTY = []
+      let activeIds = EMPTY
+      const openers = new Map()
+      const notify = () => { for (const listener of listeners) listener() }
+      return {
+        subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener) },
+        getSnapshot() { return activeIds },
+        setActiveIds(ids) {
+          const next = [...new Set((ids || []).filter((id) => typeof id === 'string' && id))]
+          if (next.length === 0) {
+            if (activeIds === EMPTY) return
+            activeIds = EMPTY
+            notify()
+            return
+          }
+          if (next.length === activeIds.length && next.every((id, index) => id === activeIds[index])) return
+          activeIds = next
+          notify()
+        },
+        registerOpener(id, open) {
+          if (typeof id !== 'string' || !id || typeof open !== 'function') throw new Error('Invalid soft sidebar opener')
+          openers.set(id, open)
+          return () => { if (openers.get(id) === open) openers.delete(id) }
+        },
+        has(id) { return openers.has(id) },
+        open(id) {
+          const open = openers.get(id)
+          if (typeof open !== 'function') return false
+          open()
+          return true
+        },
+      }
+    }
     function apply(ctx) {
       hostLocale = ctx.locale
       ctx.effect(() => ctx.locale.register(DOWNLOAD_NS, downloadCopy), 'workbenches: download dictionaries')
       ctx.effect(() => ctx.locale.register(REGISTRATION_NS, registrationCopy), 'workbenches: registration dictionaries')
       const service = new Workbenches(ctx)
+      const softPanels = createSidebarSoftPanels()
       ctx.effect(() => ctx.reflect.provide('desktopWorkbenches', service), 'workbenches: service')
+      ctx.effect(() => ctx.reflect.provide('sidebarSoftPanels', softPanels), 'workbenches: soft sidebar panels')
+      const syncSoftSidebar = () => {
+        const panelId = ctx.layout?.panelInfo?.getSnapshot?.()?.activePanelId
+        const active = service.state.active
+        softPanels.setActiveIds(!panelId && active && softPanels.has(active) ? [active] : [])
+      }
+      ctx.effect(() => service.subscribe(syncSoftSidebar), 'workbenches: soft sidebar active sync')
+      ctx.effect(() => ctx.layout?.panelInfo?.subscribe?.(syncSoftSidebar), 'workbenches: soft sidebar panel sync')
+      syncSoftSidebar()
       ctx.effect(() => ctx.modules?.entries?.state?.subscribe?.(() => service.publish()), 'workbenches: client module failures')
       ctx.effect(() => {
         const refresh = () => service.run(service.refreshNative())

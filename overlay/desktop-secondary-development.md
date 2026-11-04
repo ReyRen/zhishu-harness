@@ -28,7 +28,7 @@
 
 退出确认被取消，或官方侧还没进入会话就需要把窗口露出来时，用 `presentLogin()` 再盖上 `/login`。
 
-会话页左下角是平台账号，不是 DeepSeek 账号。官方那一行 `ui-settings-account` 保持关闭。`overlay/platform-account` 占住原来的 `settings.launcher`：头像和账号名来自平台登录，弹出层里是「设置」和「退出登录」。设置仍打开 Harness 自己的设置。退出登录通知壳，由业务页执行原来的退出并回到 `/login`。
+会话页左下角是平台账号，不是 DeepSeek 账号。官方那一行 `ui-settings-account` 保持关闭。`overlay/platform-account` 占住原来的 `settings.launcher`：头像和账号名来自平台登录，弹出层里是「设置」和「退出登录」。设置仍打开 Harness 自己的设置。退出登录通知壳，由业务页执行原来的退出并回到 `/login`。会话页上的账号与知识库领票怎样经主进程和业务页协作，见下面「会话与业务怎么通信」。
 
 业务页只在桌面壳里改。model 预加载注入 `window.zhishuDesktop.embedded`。有这个标记时藏起蓝顶栏和侧栏自己的收起按钮，侧栏左下角放平台账号菜单（用户信息、修改密码、值班电话、用户手册、其他平台、全屏、退出登录），标签栏保留。窗口左上角的折叠按钮按当前空间切换：会话时收会话侧栏，业务时通知业务页收它自己的侧栏。会话侧栏收起后钉在标题栏上的「新会话」按钮，切到业务时藏起，菜单回到折叠按钮旁边。`Header.vue` 仍负责拉取用户信息和相关登录副作用，对话框挂到 `body`。浏览器直接打开 model 没有这个标记，顶栏、侧栏和收起按钮保持原样。
 
@@ -40,6 +40,119 @@
 
 标题栏和平台页不在同一个文档里。登录状态用 `zhishu-model:state`、`zhishu-model:switch`、`zhishu-model:state-changed`、`zhishu-model:menu` 传递。对话页经常比登录门更早打开，所以状态会补发，标题栏在按钮还藏着时也会自己再问。这两处的细节见后面的打包说明。
 
+### 会话与业务怎么通信
+
+两个空间都不是跑在主进程里的页面。主进程只负责窗口、`WebContentsView` 的显隐，以及 IPC 编排。会话是主窗口自己的文档（`dsh-app://app/`，一套渲染进程）；业务是盖在上面的 `WebContentsView`（model 站点，另一套渲染进程，分区 `persist:zhishu-model`）。两边不能直接调对方页面里的 JS 模块，只能经主进程或各自的 preload 桥接。
+
+会话页通过 `preload-app.ts` 暴露 `zhishuPlatform`（账号、退出、领票）和 `dshModelSpace`（空间状态与切换）。业务页通过 `preload-model-gate.ts` 暴露 `zhishuDesktop`（`embedded`、`publishAccount`）和同名的 `dshModelSpace`。主进程侧的总闸在 `model-gate.ts`。
+
+桌面要「动」到业务时，现在有两类做法。都可以满足需要；差别在有没有返回值、要不要复用 model 内部封装。
+
+**A. 事件桥：主进程通知业务页，由 model 业务代码执行**
+
+适合单向命令，不需要把结果同步回会话。
+
+1. 会话页 `invoke`（例如退出登录）。
+2. 主进程 `model-gate.ts` 校验发送方后，向业务页 `webContents` 发 IPC。
+3. 业务页 preload（`preload-model-gate.ts`）收到后 `document.dispatchEvent`，例如 `zhishu-desktop-logout`、`zhishu-desktop-sidebar-toggle`。
+4. model 里监听这些事件（如 `Header.vue`、`DesktopSidebar.vue`），再走平台自己的退出、收侧栏等逻辑。
+
+反向也走这条桥：业务页登录后调用 `zhishuDesktop.publishAccount`，主进程缓存账号，再 `accountChanged` 推给会话页上的 `overlay/platform-account`。会话侧边栏上的头像和「退出」只是壳上的入口；真正清平台会话仍在业务页。
+
+注意：普通 `dispatchEvent` 发完就结束，**没有返回值**。这不是说 JavaScript 的 `async/await` 不能用，而是当前 A 类事件没有「请求 id + 回程」。若要让业务页用现有 `getSsoToken` 领票再把 token 交回会话，需要另做带回调的 RPC；现在没有做成那种桥。
+
+**B. 主进程代调：会话 `invoke`，主进程拿结果再返回**
+
+适合会话必须立刻拿到数据的场景，例如知识库 SSO。
+
+1. 会话页（如 `overlay/knowledge-base`）调用 `zhishuPlatform.getSsoToken(clientId)`。
+2. 主进程 `model-gate.ts` 的 `ipcMain.handle` 处理；当前实现要求平台已登录，并在业务页 `WebContents` 里执行原生 `fetch('/DistributedAISystem/getSsoToken?…', { credentials: 'include' })`，用业务分区里的平台会话领票。
+3. 解析 JSON 后把 `access_token` 等字段作为 `invoke` 的返回值交回会话页，再由知识库 `postMessage` 给 weknora iframe。
+
+这条路径**不复用** model 仓库里的 axios / `distributed-ai-system.js` / `gcs-harness.js` 封装，而是桌面侧重写请求。主进程也曾用 `net.fetch` 自带 Cookie 头；分区里过大的 `dsh-auth-*` 等会触发后台 HTTP 400（Request header is too large），因此领票改到已登录的业务页里发。领票前还会清掉不应发给平台的桌面残留 cookie。知识库 iframe 也应等 `dshModelSpace` 报告已登录后再加载，避免业务页还在 `/login` 时领票失败。
+
+对照：
+
+| | A. 事件桥 | B. 主进程代调 |
+|---|---|---|
+| 典型用途 | 退出登录、业务侧栏折叠 | `getSsoToken`、主进程读账号 |
+| 执行业务逻辑的位置 | model 页面代码 | 主进程编排；HTTP 可在业务页 `fetch` 或主进程 `net.fetch` |
+| 是否复用 model 接口封装 | 是 | 否（桌面侧重写） |
+| 会话能否直接拿到返回值 | 当前不能（单向事件） | 能（`invoke` 的 Promise） |
+| 为何常选 B 做领票 | — | 少建一层回程协议，对接会话侧更直接 |
+
+容器 / `dsh:private`（profile `web`）走另一条领票桥，与桌面对比、本地怎么测、WeKnora 配置坑见下一节「知识库（WeKnora）：桌面与 Web」。
+
+### 知识库（WeKnora）：桌面与 Web
+
+知识库 workbench 在 `overlay/knowledge-base`，对所有带 Web 的 profile 加载（不只 desktop）。**Harness ↔ WeKnora 的 `weknora:sso-*` 协议两边共用**；差别只在「谁给知识库发平台票」。
+
+#### 场景对比
+
+| | 桌面会话空间 | Web / 容器化（model 嵌 harness） |
+|---|---|---|
+| Harness 在哪 | 主窗口文档 `dsh-app://app/` | model `/harnessAgent` 里的 iframe（开发常见 `http://localhost:3002` → 代理到本地或远端 harness） |
+| 知识库 UI | 同一会话页里的 workbench + WeKnora iframe | 同上，跑在 harness iframe 文档里 |
+| WeKnora 父页 origin（白名单要认的） | `dsh-app://app` | harness 的 http(s) 源，如 `http://localhost:3002` |
+| 领 `gcs-webnora` | `zhishuPlatform.getSsoToken` → 主进程在已登录业务页 `fetch` | harness → model：`zhishu:sso-request` / `zhishu:sso-response`；model `mintWeknoraSsoTicket()` |
+| 与启动容器的关系 | 无 | `/v1/launch` 用的是 clientId `gcs-harness`，和知识库的 `gcs-webnora` 不是同一个 |
+
+嵌套（Web）：
+
+```text
+model（平台 cookie，能 getSsoToken）
+  └── harness iframe（知识库 workbench）
+        └── WeKnora iframe（/weknora/sso/platform）
+```
+
+两跳 postMessage（不要混用消息类型）：
+
+1. **hop1 model↔harness**：`zhishu:sso-request` → 领票 → `zhishu:sso-response`（仅 Web；桌面用 hop0 IPC 代替）。
+2. **hop2 harness↔weknora**：`weknora:sso-ready` → 知识库拿到票后发 `weknora:sso-token`（桌面与 Web 相同）。
+
+控制台过滤：`SSO hop1 model↔harness`、`SSO hop2 harness↔weknora`、`SSO hop0 desktop-ipc`。model 父页只看 hop1；harness iframe 里 hop1/hop2 都有；WeKnora 子页控制台是对方的 `[SSO] …` 日志。
+
+#### 本地测 Web harness（不必先发容器镜像）
+
+默认 `model/vue.config.js` 里 `HARNESS_IFRAME_TARGET` 指向远端网关（如 `http://172.18.29.80:18089`），本机 `:3002` 只是代理入口，**iframe 里仍是线上镜像**，看不到你刚改的 `overlay/knowledge-base`。
+
+本地闭环：
+
+1. `zhishu-harness`：`pnpm market:registry`，再 `pnpm dsh:private`（看日志打印的 URL，常见 `http://127.0.0.1:3080/?token=…`）。
+2. 把 `HARNESS_IFRAME_TARGET` **临时**改成该监听地址（例如 `http://127.0.0.1:3080`），**不要**把 `?token=` 写进 TARGET。
+3. 重启 model 的 `npm run dev`。浏览器 iframe 仍打开 `当前主机:3002`；代理转到本地 web。
+4. 先在浏览器打开 dsh 打印的 **3080 + token** 确认能进；若经 3002 访问，用**同一次启动**的 token 打开一次 `http://127.0.0.1:3002/?token=…` 种 cookie（`localhost` 与 `127.0.0.1` 尽量与日志一致）。
+5. 测完把 `HARNESS_IFRAME_TARGET` 改回远端。
+
+说明：`/v1/launch` 仍可能打远端 Master；知识库 UI 与 SSO 桥测的是本地 web 页。dsh web 的 401（`authentication required; reopen the URL printed by dsh web`）是本地门禁，与平台 `getSsoToken` 无关。
+
+#### WeKnora 子页配置坑
+
+子页由 WeKnora 仓库配置；智枢侧只嵌 iframe 并按协议回票。常见坑：
+
+1. **`targets` 父页白名单**（控制台 `[SSO] config-ready` 里的数组）
+   必须包含**实际嵌入父页**的 origin。桌面要有 `dsh-app://app`；本地 Web 要有 `http://localhost:3002`（或你真实的 harness 源）。缺一项时：页面也许能出来，但收不到 / 不认 `weknora:sso-token`，出现 `handshake-failed`（未收到统一平台登录响应）。线上 Web 还要把生产 harness 源（如 `https://172.18.127.67` 或实际网关源）加进白名单。
+
+2. **`postMessage` 的 `targetOrigin`**
+   发 `weknora:sso-ready` 时，开发可先用 `*`；收紧后应是 harness / `dsh-app://app` 的具体 origin。父页回票时知识库用 WeKnora 的 origin（或 `*`）。子页若仍只向 `dsh-app://app` 说话，在 Web harness 里消息到不了。
+
+3. **CSP `frame-ancestors`**
+   须允许直接父页：桌面 `dsh-app://app`；Web 为 harness 的 http(s) origin。缺了会嵌成空白，不是业务 404。
+
+4. **单独浏览器打开 SSO 页跳到应用内 404**
+   多半是前端在无父页、完不成握手时的路由，**不能**用来判断 iframe 嵌入是否可行。以嵌在知识库里、且 hop2 出现 `ready` / `token` 为准。
+
+5. **Network 里 `/weknora/sso/platform` 200 且 Response「像空的」**
+   返回的是 HTML 壳（`text/html`），不是 JSON。`Unexpected token 'o', 'forbidden' is not valid JSON` 通常来自 harness 其它接口返回纯文本 `forbidden`，与该 HTML 文档不是同一条请求。
+
+6. **调通顺序**
+   可先临时 `targets` 放宽、`targetOrigin: '*'`、`frame-ancestors *`，确认 hop2 通后再按环境收紧白名单。
+
+#### 桌面领票额外坑（与 Web 桥无关）
+
+- 主进程曾 `net.fetch` 转发分区 Cookie，过大的 `dsh-auth-*` 会触发 Tomcat「Request header is too large」；现改为在已登录业务页里 `fetch`。
+- 业务页还在 `/login` 就领票会得到「当前会话身份不是有效 User」；知识库应等平台已登录再挂 WeKnora iframe。
+
 ### 改动落在哪
 
 | 想改的东西 | 放哪 | 不要 |
@@ -47,17 +160,22 @@
 | 对话界面的标识、关掉官方账号菜单 | `overlay/` 独立插件 | 改 `packages/` 里的界面源码，或把插件接进官方 `tsc` / `tsdown` |
 | 窗口、登录门、两个空间谁盖住谁、安装包里的平台地址 | `apps/desktop` | 在平台里再做一套桌面壳 |
 | 登录页、补录、`/desktop-entry`、业务功能 | model 仓库 | 在 Harness 里复制这些页面 |
+| 会话 ↔ 业务的 IPC、领票、账号缓存 | `apps/desktop/src/model-space/` 与会话侧 `preload-app.ts` | 在会话页里直接拼平台 Cookie 调后台 |
+| 业务页响应桌面事件、向壳上报账号 | model 监听 `zhishu-desktop-*`，以及 `utils/desktop-embed.js` | 在容器化 web profile 里假设存在 `zhishuPlatform` |
+| 容器 harness 内知识库领 WeKnora 票 | model `/harnessAgent` 监听 `zhishu:sso-request` → `mintWeknoraSsoTicket` | 让 WeKnora 跨两层 iframe 直接跟 model 通信；或在容器里假设有平台 cookie |
 
-官方测试设置了 `VITEST` 时不加载 overlay。没有 Web 界面的 profile 也不加载。桌面端带 Web 运行时，会加载。`hide-official-account` 对所有 Web profile 生效，关掉官方账号菜单，左下角回到只有设置的齿轮。`platform-account` 只在 profile 名为 `desktop` 时加载，用平台账号换成这颗齿轮。容器化网页用 profile `web`，不加载平台账号。
+官方测试设置了 `VITEST` 时不加载 overlay。没有 Web 界面的 profile 也不加载。桌面端带 Web 运行时，会加载。`hide-official-account` 对所有 Web profile 生效，关掉官方账号菜单，左下角回到只有设置的齿轮。`platform-account` 只在 profile 名为 `desktop` 时加载（`DESKTOP_ONLY_OVERLAYS`）。`knowledge-base` 对所有 Web profile 生效：桌面走 IPC 领票，容器 / `dsh:private` 走 model 父页 `zhishu:sso-*` 桥。
 
-相关代码在 `apps/desktop/src/model-space/`：
+相关代码在 `apps/desktop/src/model-space/`（会话侧桥在 `preload-app.ts`）：
 
 | 文件 | 作用 |
 |---|---|
-| `model-gate.ts` | 承载 model 页面的 `WebContentsView`，分区 `persist:zhishu-model` |
-| `model-space.ts` | 会话 / 业务的类型和 IPC |
+| `model-gate.ts` | 业务 `WebContentsView`、分区、空间显隐；IPC 总闸（账号、切换、logout 转发、`getSsoToken`） |
+| `model-space.ts` | 会话 / 业务的类型和 IPC 通道名 |
+| `model-address.ts` | 按业务页地址判断登录流程 / 已登录 |
 | `workspace-menu.ts` | 标题栏下拉菜单 |
-| `preload-model-gate.ts` | model 页面的预加载脚本，打包后仍是 `lib/preload-model-gate.cjs` |
+| `preload-model-gate.ts` | 业务页预加载：IPC → DOM 事件、`publishAccount`；打包后仍是 `lib/preload-model-gate.cjs` |
+| `../preload-app.ts` | 会话页预加载：`zhishuPlatform`、`dshModelSpace` |
 
 ## 桌面壳现在做什么
 

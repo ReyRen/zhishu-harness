@@ -75,6 +75,39 @@ export function apply(ctx: ClientContext): void {
     getSnapshot: () => ctx.slots.entriesOfSlot('sidebar.panellist.actions').length > 0,
     subscribe: (listener: () => void) => ctx.slots.subscribe('sidebar.panellist.actions', listener),
   }
+  type SoftPanels = {
+    getSnapshot: () => readonly string[]
+    subscribe: (listener: () => void) => () => void
+    open?: (id: string) => boolean
+  }
+  const EMPTY_SOFT_ACTIVE: readonly string[] = []
+  const readSoftPanels = (): SoftPanels | undefined => ctx.get('sidebarSoftPanels') as SoftPanels | undefined
+  // Overlay soft launchers may register after the sidebar. Resolve the live
+  // service on each read/subscribe so the first empty snapshot is not sticky.
+  const softActivePanels = {
+    getSnapshot: (): readonly string[] => readSoftPanels()?.getSnapshot() ?? EMPTY_SOFT_ACTIVE,
+    subscribe: (listener: () => void) => {
+      let disposeInner: (() => void) | undefined
+      const bind = (): void => {
+        disposeInner?.()
+        disposeInner = readSoftPanels()?.subscribe(listener)
+      }
+      bind()
+      const started = Date.now()
+      const timer = window.setInterval(() => {
+        const soft = readSoftPanels()
+        bind()
+        if (soft !== undefined || Date.now() - started > 15_000) {
+          window.clearInterval(timer)
+          listener()
+        }
+      }, 250)
+      return () => {
+        window.clearInterval(timer)
+        disposeInner?.()
+      }
+    },
+  }
 
   const injectProps = (): SidebarRootInjected => ({
     // The shell's New Session button rides the Workspace UI's shared action
@@ -82,9 +115,20 @@ export function apply(ctx: ClientContext): void {
     startSession: (workspaceId) => { workspaceNavigation.startSession(workspaceId) },
     toggleSidebar: () => { ctx.layout.toggleSidebar() },
     selectPanel: (id) => { ctx.layout.selectPanel(id) },
+    openPanel: (id) => {
+      if (readSoftPanels()?.open?.(id) === true) return true
+      ctx.layout.selectPanel(id as MainPanelId)
+      return true
+    },
     setPinned: panelPins.setPinned,
     trackEntryClick: (attributes) => { ctx.get('productAnalytics')?.track('sidebar_menu_click', attributes) },
-    hooks: { panels, shortcuts: ctx.shortcuts.catalog, entryPins: panelPins.unpinned, entryActions },
+    hooks: {
+      panels,
+      shortcuts: ctx.shortcuts.catalog,
+      entryPins: panelPins.unpinned,
+      entryActions,
+      softActivePanels,
+    },
   })
   ctx.slots.inject('sidebar', function* () {
     yield ctx.slots.registerFactory({
