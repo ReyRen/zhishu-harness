@@ -407,7 +407,7 @@ DSH_DESKTOP_LAN_FEED_URL=http://172.18.127.67:8070/feeds/win-x64/
 
 这个地址在打包时写进 `resources/app-update.yml`。装好的程序不再读 `.env.windows`。换服务器要重新打包，已经装上的程序仍访问原来的地址。第一份给别人安装的包必须已经带上这个地址，从产品页手工安装。之后提高版本再发布，应用里的检查更新才能看到新版本。
 
-通道由 `DSH_DESKTOP_UPDATE_CHANNEL` 决定，不写就是 `nightly`，不会因为版本号变成稳定版就自动改成 `latest`。版本号里带 `-` 时不能选 `latest`。已经装好的 `nightly` 包只读 `nightly.yml`。未签名局域网包会写入 `dshDesktopVerifyUpdateSignature: false`，下载后的安装包不再核对发布者证书。正式包不写这个字段，仍然校验签名。
+包内默认通道由 `DSH_DESKTOP_UPDATE_CHANNEL` 决定，不写就是 `nightly`。桌面设置可以切换 `stable` 和 `nightly`，保存后立即应用；版本号里带 `-` 时不能打包为 `stable`。未签名局域网包会写入 `dshDesktopVerifyUpdateSignature: false`，下载后的安装包不再核对发布者证书。正式包不写这个字段，仍然校验签名。
 
 检查和安装仍分开。应用不会自动下载，也不会在退出时自动安装，要等使用者确认。Windows 对未签名安装包仍可能弹出风险提示。
 

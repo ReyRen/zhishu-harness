@@ -78,6 +78,7 @@ describe('desktop macOS release signature', () => {
     expect(config.asarUnpack).toEqual(expect.arrayContaining([
       '**/*.{node,dylib,dll,so,exe}',
       '**/@vscode/ripgrep-*/bin/rg',
+      '**/node_modules/@deepseek-ai/dsh-experimental-cua-macos/native/bin/**/*',
     ]))
     expect(config).toMatchObject({
       appId: RELEASE_ENVIRONMENT.DSH_DESKTOP_APP_ID,
@@ -182,7 +183,7 @@ describe('desktop macOS release signature', () => {
     expect(config.win.signtoolOptions.publisherName).toBeUndefined()
   })
 
-  it('rejects a latest LAN feed for the current prerelease version', async () => {
+  it('rejects a stable LAN feed for the current prerelease version', async () => {
     const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
     expect(() => createElectronBuilderConfig({
       DSH_DESKTOP_APP_ID: RELEASE_ENVIRONMENT.DSH_DESKTOP_APP_ID,
@@ -190,9 +191,9 @@ describe('desktop macOS release signature', () => {
       DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: JSON.stringify({ allowedAuthOrigins: ['https://login.example.com'] }),
       DSH_DESKTOP_TARGET_PLATFORM: 'win32',
       DSH_DESKTOP_UNSIGNED: '1',
-      DSH_DESKTOP_UPDATE_CHANNEL: 'latest',
+      DSH_DESKTOP_UPDATE_CHANNEL: 'stable',
       DSH_DESKTOP_LAN_FEED_URL: 'http://10.5.60.154:8070/feeds/win-x64/',
-    }, 'win32', 'x64')).toThrow(/latest requires a stable version/u)
+    }, 'win32', 'x64')).toThrow(/stable requires a stable version/u)
   })
 
   it.each(['arm64', 'x64'])('builds local macOS %s DMGs without release credentials or update metadata', async (arch) => {
