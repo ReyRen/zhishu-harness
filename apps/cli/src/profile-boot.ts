@@ -216,9 +216,10 @@ const DESKTOP_PROFILE = 'desktop'
 /**
  * Platform account menu. It replaces the settings gear and only exists inside
  * the desktop shell. Container web disables the official account row and keeps
- * that gear.
+ * that gear. Knowledge-base loads on every Web profile: desktop mints SSO via
+ * Electron IPC; container harness asks the model parent page over postMessage.
  */
-const DESKTOP_ONLY_OVERLAYS = new Set(['platform-account', 'knowledge-base'])
+const DESKTOP_ONLY_OVERLAYS = new Set(['platform-account'])
 
 /**
  * Overlay directory for this process. A packaged desktop app sets

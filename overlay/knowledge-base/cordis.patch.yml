@@ -1,6 +1,6 @@
 # Preinstalled knowledge-base workbench. Registers with the workbench host and
-# adds a soft-active sidebar launcher. Desktop-only: platform SSO uses model
-# partition cookies.
+# adds a soft-active sidebar launcher. Desktop mints SSO via zhishuPlatform IPC;
+# container / dsh web asks the embedding model page over zhishu:sso-* postMessage.
 - insert:
     - id: zhishu-knowledge-base
       name: ./index.js

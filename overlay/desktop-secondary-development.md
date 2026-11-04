@@ -81,7 +81,77 @@
 | 会话能否直接拿到返回值 | 当前不能（单向事件） | 能（`invoke` 的 Promise） |
 | 为何常选 B 做领票 | — | 少建一层回程协议，对接会话侧更直接 |
 
-容器化网页 Harness（profile `web`）没有 Electron 这套桥，也不加载仅桌面用的 overlay（如 `platform-account`、`knowledge-base`）。业务页里嵌的容器化 harness 仍用 model 自己的 `getSsoToken(clientId=gcs-harness)` 等接口；与桌面会话空间的 `gcs-webnora` 领票是两条路径，不能互相替代。
+容器 / `dsh:private`（profile `web`）走另一条领票桥，与桌面对比、本地怎么测、WeKnora 配置坑见下一节「知识库（WeKnora）：桌面与 Web」。
+
+### 知识库（WeKnora）：桌面与 Web
+
+知识库 workbench 在 `overlay/knowledge-base`，对所有带 Web 的 profile 加载（不只 desktop）。**Harness ↔ WeKnora 的 `weknora:sso-*` 协议两边共用**；差别只在「谁给知识库发平台票」。
+
+#### 场景对比
+
+| | 桌面会话空间 | Web / 容器化（model 嵌 harness） |
+|---|---|---|
+| Harness 在哪 | 主窗口文档 `dsh-app://app/` | model `/harnessAgent` 里的 iframe（开发常见 `http://localhost:3002` → 代理到本地或远端 harness） |
+| 知识库 UI | 同一会话页里的 workbench + WeKnora iframe | 同上，跑在 harness iframe 文档里 |
+| WeKnora 父页 origin（白名单要认的） | `dsh-app://app` | harness 的 http(s) 源，如 `http://localhost:3002` |
+| 领 `gcs-webnora` | `zhishuPlatform.getSsoToken` → 主进程在已登录业务页 `fetch` | harness → model：`zhishu:sso-request` / `zhishu:sso-response`；model `mintWeknoraSsoTicket()` |
+| 与启动容器的关系 | 无 | `/v1/launch` 用的是 clientId `gcs-harness`，和知识库的 `gcs-webnora` 不是同一个 |
+
+嵌套（Web）：
+
+```text
+model（平台 cookie，能 getSsoToken）
+  └── harness iframe（知识库 workbench）
+        └── WeKnora iframe（/weknora/sso/platform）
+```
+
+两跳 postMessage（不要混用消息类型）：
+
+1. **hop1 model↔harness**：`zhishu:sso-request` → 领票 → `zhishu:sso-response`（仅 Web；桌面用 hop0 IPC 代替）。
+2. **hop2 harness↔weknora**：`weknora:sso-ready` → 知识库拿到票后发 `weknora:sso-token`（桌面与 Web 相同）。
+
+控制台过滤：`SSO hop1 model↔harness`、`SSO hop2 harness↔weknora`、`SSO hop0 desktop-ipc`。model 父页只看 hop1；harness iframe 里 hop1/hop2 都有；WeKnora 子页控制台是对方的 `[SSO] …` 日志。
+
+#### 本地测 Web harness（不必先发容器镜像）
+
+默认 `model/vue.config.js` 里 `HARNESS_IFRAME_TARGET` 指向远端网关（如 `http://172.18.29.80:18089`），本机 `:3002` 只是代理入口，**iframe 里仍是线上镜像**，看不到你刚改的 `overlay/knowledge-base`。
+
+本地闭环：
+
+1. `zhishu-harness`：`pnpm market:registry`，再 `pnpm dsh:private`（看日志打印的 URL，常见 `http://127.0.0.1:3080/?token=…`）。
+2. 把 `HARNESS_IFRAME_TARGET` **临时**改成该监听地址（例如 `http://127.0.0.1:3080`），**不要**把 `?token=` 写进 TARGET。
+3. 重启 model 的 `npm run dev`。浏览器 iframe 仍打开 `当前主机:3002`；代理转到本地 web。
+4. 先在浏览器打开 dsh 打印的 **3080 + token** 确认能进；若经 3002 访问，用**同一次启动**的 token 打开一次 `http://127.0.0.1:3002/?token=…` 种 cookie（`localhost` 与 `127.0.0.1` 尽量与日志一致）。
+5. 测完把 `HARNESS_IFRAME_TARGET` 改回远端。
+
+说明：`/v1/launch` 仍可能打远端 Master；知识库 UI 与 SSO 桥测的是本地 web 页。dsh web 的 401（`authentication required; reopen the URL printed by dsh web`）是本地门禁，与平台 `getSsoToken` 无关。
+
+#### WeKnora 子页配置坑
+
+子页由 WeKnora 仓库配置；智枢侧只嵌 iframe 并按协议回票。常见坑：
+
+1. **`targets` 父页白名单**（控制台 `[SSO] config-ready` 里的数组）
+   必须包含**实际嵌入父页**的 origin。桌面要有 `dsh-app://app`；本地 Web 要有 `http://localhost:3002`（或你真实的 harness 源）。缺一项时：页面也许能出来，但收不到 / 不认 `weknora:sso-token`，出现 `handshake-failed`（未收到统一平台登录响应）。线上 Web 还要把生产 harness 源（如 `https://172.18.127.67` 或实际网关源）加进白名单。
+
+2. **`postMessage` 的 `targetOrigin`**
+   发 `weknora:sso-ready` 时，开发可先用 `*`；收紧后应是 harness / `dsh-app://app` 的具体 origin。父页回票时知识库用 WeKnora 的 origin（或 `*`）。子页若仍只向 `dsh-app://app` 说话，在 Web harness 里消息到不了。
+
+3. **CSP `frame-ancestors`**
+   须允许直接父页：桌面 `dsh-app://app`；Web 为 harness 的 http(s) origin。缺了会嵌成空白，不是业务 404。
+
+4. **单独浏览器打开 SSO 页跳到应用内 404**
+   多半是前端在无父页、完不成握手时的路由，**不能**用来判断 iframe 嵌入是否可行。以嵌在知识库里、且 hop2 出现 `ready` / `token` 为准。
+
+5. **Network 里 `/weknora/sso/platform` 200 且 Response「像空的」**
+   返回的是 HTML 壳（`text/html`），不是 JSON。`Unexpected token 'o', 'forbidden' is not valid JSON` 通常来自 harness 其它接口返回纯文本 `forbidden`，与该 HTML 文档不是同一条请求。
+
+6. **调通顺序**
+   可先临时 `targets` 放宽、`targetOrigin: '*'`、`frame-ancestors *`，确认 hop2 通后再按环境收紧白名单。
+
+#### 桌面领票额外坑（与 Web 桥无关）
+
+- 主进程曾 `net.fetch` 转发分区 Cookie，过大的 `dsh-auth-*` 会触发 Tomcat「Request header is too large」；现改为在已登录业务页里 `fetch`。
+- 业务页还在 `/login` 就领票会得到「当前会话身份不是有效 User」；知识库应等平台已登录再挂 WeKnora iframe。
 
 ### 改动落在哪
 
@@ -92,8 +162,9 @@
 | 登录页、补录、`/desktop-entry`、业务功能 | model 仓库 | 在 Harness 里复制这些页面 |
 | 会话 ↔ 业务的 IPC、领票、账号缓存 | `apps/desktop/src/model-space/` 与会话侧 `preload-app.ts` | 在会话页里直接拼平台 Cookie 调后台 |
 | 业务页响应桌面事件、向壳上报账号 | model 监听 `zhishu-desktop-*`，以及 `utils/desktop-embed.js` | 在容器化 web profile 里假设存在 `zhishuPlatform` |
+| 容器 harness 内知识库领 WeKnora 票 | model `/harnessAgent` 监听 `zhishu:sso-request` → `mintWeknoraSsoTicket` | 让 WeKnora 跨两层 iframe 直接跟 model 通信；或在容器里假设有平台 cookie |
 
-官方测试设置了 `VITEST` 时不加载 overlay。没有 Web 界面的 profile 也不加载。桌面端带 Web 运行时，会加载。`hide-official-account` 对所有 Web profile 生效，关掉官方账号菜单，左下角回到只有设置的齿轮。`platform-account` 与 `knowledge-base` 只在 profile 名为 `desktop` 时加载（见 `apps/cli/src/profile-boot.ts` 的 `DESKTOP_ONLY_OVERLAYS`）。容器化网页用 profile `web`，不加载这两项。
+官方测试设置了 `VITEST` 时不加载 overlay。没有 Web 界面的 profile 也不加载。桌面端带 Web 运行时，会加载。`hide-official-account` 对所有 Web profile 生效，关掉官方账号菜单，左下角回到只有设置的齿轮。`platform-account` 只在 profile 名为 `desktop` 时加载（`DESKTOP_ONLY_OVERLAYS`）。`knowledge-base` 对所有 Web profile 生效：桌面走 IPC 领票，容器 / `dsh:private` 走 model 父页 `zhishu:sso-*` 桥。
 
 相关代码在 `apps/desktop/src/model-space/`（会话侧桥在 `preload-app.ts`）：
 
