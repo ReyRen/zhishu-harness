@@ -523,6 +523,111 @@
       }
     },
     {
+      "name": "weknora_ask",
+      "description": "Ask WeKnora a question and get its own composed answer with citations (RAG pipeline runs server-side: query rewriting, retrieval, reranking and summarization). Reserve it for broad or synthesis questions whose answer spans many documents, where retrieving passages yourself would take several rounds. For anything you can answer from specific passages, prefer weknora_search: it is far faster and leaves you the evidence to reason over rather than another model's conclusion.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The question to answer."
+          },
+          "knowledge_base_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Restrict retrieval to these knowledge base ids."
+          },
+          "agent_id": {
+            "type": "string",
+            "description": "Custom agent id; selects the server-side ReAct pipeline."
+          },
+          "session_id": {
+            "type": "string",
+            "description": "Continue an earlier WeKnora session instead of starting one."
+          },
+          "web_search": {
+            "type": "boolean",
+            "description": "Let WeKnora also search the web, when its deployment allows it."
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "weknora_list_knowledge_bases",
+      "description": "List the WeKnora knowledge bases this deployment can retrieve from, with their ids. weknora_search already spans them all, so reach for this only to report what is available or to narrow a later search to one of them.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "weknora_read_document",
+      "description": "Read a WeKnora document's stored passages in order, reassembled into text. Use it after weknora_search when one passage is not enough context; page through long documents.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "knowledge_id": {
+            "type": "string",
+            "description": "Document id, as returned in a search hit."
+          },
+          "page": {
+            "type": "integer",
+            "description": "Page of passages, starting at 1."
+          },
+          "page_size": {
+            "type": "integer",
+            "description": "Passages per page (max 100)."
+          }
+        },
+        "required": [
+          "knowledge_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "weknora_search",
+      "description": "Search WeKnora knowledge bases and return the matching passages verbatim (hybrid vector + keyword retrieval, no model summarization). Use this to ground an answer in the organization's own documents, and also to locate a document by name — a query that reads like a title additionally returns the documents it names. Searches every knowledge base this credential can see unless you narrow it with knowledge_base_ids. Every hit carries a knowledge_id you can pass to weknora_read_document for the full document.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Natural-language query; a full question retrieves better than keywords."
+          },
+          "knowledge_base_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Restrict the search to these knowledge base ids."
+          },
+          "knowledge_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Restrict the search to these document ids."
+          },
+          "max_results": {
+            "type": "integer",
+            "description": "Maximum passages to return (default 8)."
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "workflow",
       "description": "Run a JavaScript workflow script that orchestrates subagents at scale. Use this for work that fans out across many independent pieces — an audit over many files, a migration, multi-angle research, adversarial verification of findings — where you write the orchestration as a script instead of delegating turn by turn.\n\nScript-body hooks:\n- `agent(prompt, opts?): Promise<any>` — run one subagent to completion. Without `opts.schema` it resolves to the child's final text; with `opts.schema` (an object-rooted JSON Schema using ONLY type/properties/required/additionalProperties/items/enum/const/oneOf) it resolves to the validated object. Resolves `null` when the child fails (filter with `.filter(Boolean)`). Other opts: `label` (display), `phase` (progress group), and independent `provider`/`model` LLM target overrides.\n- `pipeline(items, ...stages): Promise<any[]>` — run each item through the stages independently with NO barrier between stages (prefer this for multi-stage work). Each stage receives `(prev, item, index)`. A stage throw drops that ITEM to `null` and skips its remaining stages.\n- `parallel(thunks): Promise<any[]>` — run zero-argument functions concurrently and await ALL of them (a barrier; use only when a stage genuinely needs every prior result together). A throwing thunk resolves to `null`.\n- `phase(title)` — start a progress phase; `log(message)` — narrate progress; `args` — the tool call's `args` input, verbatim.\n\nMisused hooks (bad arguments, unknown options, unsupported schemas, tripped caps) end the whole script instead of producing `null`. The script has no filesystem, network, timer, or Node.js APIs; the agents do the work.",
       "parameters": {

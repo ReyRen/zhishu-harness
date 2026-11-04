@@ -1,8 +1,15 @@
 - id: llm-deepseek
   disabled: true
-- id: weknora-snapshot-backend
-  config: { model: false }
 - insert:
+    - id: weknora-snapshot-backend
+      name: ./fixture.mjs
+      config: { model: false }
+    - id: weknora
+      name: ../../../node_modules/@wxg-prc-cpg/dsh-weknora/dist/index.js
+      config:
+        baseUrl: http://weknora.test/api/v1
+        apiKey: snapshot-key
+        resourceUrls: handle
     - id: llm-replay
       name: '@deepseek-ai/dsh-llm-replay'
       config:
