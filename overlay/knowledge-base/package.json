@@ -1,0 +1,22 @@
+{
+  "name": "@zhishu/dsh-overlay-knowledge-base",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Preinstalled knowledge-base workbench: iframe WeKnora UI with platform SSO and Ask-AI session dock.",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@zhishu/dsh-overlay-workbenches"
+      ],
+      "platform": "web"
+    }
+  }
+}

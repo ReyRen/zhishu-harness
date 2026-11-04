@@ -11,7 +11,15 @@ export const MODEL_SPACE_IPC = {
   logout: 'zhishu-model:logout',
   businessSidebarToggle: 'zhishu-model:business-sidebar-toggle',
   bootReady: 'zhishu-model:boot-ready',
+  ssoToken: 'zhishu-model:sso-token',
 } as const
+
+/** Platform SSO ticket handed to an embedded third-party frame. */
+export interface PlatformSsoToken {
+  readonly access_token: string
+  readonly refresh_token?: string
+  readonly user_id?: string
+}
 
 /** Which surface covers the main window. `business` is the whole model site. */
 export type ModelSpace = 'conversation' | 'business'

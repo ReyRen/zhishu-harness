@@ -9,7 +9,10 @@ import { join } from 'node:path'
 import { app, BrowserWindow, ipcMain, net, session, shell, WebContentsView, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import { classifyModelAddress } from './model-address.ts'
 import { MODEL_SITE_ORIGIN } from './model-gateway.ts'
-import { MODEL_SPACE_IPC, type ModelSpace, type ModelSpaceState, type PlatformAccount } from './model-space.ts'
+import { MODEL_SPACE_IPC, type ModelSpace, type ModelSpaceState, type PlatformAccount, type PlatformSsoToken } from './model-space.ts'
+
+/** Client ids the conversation page may ask the platform to mint SSO tickets for. */
+const SSO_CLIENT_IDS = new Set(['gcs-webnora'])
 import { WINDOWS_TITLEBAR_HEIGHT } from '../windows-layout.ts'
 import { modelReloadDocument } from './reload-screen.ts'
 import { workspaceMenuDocument } from './workspace-menu.ts'
@@ -105,6 +108,7 @@ export class ModelPlatformGate {
     ipcMain.removeHandler(MODEL_SPACE_IPC.switch)
     ipcMain.removeHandler(MODEL_SPACE_IPC.menu)
     ipcMain.removeHandler(MODEL_SPACE_IPC.accountGet)
+    ipcMain.removeHandler(MODEL_SPACE_IPC.ssoToken)
     ipcMain.removeHandler(MODEL_SPACE_IPC.logout)
     ipcMain.removeHandler(MODEL_SPACE_IPC.businessSidebarToggle)
     ipcMain.removeAllListeners(MODEL_SPACE_IPC.account)
@@ -125,6 +129,14 @@ export class ModelPlatformGate {
       this.assertSender(event)
       if (event.sender !== this.window?.webContents) throw new Error('desktop model login: unowned renderer')
       return this.account
+    })
+    ipcMain.handle(MODEL_SPACE_IPC.ssoToken, async (event, clientId: unknown) => {
+      this.assertSender(event)
+      if (event.sender !== this.window?.webContents) throw new Error('desktop model login: unowned renderer')
+      if (typeof clientId !== 'string' || !SSO_CLIENT_IDS.has(clientId)) {
+        throw new Error('desktop model login: unsupported SSO client')
+      }
+      return await this.fetchSsoToken(clientId)
     })
     ipcMain.handle(MODEL_SPACE_IPC.logout, (event) => {
       this.assertSender(event)
@@ -564,17 +576,36 @@ export class ModelPlatformGate {
     window.webContents.send(MODEL_SPACE_IPC.accountChanged, this.account)
   }
 
-  /** @returns the signed-in platform user, or undefined when the cookie is absent or expired. */
-  private async fetchAccount(): Promise<PlatformAccount | undefined> {
+  /**
+   * Build a Cookie header for platform DistributedAISystem calls.
+   * The model partition also accumulates large desktop/harness cookies
+   * (`dsh-auth-*`, `gcs_harness_session`). Sending all of them makes Tomcat
+   * reject the request with HTTP 400 "Request header is too large", while the
+   * business page still works with the smaller browser-sent set.
+   * @returns cookie header, or undefined when signed out.
+   */
+  private async modelCookieHeader(): Promise<string | undefined> {
     const partition = session.fromPartition(PARTITION)
     const cookies = await partition.cookies.get({ url: this.origin })
     if (cookies.length === 0) return undefined
+    // Never send desktop/harness leftovers: a single dsh-auth-* value can exceed
+    // Tomcat's max HTTP header size ("Request header is too large").
+    const selected = cookies.filter(cookie =>
+      cookie.name !== 'gcs_harness_session' && !cookie.name.startsWith('dsh-auth-'))
+    if (selected.length === 0) return undefined
+    return selected.map(cookie => `${cookie.name}=${cookie.value}`).join('; ')
+  }
+
+  /** @returns the signed-in platform user, or undefined when the cookie is absent or expired. */
+  private async fetchAccount(): Promise<PlatformAccount | undefined> {
+    const cookie = await this.modelCookieHeader()
+    if (cookie === undefined) return undefined
     try {
       const response = await net.fetch(new URL('/DistributedAISystem/UserLoginDisplayInfo', this.origin).href, {
         method: 'POST',
         headers: {
           accept: 'application/json',
-          cookie: cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; '),
+          cookie,
         },
       })
       if (!response.ok) return undefined
@@ -582,6 +613,86 @@ export class ModelPlatformGate {
       return readPlatformAccount(body)
     } catch {
       return undefined
+    }
+  }
+
+  /**
+   * Drop desktop/harness cookies that the model partition should never send to
+   * Tomcat. A single `dsh-auth-*` value can exceed max HTTP header size.
+   */
+  private async scrubNonPlatformCookies(): Promise<void> {
+    const partition = session.fromPartition(PARTITION)
+    const cookies = await partition.cookies.get({ url: this.origin })
+    await Promise.all(cookies
+      .filter(cookie => cookie.name === 'gcs_harness_session' || cookie.name.startsWith('dsh-auth-'))
+      .map(cookie => partition.cookies.remove(this.origin, cookie.name)))
+  }
+
+  /**
+   * Mint a platform SSO token for an allow-listed client id.
+   * Must run inside the signed-in model BrowserView: main-process net.fetch that
+   * forwards partition cookies hits Tomcat HTTP 400 when `dsh-auth-*` is present,
+   * while page fetch() matches the business-space probe for gcs-webnora.
+   * @returns ticket fields for postMessage.
+   */
+  private async fetchSsoToken(clientId: string): Promise<PlatformSsoToken> {
+    if (!this.authenticated) {
+      throw new Error('desktop model login: SSO token unavailable (not signed in)')
+    }
+    const view = this.view
+    if (view === undefined || view.webContents.isDestroyed()) {
+      throw new Error('desktop model login: SSO token unavailable (model page not ready)')
+    }
+    const pageUrl = view.webContents.getURL()
+    if (!pageUrl.startsWith(this.origin) || classifyModelAddress(pageUrl, this.origin) !== 'signed-in') {
+      throw new Error('desktop model login: SSO token unavailable (model page not signed in)')
+    }
+    await this.scrubNonPlatformCookies()
+    const requestPath = `/DistributedAISystem/getSsoToken?clientId=${encodeURIComponent(clientId)}`
+    console.info('[zhishu-model sso] request via model page', { pageUrl, requestPath, clientId })
+    let payload: { status: number; ok: boolean; text: string }
+    try {
+      payload = await view.webContents.executeJavaScript(
+        `fetch(${JSON.stringify(requestPath)},{method:'GET',credentials:'include',headers:{accept:'application/json'}})`
+        + '.then(async(r)=>({status:r.status,ok:r.ok,text:await r.text()}))',
+        true,
+      ) as { status: number; ok: boolean; text: string }
+    } catch (error) {
+      console.error('[zhishu-model sso] model page fetch failed', error)
+      throw new Error(`desktop model login: SSO token request failed (${error instanceof Error ? error.message : String(error)})`)
+    }
+    let body: unknown
+    try { body = payload.text === '' ? null : JSON.parse(payload.text) } catch {
+      console.error('[zhishu-model sso] non-json response', { status: payload.status, text: payload.text.slice(0, 500) })
+      throw new Error(`desktop model login: SSO token unavailable (HTTP ${String(payload.status)}, non-JSON body)`)
+    }
+    const record = typeof body === 'object' && body !== null
+      ? body as { code?: unknown; content?: unknown; msg?: unknown; message?: unknown }
+      : undefined
+    const content = typeof record?.content === 'object' && record.content !== null
+      ? record.content as Record<string, unknown>
+      : undefined
+    const access = typeof content?.access_token === 'string' ? content.access_token.trim() : ''
+    console.info('[zhishu-model sso] response', {
+      status: payload.status,
+      ok: payload.ok,
+      code: record?.code,
+      msg: record?.msg ?? record?.message,
+      hasAccessToken: access !== '',
+      contentKeys: content === undefined ? [] : Object.keys(content),
+    })
+    if (!payload.ok) {
+      throw new Error(`desktop model login: SSO token unavailable (HTTP ${String(payload.status)}, code=${String(record?.code ?? '')}, msg=${String(record?.msg ?? record?.message ?? '')})`)
+    }
+    if (!access) {
+      throw new Error(`desktop model login: SSO token unavailable (code=${String(record?.code ?? '')}, msg=${String(record?.msg ?? record?.message ?? 'missing access_token')})`)
+    }
+    const refresh = typeof content?.refresh_token === 'string' ? content.refresh_token : undefined
+    const userId = content?.user_id ?? content?.userId ?? content?.userID
+    return {
+      access_token: access,
+      ...(refresh ? { refresh_token: refresh } : {}),
+      ...(userId != null && String(userId) !== '' ? { user_id: String(userId) } : {}),
     }
   }
 

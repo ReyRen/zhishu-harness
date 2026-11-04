@@ -55,7 +55,8 @@ type PanelRowProps =
   Pick<SidebarPanelMetadata, 'id' | 'label'>
   & Pick<SidebarSectionOwnerProps, 'wide'>
   & Pick<PropsRuntime<'sidebar'>, 'usePanelInfo'>
-  & Pick<InjectFace<SidebarRootInjected>, 'selectPanel' | 'trackEntryClick'>
+  & Pick<InjectFace<SidebarRootInjected>, 'openPanel' | 'trackEntryClick'>
+  & Pick<SidebarRootComponentProps, 'useSoftActivePanels'>
   & PropsRenderSlots<'sidebar.panellist'>
 
 /** Analytics category of an official panel; other panels are never reported. */
@@ -65,8 +66,10 @@ function officialEntry(id: string): 'plugin' | 'cron' | undefined {
 }
 
 /** Each panel row subscribes only to its own selection state. */
-function PanelRow({ id, label, wide, usePanelInfo, selectPanel, trackEntryClick, renderSlot }: PanelRowProps) {
-  const active = usePanelInfo(info => info.activePanelId === id)
+function PanelRow({ id, label, wide, usePanelInfo, useSoftActivePanels, openPanel, trackEntryClick, renderSlot }: PanelRowProps) {
+  const panelActive = usePanelInfo(info => info.activePanelId === id)
+  const softActive = useSoftActivePanels(ids => ids.includes(id))
+  const active = panelActive || softActive
   return (
     <Tooltip label={label} delayMs={500} disabled={wide}>
       <button
@@ -77,7 +80,7 @@ function PanelRow({ id, label, wide, usePanelInfo, selectPanel, trackEntryClick,
         onClick={() => {
           const entry = officialEntry(id)
           if (entry !== undefined) trackEntryClick({ menu_name: entry, position: 'sidebar' })
-          selectPanel(id)
+          openPanel(id)
         }}
       >
         <span className={css.panelGlyph} aria-hidden="true">
@@ -134,13 +137,14 @@ export function SidebarRoot({
   drawer,
   startSession,
   toggleSidebar,
-  selectPanel,
+  openPanel,
   setPinned,
   trackEntryClick,
   useRemoteAccess,
   usePanels,
   useEntryPins,
   useEntryActions,
+  useSoftActivePanels,
   useShortcuts,
   usePanelInfo,
   t,
@@ -148,6 +152,7 @@ export function SidebarRoot({
 }: SidebarRootComponentProps) {
   const panels = usePanels(snapshot => snapshot)
   const unpinned = useEntryPins(ids => ids)
+  const softActivePanels = useSoftActivePanels(ids => ids)
   const activePanelId = usePanelInfo(info => info.activePanelId)
   const hasEntryActions = useEntryActions(registered => registered)
   const shortcut = useShortcuts(rows => rows.find(row => row.id === 'sidebar.left.toggle'))
@@ -387,7 +392,8 @@ export function SidebarRoot({
               label={label}
               wide={wide}
               usePanelInfo={usePanelInfo}
-              selectPanel={selectPanel}
+              useSoftActivePanels={useSoftActivePanels}
+              openPanel={openPanel}
               trackEntryClick={trackEntryClick}
               renderSlot={renderSlot}
             />
@@ -397,12 +403,17 @@ export function SidebarRoot({
               wide={wide}
               label={t('panels.more')}
               entries={panels.filter(({ id }) => id !== FIXED_PANEL_ID)
-                .map(({ id, label }) => ({ id, label, pinned: !unpinned.includes(id), active: id === activePanelId }))}
+                .map(({ id, label }) => ({
+                  id,
+                  label,
+                  pinned: !unpinned.includes(id),
+                  active: id === activePanelId || softActivePanels.includes(id),
+                }))}
               onOpen={(id) => {
                 const entry = officialEntry(id)
                 if (entry !== undefined) trackEntryClick({ menu_name: entry, position: 'sidebar_more' })
                 const panel = panels.find(candidate => candidate.id === id)
-                if (panel !== undefined) selectPanel(panel.id)
+                if (panel !== undefined) openPanel(panel.id)
               }}
               onPinnedChange={setPinned}
               trackEntryClick={trackEntryClick}

@@ -218,7 +218,7 @@ const DESKTOP_PROFILE = 'desktop'
  * the desktop shell. Container web disables the official account row and keeps
  * that gear.
  */
-const DESKTOP_ONLY_OVERLAYS = new Set(['platform-account'])
+const DESKTOP_ONLY_OVERLAYS = new Set(['platform-account', 'knowledge-base'])
 
 /**
  * Overlay directory for this process. A packaged desktop app sets

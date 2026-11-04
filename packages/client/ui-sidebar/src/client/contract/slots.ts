@@ -181,6 +181,11 @@ export type SidebarRootInjected = {
   setPinned: (id: string, pinned: boolean) => void
   /** Record activation of an official navigation control without changing navigation. */
   trackEntryClick: (attributes: ProductEventMap['sidebar_menu_click']) => void
+  /**
+   * Open a sidebar row. Soft launchers (workbench-backed entries) may handle
+   * the id without selecting a main panel; return true when handled.
+   */
+  openPanel: (id: string) => boolean
   /** Private reactive sources bound to framework selector hooks. */
   hooks: {
     panels: ObservableSnapshot<readonly SidebarPanelMetadata[]>
@@ -189,6 +194,11 @@ export type SidebarRootInjected = {
     entryPins: ObservableSnapshot<readonly string[]>
     /** Whether `sidebar.panellist.actions` has registrations. */
     entryActions: ObservableSnapshot<boolean>
+    /**
+     * Panel ids that should look selected without occupying the main column
+     * (for example a workbench opened from a sidebar launcher).
+     */
+    softActivePanels: ObservableSnapshot<readonly string[]>
   }
 }
 

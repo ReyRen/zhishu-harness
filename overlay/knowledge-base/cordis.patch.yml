@@ -1,0 +1,6 @@
+# Preinstalled knowledge-base workbench. Registers with the workbench host and
+# adds a soft-active sidebar launcher. Desktop-only: platform SSO uses model
+# partition cookies.
+- insert:
+    - id: zhishu-knowledge-base
+      name: ./index.js
