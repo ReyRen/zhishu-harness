@@ -1,10 +1,14 @@
 {
-  "updated": "2026-10-21",
-  "count": 1,
+  "updated": "2026-11-04",
+  "count": 2,
   "categories": {
     "theme": {
       "zh": "主题",
       "en": "Theme"
+    },
+    "docs": {
+      "zh": "文档与渲染",
+      "en": "Docs & rendering"
     }
   },
   "plugins": [
@@ -21,6 +25,20 @@
       "version": "1.2.6",
       "install": "dsh plugin --profile web add open-sea-skin",
       "added": "2026-08-17"
+    },
+    {
+      "name": "dsh-paper-reader",
+      "owner": "GGboya",
+      "url": "https://github.com/GGboya/dsh-paper-reader",
+      "category": "docs",
+      "description": {
+        "zh": "论文伴读工作台：文献库 + PDF 阅读器 + 教练式伴读。回答必带页码，点页码跳回 PDF 并高亮原文；选中即问不打断阅读。",
+        "en": "Paper-reading companion: literature library, PDF reader, and tutor-style study. Answers cite page numbers; click to jump back and highlight the source."
+      },
+      "npm": "@ggboy123/dsh-paper-reader",
+      "version": "1.6.1",
+      "install": "dsh plugin --profile web add @ggboy123/dsh-paper-reader",
+      "added": "2026-11-04"
     }
   ]
 }

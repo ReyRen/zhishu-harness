@@ -27,6 +27,7 @@ try {
   await writeFile(indexPath, JSON.stringify(index), { mode: 0o600 })
   await writeFile(join(state, 'htpasswd'), '', { mode: 0o600 })
   await writeFile(join(state, 'verdaccio.yaml'), [
+    'max_body_size: 100mb',
     `storage: ${JSON.stringify(join(state, 'storage'))}`,
     'auth:', '  htpasswd:', `    file: ${JSON.stringify(join(state, 'htpasswd'))}`, '    max_users: -1',
     'uplinks: {}',

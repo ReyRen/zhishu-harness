@@ -241,6 +241,8 @@ function uniquePackages(packages: readonly PluginMarketPackage[]): PluginMarketP
 
 function verdaccioConfig(storage: string, htpasswd: string): string {
   return [
+    // Keep aligned with market-registry/verdaccio.yaml for large community tarballs.
+    'max_body_size: 100mb',
     `storage: ${yamlString(storage)}`,
     'auth:',
     '  htpasswd:',

@@ -1,5 +1,8 @@
 # Private npm for the plugin market. No uplink: only tarballs published
 # into this registry can be installed.
+# npm publish embeds the tarball as base64 in the JSON body; pdfjs-dist ~8.5MB
+# becomes >10MB, so raise the default 10mb limit.
+max_body_size: 100mb
 storage: ./storage
 auth:
   htpasswd:
