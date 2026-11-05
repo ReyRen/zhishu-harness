@@ -66,6 +66,8 @@ Host 自动获得 `DSHM_REGISTRY_URL`、`DSHM_NPM_MIRROR`，并关闭 peer 自�
 docker run --rm --init --network none --entrypoint node "$IMAGE" /opt/dsh/docker/smoke-market.mjs
 ```
 
+可选的论文伴读插件默认把文献库存入 `DSH_HOME/storages/dsh-paper-reader`；`DSH_PAPER_READER_DATA` 可覆盖该路径。使用标准 JFS 挂载时，文献可在容器替换后保留。其翻译引擎和可选 OCR 服务需要另行准备离线资源并配置端点。
+
 离线范围是随镜像交付的 Office、运行时资源和市场安装包，不包括任意 npm/GitHub 插件、模型推理或联网搜索；它们仍需要配置相应服务。桌面端专属的操作系统集成和受浏览器限制的能力，也不会因为安装服务端依赖而自动具备。
 
 ## 验证单个用户

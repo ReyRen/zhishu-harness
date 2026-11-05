@@ -66,6 +66,8 @@ The container also sets `npm_config_registry` and `pnpm_config_registry` to its 
 docker run --rm --init --network none --entrypoint node "$IMAGE" /opt/dsh/docker/smoke-market.mjs
 ```
 
+The optional paper-reader plugin stores its library under `DSH_HOME/storages/dsh-paper-reader` by default; `DSH_PAPER_READER_DATA` overrides that path. With the standard JFS mount, documents survive container replacement. Its translation engine and optional OCR services require separate offline preparation and endpoint configuration.
+
 Offline coverage applies to shipped Office/runtime resources and bundled market packages, not arbitrary npm/GitHub plugins, model inference or web search. Those require their configured services. Desktop-only operating-system integrations and browser-restricted capabilities are not supplied by installing server dependencies.
 
 ## Validate one user
