@@ -539,6 +539,18 @@
   flex-direction: column;
 }
 
+/* Workbench `sidebar.quickSwitcher` sits between New Session and this
+   scrollport (menu must stay outside overflow). It owns the 12px
+   newSession→nav gap; collapse the scrollport lead so the first panel
+   row sits on the same 2px rhythm as the rest of the list. */
+.root:has(:global([data-dsh-workbench-switcher])) > .scrollRegion {
+  margin-top: 0;
+}
+
+.root:has(:global([data-dsh-workbench-switcher])) .scrollArea {
+  grid-template-rows: 2px max-content 2px max-content;
+}
+
 /* The workspace section is `100cqh` of this bounded region, one viewport tall without a resize observer. */
 .root:not(.collapsed) .scrollRegion {
   container-type: size;
