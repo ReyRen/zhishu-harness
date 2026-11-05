@@ -11,6 +11,10 @@
 | 包 | 版本 | 来源 |
 | --- | --- | --- |
 | `open-sea-skin` | 1.2.6 | 社区 npm，tarball 在 `tarballs/` |
+| `@zhishu/dsh-paper-reader` | 1.6.0 | 插件「论文伴读」，基于上游 v1.6.0 的智枢二次打包 |
+| `pdfjs-dist` | 6.3.289 | `dsh-paper-reader` 的运行时依赖 |
+| `@typesafe-ai/sdk` | 0.6.0 | `dsh-paper-reader` 的运行时依赖 |
+| `undici` | 8.10.2 | `dsh-paper-reader` 的运行时依赖 |
 | `deepseek-harness-daily` | 0.4.10 | 工作台「产品更新追踪」，GitHub Release |
 | `dsh-mind-workbench` | 1.0.15 | 工作台「DSH 思维导图工作台」，GitHub Release |
 | `dsh-xiaohongshu-note-workbench` | 0.1.1 | 工作台「小红书笔记创作」，按公网目录指定的 GitHub commit 打包 |

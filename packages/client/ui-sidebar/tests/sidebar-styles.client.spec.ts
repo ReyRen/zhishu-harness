@@ -61,6 +61,10 @@ describe('SidebarRoot.module.css', () => {
     expect(scrollport?.get('grid-template-rows')).toBe('8px max-content 2px max-content')
     expect(declarations('.scrollRegion')?.get('margin-top')).toBe('4px')
     expect(declarations('.collapsed .scrollRegion')?.get('margin-top')).toBe('0')
+    // Workbench quickSwitcher owns the newSession→nav gap; collapse the
+    // scrollport lead so panel rows keep the 2px list rhythm under it.
+    expect(declarations('.root:has(:global([data-dsh-workbench-switcher])) > .scrollRegion')?.get('margin-top')).toBe('0')
+    expect(declarations('.root:has(:global([data-dsh-workbench-switcher])) .scrollArea')?.get('grid-template-rows')).toBe('2px max-content 2px max-content')
     expect(scrollport?.get('margin-left')).toBe('-4px')
     expect(scrollport?.get('margin-right')).toBe('calc(2px - var(--dsh-sidebar-inline-padding))')
     expect(scrollport?.get('scroll-padding-block')).toBeUndefined()
