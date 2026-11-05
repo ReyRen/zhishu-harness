@@ -29,6 +29,8 @@ overlay/
 │   └── cordis.patch.yml   Insert `dshmarket` with restart disabled
 ├── meow-memory/           Preinstalled memory with persistent DSH-home state
 │   └── cordis.patch.yml   Insert `meow-memory` with homeDir: dsh-storage
+├── weknora/               Built-in retrieval and question answering for every Web profile
+│   └── cordis.patch.yml   Insert `@wxg-prc-cpg/dsh-weknora`
 └── workbenches/           Workbench host: switcher, local list, session ownership, conversation frame
     ├── cordis.patch.yml   Insert this plugin
     ├── package.json       Declare dsh.client
@@ -39,6 +41,8 @@ overlay/
 `dsh-market` does not contain the market implementation. The private repository root and Desktop Host pin `dshmarket@1.66.22` for source/container and packaged Desktop installations respectively. Both assemblies provide their own selected Cordis, Schemastery and DSH peers. The public CLI package carries no platform-only plugin dependencies. The market is not written into the user profile. If a profile later installs `dshmarket` itself, startup skips this insert so the Cordis id `dsh-market` is registered once.
 
 `meow-memory` loads the same version pinned by both private assemblies for every Web profile. Platform Web and Desktop use the private Host manifest to build the official installation package table, including these plugins and their shared core dependencies. Its global state uses DSH-home storage and its project databases stay in each Workspace. The overlay's standard `package.json` bundle declaration lets a profile's own installed bundle replace the default insert without registering it twice. The market overlay uses the same declaration. It is not added to the private catalog. See [container memory](../docker/README.md#default-memory) for persistence and offline verification.
+
+The [WeKnora overlay](weknora/README.md) provides knowledge tools to every Web and Desktop conversation without a user installation. Its backend credential is configured separately from browser SSO.
 
 Copy this directory structure for another capability. Keep its patch outside the official `cordis.patch.yml`. For how the official UI distinguishes plugins and where to put them in offline deployments, see [plugin-secondary-development.md](./plugin-secondary-development.md) (Chinese). Desktop login, workspaces, and Windows packaging are in [desktop-secondary-development.md](./desktop-secondary-development.md) (Chinese). The workbench concept and its boundaries are in [workbench-concept.md](./workbench-concept.md) (Chinese).
 
