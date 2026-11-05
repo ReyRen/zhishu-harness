@@ -11,7 +11,7 @@ There is no public-registry proxy. A package absent from Verdaccio fails to inst
 | Package | Version | Source |
 | --- | --- | --- |
 | `open-sea-skin` | 1.2.6 | Community npm; tarball in `tarballs/` |
-| `@ggboy123/dsh-paper-reader` | 1.6.1 | Plugin “论文伴读”; community npm |
+| `@zhishu/dsh-paper-reader` | 1.6.0 | Plugin “论文伴读”; Zhishu build based on upstream v1.6.0 |
 | `pdfjs-dist` | 6.3.289 | Runtime dependency of `dsh-paper-reader` |
 | `@typesafe-ai/sdk` | 0.6.0 | Runtime dependency of `dsh-paper-reader` |
 | `undici` | 8.10.2 | Runtime dependency of `dsh-paper-reader` |
