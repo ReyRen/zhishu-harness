@@ -227,9 +227,12 @@ export class CommandUiRuntime extends Service implements CommandUiContract {
     const seen = new Set<string>()
     for (const c of list) {
       seen.add(c.name)
+      const decoration = this.live.decorations.get(c.name)
       rows.push({
         name: c.name,
         ...(builtinRowFace(c, this.t) ?? { description: c.description }),
+        ...(decoration?.label === undefined ? {} : { label: decoration.label() }),
+        ...(decoration?.hideAlias === undefined ? {} : { hideAlias: decoration.hideAlias }),
         ...(c.input !== undefined ? { hint: c.input.hint } : {}),
       })
     }

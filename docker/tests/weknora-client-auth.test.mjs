@@ -19,7 +19,8 @@ async function fixture(t, { mode = 'sso', status = 200, deferTicket = false } = 
   } }
   const window = {
     parent, top: parent,
-    __ModuleLoader__: { load(definition) { plugin = definition.factory(() => ({ createElement() {} })) } },
+    __ModuleLoader__: { load(definition) { plugin = definition.factory(() => ({ createElement() {},
+      createSnapshotStore(value) { return { getSnapshot: () => value, set(next) { value = next } } } })) } },
     addEventListener(type, callback) { if (type === 'message') listeners.add(callback) },
     removeEventListener(type, callback) { if (type === 'message') listeners.delete(callback) },
     setTimeout, clearTimeout,

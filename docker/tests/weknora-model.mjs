@@ -9,9 +9,23 @@ export const calls = [
   ['weknora_ask', { query: 'Summarize the backup policy.' }],
 ]
 
+const selectedDescriptions = [
+  'Show the knowledge bases explicitly selected by the user for this conversation.',
+  'Search only the user-selected knowledge bases and return passages with document references. Do not widen the scope. Empty results mean no evidence was found.',
+  'Read a document belonging to the user-selected knowledge bases, using its knowledge_id from retrieval.',
+  'Ask WeKnora to compose a cited answer using only the user-selected knowledge bases. Uses a fresh scoped RAG session; custom agents, prior session IDs and web search are not allowed.',
+]
+
 export class KnowledgeModel extends LlmAdapter {
   async * stream(options) {
-    for (const [name] of calls) assert.ok(options.tools.some(tool => tool.name === name), `${name} is model-visible`)
+    for (const [index, [name]] of calls.entries()) {
+      const tool = options.tools.find(tool => tool.name === name)
+      assert.ok(tool, `${name} is model-visible`)
+      // Independently installed upstream bundles retain their own descriptions.
+      if (tool.description.startsWith('Show the knowledge bases explicitly') || options.tools.some(row => row.description === selectedDescriptions[0])) {
+        assert.equal(tool.description, selectedDescriptions[index])
+      }
+    }
     const results = options.messages.filter(message => message.role === 'tool')
     const next = calls[results.length]
     if (next) {

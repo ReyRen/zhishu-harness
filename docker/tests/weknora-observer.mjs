@@ -48,7 +48,7 @@ export function apply(ctx) {
           await ctx.tools.get('weknora_search').execute({ query: 'secret', knowledge_base_ids: ['forbidden'] },
             { agent: handle.agent, callId: 'denied-probe', signal: AbortSignal.timeout(5_000) })
         } catch (error) { denied = error.message }
-        assert.match(denied, managed ? /Only the knowledge base selected/u : /HTTP 403/u)
+        assert.match(denied, managed ? /Only the knowledge bases selected/u : /HTTP 403/u)
         if (managed) {
           const disabled = await ctx.commands.execute(handle.agent, '/knowledge off', [], AbortSignal.timeout(5_000))
           assert.equal(disabled.result.kind, 'success')
