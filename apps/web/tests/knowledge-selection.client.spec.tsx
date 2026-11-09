@@ -1,33 +1,29 @@
 // @vitest-environment jsdom
-/** Render the shipped platform overlay through its registered multi-select component. */
+/** Shipped overlay registration through the native command controller and rendered inline shell. */
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import * as React from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, expect, it, vi } from 'vitest'
-import * as primitives from '@deepseek-ai/dsh-client-ui-primitives'
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
-import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
+import { PopupSelectController, type PopupSpec } from '@deepseek-ai/dsh-client-ui-commands/client'
+import { PopupSelectView } from '@deepseek-ai/dsh-client-ui-commands/src/client/PopupSelectView.tsx'
+import { zh } from '@deepseek-ai/dsh-client-ui-commands/src/client/locales.ts'
 
 const source = await readFile(resolve(import.meta.dirname, '../../../overlay/knowledge-base/client.js'), 'utf8')
 const disposers: Array<() => void> = []
+beforeEach(() => { Element.prototype.scrollIntoView = vi.fn() })
 afterEach(() => { cleanup(); disposers.splice(0).reverse().forEach((dispose) => { dispose() }) })
 
 function fixture() {
+  type Session = { sessionId: string }
   let apply: (ctx: object) => void
-  let decoration: { label(): string; hideAlias: boolean; ui: { run(session: { sessionId: string }): void } }
-  let definition: { inject(): {
-    hooks: { knowledgeRequest: ReturnType<typeof createSnapshotStore> }
-    save(request: object, ids: readonly string[]): Promise<void>
-    dismiss(request: object): void
-    loadCatalog(signal: AbortSignal): Promise<{ knowledgeBases: Array<{ id: string; name: string }> }>
-  } }
-  let Component: React.ComponentType<Record<string, unknown>>
+  let decoration: { label(): string; hideAlias: boolean; ui: PopupSpec<Session> }
   let dictionary: Record<string, string>
   let selected: string[] = []
   let catalogFails = false, commandFails = false
-  const t = (key: string) => dictionary[key]
   const execute = vi.fn(async (_session: string, line: string) => {
     if (!commandFails) selected = line.endsWith(' off') ? [] : line.split(' ').slice(1)
     return { ok: true, value: { result: { kind: commandFails ? 'error' : 'success' } } }
@@ -38,8 +34,6 @@ function fixture() {
     __ModuleLoader__: { load(entry: { factory: (require: (id: string) => unknown) => { apply: typeof apply } }) {
       apply = entry.factory((id) => {
         if (id === 'react') return React
-        if (id === '@deepseek-ai/dsh-client-store') return { createSnapshotStore }
-        if (id === '@deepseek-ai/dsh-client-ui-primitives') return primitives
         throw new Error('Unexpected module '+id)
       }).apply
     } },
@@ -50,72 +44,71 @@ function fixture() {
       ? Response.json({ mode: 'api-key', authenticated: true })
       : Response.json({ knowledgeBases: [{ id: 'kb-a', name: '资料甲' }, { id: 'kb-b', name: '资料乙' }] }, { status: catalogFails ? 401 : 200 }),
   })
+  const consume = vi.fn(() => true)
+  const popup = new PopupSelectController<Session>({ consume, focusComposer() {} })
+  disposers.push(() => { popup.dispose() })
   apply!({
     effect(setup: () => undefined | (() => void)) { const dispose = setup(); if (dispose) disposers.push(dispose) },
     on() { return () => {} },
-    commandUi: { decorate(value: typeof decoration) { decoration = value; return () => {} } },
+    commandUi: { decorate(value: typeof decoration) { decoration = value; return () => {} }, dismiss() { popup.dismiss() } },
     locale: {
-      register(_ns: string, dictionaries: { zh: typeof dictionary }) { dictionary = dictionaries.zh; return () => {} }, bind() { return t },
+      register(_ns: string, dictionaries: { zh: typeof dictionary }) { dictionary = dictionaries.zh; return () => {} },
+      bind() { return (key: string) => dictionary[key] },
     },
     sessions: { binding() {
       return { session: { projections: { faceOf() { return { getSnapshot: () => ({ knowledgeBaseIds: selected }) } } } } }
     } },
     remote: { commands: { execute } },
     desktopWorkbenches: { register() { return () => {} } }, sidebarSoftPanels: { registerOpener() { return () => {} } },
-    slots: { inject(_name: string, setup: () => void) { setup() },
-      register(value: typeof definition & { id: string }, component: typeof Component) {
-        if (value.id === 'zhishu-knowledge-picker') { definition = value; Component = component }
-        return () => {}
-      } },
+    slots: { inject() {} },
   })
-  const injected = definition!.inject()
-  const store = injected.hooks.knowledgeRequest
-  const useKnowledgeRequest = bindSnapshotSelector(store)
-  function FixtureRoot() {
-    // Use the production selector-hook bridge; a whole-value hook double hides missing selectors.
-    return React.createElement(Component!, { ...injected, useKnowledgeRequest, t })
-  }
-  render(<FixtureRoot />)
-  return { execute, open() { act(() => { decoration!.ui.run({ sessionId: 'session-a' }) }) },
-    decoration: () => decoration!, selected: () => selected,
-    failCatalog(value: boolean) { catalogFails = value }, failCommand(value: boolean) { commandFails = value } }
+  render(<PopupSelectView popup={popup} t={makeTranslate(zh, commonZh)} />)
+  return { execute, consume, popup, open() {
+    act(() => { popup.open('knowledge', decoration!.ui, { sessionId: 'session-a' }, { via: 'enter', token: '/知识库' }) })
+  }, decoration: () => decoration!, selected: () => selected,
+  failCatalog(value: boolean) { catalogFails = value }, failCommand(value: boolean) { commandFails = value } }
 }
 
-it('shows a Chinese menu label and commits multiple checked bases together; search and cancel preserve the draft rules', async () => {
+it('uses the native inline dropdown and immediately applies several toggles without a separate dialog or save', async () => {
   const f = fixture()
   expect(f.decoration().label()).toBe('知识库')
   expect(f.decoration().hideAlias).toBe(true)
   f.open()
-  await screen.findByRole('checkbox', { name: '资料甲' })
-  fireEvent.click(screen.getByRole('checkbox', { name: '资料甲' }))
-  fireEvent.change(screen.getByRole('searchbox'), { target: { value: '乙' } })
-  fireEvent.click(screen.getByRole('checkbox', { name: '资料乙' }))
-  expect(f.execute).not.toHaveBeenCalled()
-  fireEvent.click(screen.getByRole('button', { name: '保存' }))
-  await waitFor(() => { expect(screen.queryByRole('dialog')).toBeNull() })
-  expect(f.execute).toHaveBeenCalledWith('session-a', '/knowledge kb-a kb-b', [])
+  await screen.findByRole('option', { name: '资料甲' })
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(screen.getByRole('listbox').getAttribute('aria-multiselectable')).toBe('true')
+  fireEvent.click(screen.getByRole('option', { name: '资料甲' }))
+  await waitFor(() => { expect(f.selected()).toEqual(['kb-a']) })
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: '乙' } })
+  fireEvent.click(screen.getByRole('option', { name: '资料乙' }))
+  await waitFor(() => { expect(f.selected()).toEqual(['kb-a', 'kb-b']) })
+  expect(f.consume).toHaveBeenCalledTimes(1)
+  expect(screen.getByRole('option', { name: '资料乙' }).getAttribute('aria-selected')).toBe('true')
+  fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape' })
+  expect(screen.queryByRole('listbox')).toBeNull()
   f.open()
-  await screen.findByRole('checkbox', { name: '资料甲' })
-  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: '资料甲' }).checked).toBe(true)
-  fireEvent.click(screen.getByRole('checkbox', { name: '资料甲' }))
-  fireEvent.click(screen.getByText('取消', { selector: 'button' }))
-  expect(f.selected()).toEqual(['kb-a', 'kb-b'])
+  await screen.findByRole('option', { name: '资料甲' })
+  fireEvent.click(screen.getByRole('option', { name: '资料甲' }))
+  await waitFor(() => { expect(f.selected()).toEqual(['kb-b']) })
+  fireEvent.pointerDown(document.body)
+  expect(screen.queryByRole('listbox')).toBeNull()
+  expect(f.execute).toHaveBeenLastCalledWith('session-a', '/knowledge kb-b', [])
 })
 
-it('keeps failed loads retryable and rejected multi-selections visible without replacing the saved scope', async () => {
+it('retries catalog failures and leaves rejected toggles unchecked while retaining the open dropdown', async () => {
   const f = fixture()
   f.failCatalog(true); f.open()
   await screen.findByRole('alert')
-  expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
   f.failCatalog(false)
   fireEvent.click(screen.getByRole('button', { name: '重试' }))
-  await screen.findByRole('checkbox', { name: '资料甲' })
-  fireEvent.click(screen.getByRole('checkbox', { name: '资料甲' }))
-  fireEvent.click(screen.getByRole('checkbox', { name: '资料乙' }))
+  await screen.findByRole('option', { name: '资料甲' })
   f.failCommand(true)
-  fireEvent.click(screen.getByRole('button', { name: '保存' }))
+  fireEvent.click(screen.getByRole('option', { name: '资料甲' }))
   await waitFor(() => { expect(screen.getByRole('alert').textContent).toContain('切换知识库失败') })
-  expect(screen.getByRole('dialog')).toBeTruthy()
-  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: '资料乙' }).checked).toBe(true)
+  expect(screen.getByRole('option', { name: '资料甲' }).getAttribute('aria-selected')).toBe('false')
   expect(f.selected()).toEqual([])
+  f.failCommand(false)
+  fireEvent.click(screen.getByRole('option', { name: '资料乙' }))
+  await waitFor(() => { expect(f.selected()).toEqual(['kb-b']) })
+  expect(screen.queryByRole('alert')).toBeNull()
 })

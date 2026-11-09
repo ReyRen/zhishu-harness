@@ -53,6 +53,8 @@ export interface PopupSearchLabels {
   readonly empty: string
   /** Nonempty catalog with no matching rows. */
   readonly noResults: string
+  /** Optional guidance shown above the options, such as immediate multi-selection. */
+  readonly hint?: string
 }
 
 /**
@@ -63,6 +65,8 @@ export interface PopupSearchLabels {
  */
 export interface PopupSelectSpec {
   readonly kind: 'popupSelect'
+  /** Keep the popup open after each acknowledged toggle; option.active is the checked state. */
+  readonly multiple?: boolean
   /** Defaults to substring search; fuzzy-label ranks names within each group. */
   readonly searchMode?: PopupSearchMode
   /**
@@ -71,7 +75,8 @@ export interface PopupSelectSpec {
    */
   searchLabels?(): PopupSearchLabels
   options(session: ClientSessionContext, signal: AbortSignal): Promise<readonly SelectOption[]>
-  onSelect(option: SelectOption, session: ClientSessionContext): void | Promise<void>
+  /** In multiple mode, selection is the proposed complete set; a rejection leaves the checkmarks unchanged. */
+  onSelect(option: SelectOption, session: ClientSessionContext, selection?: readonly SelectOption[]): void | Promise<void>
 }
 
 /**

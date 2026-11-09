@@ -7,8 +7,6 @@ window.__ModuleLoader__.load({
 
     const React = require('react')
     const h = React.createElement
-    const { Modal, Checkbox, Button, Input } = require('@deepseek-ai/dsh-client-ui-primitives')
-    const { createSnapshotStore } = require('@deepseek-ai/dsh-client-store')
 
     const IFRAME_URL = 'http://172.18.36.230:5175/weknora/sso/platform'
     const SSO_CLIENT_ID = 'gcs-webnora'
@@ -206,17 +204,13 @@ window.__ModuleLoader__.load({
     function installKnowledgePicker(ctx) {
       const namespace = 'zhishu.knowledge-selection'
       const dictionaries = {
-        zh: { title: '知识库', description: '可多选，保存后用于当前会话', placeholder: '搜索可用知识库',
-          empty: '暂无可用知识库', noResults: '没有匹配的知识库', off: '不使用知识库',
-          offDetail: '普通问答，不调用知识库工具', selected: '知识库：', clear: '取消知识库选择',
-          unavailable: '知识库暂不可用，请重新打开平台会话后重试', failed: '切换知识库失败，请重试', clearing: '取消中…',
-          save: '保存', saving: '保存中…', cancel: '取消', retry: '重试', clearAll: '清空知识库', loading: '正在加载知识库',
+        zh: { title: '知识库', description: '可多选，勾选后立即生效', placeholder: '搜索可用知识库',
+          empty: '暂无可用知识库', noResults: '没有匹配的知识库', selected: '知识库：', clear: '取消知识库选择',
+          unavailable: '知识库暂不可用，请重新打开平台会话后重试', failed: '切换知识库失败，请重试', clearAll: '清空知识库',
           revoked: '不可用，请取消选择', changed: '会话的知识库选择已更改，请重新打开选择器' },
-        en: { title: 'Knowledge bases', description: 'Select one or more, then save for this conversation', placeholder: 'Search available knowledge bases',
-          empty: 'No knowledge bases available', noResults: 'No matching knowledge bases', off: 'Do not use knowledge',
-          offDetail: 'Answer without knowledge tools', selected: 'Knowledge: ', clear: 'Clear knowledge selection',
-          unavailable: 'Knowledge unavailable. Reopen the platform session and retry.', failed: 'Could not change knowledge. Retry.', clearing: 'Clearing…',
-          save: 'Save', saving: 'Saving…', cancel: 'Cancel', retry: 'Retry', clearAll: 'Clear all knowledge', loading: 'Loading knowledge bases',
+        en: { title: 'Knowledge bases', description: 'Select one or more; each change applies immediately', placeholder: 'Search available knowledge bases',
+          empty: 'No knowledge bases available', noResults: 'No matching knowledge bases', selected: 'Knowledge: ', clear: 'Clear knowledge selection',
+          unavailable: 'Knowledge unavailable. Reopen the platform session and retry.', failed: 'Could not change knowledge. Retry.', clearAll: 'Clear all knowledge',
           revoked: 'Unavailable; uncheck to continue', changed: 'Knowledge selection changed. Reopen the picker.' },
       }
       ctx.effect(() => ctx.locale.register(namespace, dictionaries), 'knowledge: picker dictionaries')
@@ -242,74 +236,31 @@ window.__ModuleLoader__.load({
         const result = await ctx.remote.commands.execute(sessionID, `/knowledge ${names}`, [])
         if (!result.ok || result.value?.result.kind !== 'success') throw new Error(t('failed'))
       }
-      const picker = createSnapshotStore(null)
-      const dismiss = request => { if (picker.getSnapshot() === request) picker.set(null) }
+      const openedSelections = new WeakMap()
       ctx.effect(() => ctx.commandUi.decorate({
         name: 'knowledge',
         label: () => t('title'), hideAlias: true,
         available: session => stateOf(session.sessionId) !== undefined,
         ui: {
-          kind: 'action',
-          run: session => picker.set({ sessionID: session.sessionId, ids: selectedOf(session.sessionId) }),
+          kind: 'popupSelect', multiple: true,
+          searchLabels: () => ({ placeholder: t('placeholder'), empty: t('empty'), noResults: t('noResults'), hint: t('description') }),
+          async options(session, signal) {
+            const result = await catalog(signal)
+            const ids = selectedOf(session.sessionId)
+            openedSelections.set(session, ids)
+            return [...result.knowledgeBases.map(base => ({ id: base.id, label: base.name, active: ids.includes(base.id) })),
+              ...ids.filter(id => !result.knowledgeBases.some(base => base.id === id))
+                .map(id => ({ id, label: id + ' · ' + t('revoked'), active: true }))]
+          },
+          async onSelect(_option, session, selection) {
+            if (JSON.stringify(selectedOf(session.sessionId)) !== JSON.stringify(openedSelections.get(session))) throw new Error(t('changed'))
+            const ids = selection.map(option => option.id).sort()
+            await select(session.sessionId, ids)
+            openedSelections.set(session, ids)
+          },
         },
-      }), 'knowledge: /knowledge picker')
-      ctx.effect(() => () => picker.set(null), 'knowledge: close picker on unload')
-      ctx.slots.inject('shell.overlay', () => ctx.slots.register({
-        name: 'shell.overlay', id: 'zhishu-knowledge-picker', locale: namespace,
-        inject: () => ({ hooks: { knowledgeRequest: picker }, loadCatalog: catalog, dismiss,
-          async save(request, ids) {
-            if (JSON.stringify(selectedOf(request.sessionID)) !== JSON.stringify(request.ids)) throw new Error(t('changed'))
-            await select(request.sessionID, ids)
-            dismiss(request)
-          } }),
-      }, KnowledgePicker))
-
-      function KnowledgePicker({ useKnowledgeRequest, loadCatalog, save, dismiss, t }) {
-        const request = useKnowledgeRequest(value => value)
-        const [ids, setIds] = React.useState([])
-        const [bases, setBases] = React.useState(null)
-        const [query, setQuery] = React.useState('')
-        const [error, setError] = React.useState('')
-        const [busy, setBusy] = React.useState(false)
-        const [retry, setRetry] = React.useState(0)
-        const lifetime = React.useRef(0)
-        React.useEffect(() => {
-          const controller = new AbortController()
-          setIds(request?.ids || []); setBases(null); setQuery(''); setError(''); setBusy(false)
-          if (request) void loadCatalog(controller.signal).then(result => {
-            if (!controller.signal.aborted) setBases(result.knowledgeBases)
-          }).catch(() => { if (!controller.signal.aborted) setError(t('unavailable')) })
-          return () => { lifetime.current++; controller.abort() }
-        }, [request, loadCatalog, t, retry])
-        if (!request) return null
-        const missing = ids.filter(id => bases && !bases.some(base => base.id === id))
-        const rows = [...(bases || []), ...missing.map(id => ({ id, name: id + ' · ' + t('revoked') }))]
-          .filter(base => base.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
-        const submit = async () => {
-          const revision = lifetime.current
-          setBusy(true); setError('')
-          try { await save(request, ids) }
-          catch (cause) { if (lifetime.current === revision) setError(cause.message || t('failed')) }
-          finally { if (lifetime.current === revision) setBusy(false) }
-        }
-        return h(Modal, { open: true, title: t('title'), description: t('description'), closeLabel: t('cancel'),
-          onClose: () => { if (!busy) dismiss(request) }, className: 'zhishuKbPicker',
-          footer: h(React.Fragment, null,
-            h(Button, { disabled: busy, onClick: () => dismiss(request) }, t('cancel')),
-            h(Button, { variant: 'primary', disabled: busy || !bases || missing.length > 0, onClick: submit }, busy ? t('saving') : t('save'))) },
-        h(Input, { type: 'search', value: query, placeholder: t('placeholder'), 'aria-label': t('placeholder'),
-          'data-modal-autofocus': true, disabled: busy, onChange: event => setQuery(event.target.value) }),
-        h('div', { className: 'zhishuKbPickerList', 'aria-busy': bases === null && !error },
-          bases === null && !error ? h('div', { role: 'status', 'aria-label': t('loading') },
-            ...[0, 1, 2].map(row => h('div', { key: row, className: 'zhishuKbPickerSkeleton', 'aria-hidden': true }))) : null,
-          ...rows.map(base => h('div', { key: base.id, className: 'zhishuKbPickerRow' },
-            h(Checkbox, { label: base.name, title: base.name, checked: ids.includes(base.id), disabled: busy,
-              onChange: checked => setIds(current => checked ? [...current, base.id] : current.filter(id => id !== base.id)) }))),
-          bases && !rows.length ? h('p', null, t(bases.length ? 'noResults' : 'empty')) : null),
-        h(Button, { size: 'sm', disabled: busy || !ids.length, onClick: () => setIds([]) }, t('off')),
-        error ? h('div', { role: 'alert', className: 'zhishuKbChoiceError' }, error,
-          !bases ? h(Button, { size: 'sm', onClick: () => setRetry(value => value + 1) }, t('retry')) : null) : null)
-      }
+      }), 'knowledge: native multi-select popup')
+      ctx.effect(() => () => ctx.commandUi.dismiss('knowledge'), 'knowledge: close picker on unload')
 
       function KnowledgeSelection({ useProjection, sessionID, remove, clear, loadCatalog, t }) {
         const selection = useProjection('zhishuKnowledge')
@@ -364,10 +315,6 @@ window.__ModuleLoader__.load({
       style.textContent = `
         .zhishuKbChoice{display:flex;align-items:center;flex-wrap:wrap;gap:4px;min-width:0;max-width:100%;font-weight:400}
         .zhishuKbChoiceTag{display:inline-flex;align-items:center;max-width:100%;min-width:0}
-        .zhishuKbPicker{width:min(520px,calc(100vw - 32px))}
-        .zhishuKbPickerList{max-height:min(45vh,360px);overflow:auto;margin:12px 0;min-height:36px}
-        .zhishuKbPickerRow{padding:8px 0;overflow-wrap:anywhere}
-        .zhishuKbPickerSkeleton{height:28px;margin:8px 0;border-radius:8px;background:var(--dsw-alias-bg-secondary)}
         .zhishuKbChoiceName{max-width:200px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
         .zhishuKbChoiceClear{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 4px;border:0;border-radius:4px;background:transparent;color:inherit;font:inherit;font-size:16px;cursor:pointer}
         .zhishuKbChoiceClear:disabled{opacity:.55;cursor:default}
