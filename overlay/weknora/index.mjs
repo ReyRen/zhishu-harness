@@ -25,8 +25,8 @@ export async function apply(ctx, config) {
     throw new Error('Worker must provide DSH_PLATFORM_USER_ID for platform knowledge authentication')
   }
   const runtime = createKnowledgeRuntime({ ...resolved, platformUserID })
-  const transport = await runtime.listen()
   ctx.effect(() => () => runtime.close(), 'weknora: close SSO transport')
+  const transport = await runtime.listen()
   ctx.effect(() => ctx.connection.fetch.register({ path: route, methods: ['GET', 'POST'], requestBody: 'buffered',
     fetch: request => runtime.handle(request),
   }), 'weknora: owner-only SSO handoff')

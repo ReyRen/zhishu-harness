@@ -57,7 +57,7 @@ export function createKnowledgeRuntime({ baseUrl, platformUserID, tenantId, requ
   const backend = apiURL(baseUrl)
   const capability = randomBytes(32).toString('hex')
   const lifetime = new AbortController()
-  let credentials, refreshing, generation = 0, address
+  let credentials, refreshing, generation = 0
 
   function clear() { generation++; credentials = undefined; refreshing = undefined }
   function state() { return { mode: 'sso', authenticated: credentials !== undefined } }
@@ -181,12 +181,16 @@ export function createKnowledgeRuntime({ baseUrl, platformUserID, tenantId, requ
       }
     },
     async listen() {
+      if (lifetime.signal.aborted) throw new KnowledgeAuthError('knowledge_runtime_closed', 503)
       await new Promise((resolve, reject) => {
         server.once('error', reject)
         server.listen(0, '127.0.0.1', () => { server.off('error', reject); resolve() })
       })
-      address = `http://127.0.0.1:${server.address().port}/api/v1`
-      return { baseUrl: address, apiKey: capability }
+      if (lifetime.signal.aborted) {
+        if (server.listening) await new Promise(resolve => server.close(resolve))
+        throw new KnowledgeAuthError('knowledge_runtime_closed', 503)
+      }
+      return { baseUrl: `http://127.0.0.1:${server.address().port}/api/v1`, apiKey: capability }
     },
     async close() {
       clear()

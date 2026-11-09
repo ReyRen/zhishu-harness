@@ -148,3 +148,12 @@ test('deployment URLs reject embedded credentials, queries and non-HTTP transpor
     assert.throws(() => createKnowledgeRuntime({ baseUrl }))
   }
 })
+
+test('closing during startup prevents a late listener from retaining credentials or sockets', async () => {
+  const runtime = createKnowledgeRuntime({ baseUrl: 'http://127.0.0.1:1/api/v1' })
+  const pending = runtime.listen()
+  await runtime.close()
+  await assert.rejects(pending, { code: 'knowledge_runtime_closed' })
+  await assert.rejects(runtime.listen(), { code: 'knowledge_runtime_closed' })
+  await runtime.close()
+})
