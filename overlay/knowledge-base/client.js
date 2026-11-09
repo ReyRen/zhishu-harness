@@ -37,7 +37,7 @@ window.__ModuleLoader__.load({
     }
 
     function maskToken(token) {
-      return typeof token === 'string' && token ? `${token.slice(0, 8)}…(${token.length})` : token
+      return typeof token === 'string' && token ? '[redacted]' : undefined
     }
 
     function readTicket(ticket) {
@@ -68,7 +68,7 @@ window.__ModuleLoader__.load({
      * Container / private web: postMessage the embedding model page.
      * Message types differ from weknora:sso-* (separate hop, separate origin).
      */
-    function fetchSsoTicketFromHost() {
+    function fetchSsoTicketFromHost(signal) {
       return new Promise((resolve, reject) => {
         if (window.parent === window) {
           reject(new Error('当前环境无法领取平台登录票据。请在智枢桌面端或平台 Harness 页使用知识库。'))
@@ -76,6 +76,7 @@ window.__ModuleLoader__.load({
         }
         const nonce = newNonce()
         const timer = window.setTimeout(() => {
+          signal?.removeEventListener('abort', onAbort)
           window.removeEventListener('message', onMessage)
           console.error(`${LOG_HOP1} harness ⏱ waiting model response timed out`, {
             direction: 'harness → model (no reply)',
@@ -86,6 +87,11 @@ window.__ModuleLoader__.load({
           })
           reject(new Error('向平台宿主领取登录票据超时。'))
         }, HOST_SSO_TIMEOUT_MS)
+        const onAbort = () => {
+          window.clearTimeout(timer)
+          window.removeEventListener('message', onMessage)
+          reject(new Error('Knowledge authentication cancelled'))
+        }
         const onMessage = (event) => {
           if (event.source !== window.parent) return
           const data = event.data
@@ -100,6 +106,7 @@ window.__ModuleLoader__.load({
             return
           }
           window.clearTimeout(timer)
+          signal?.removeEventListener('abort', onAbort)
           window.removeEventListener('message', onMessage)
           console.info(`${LOG_HOP1} harness ← model ${HOST_SSO_RESPONSE}`, {
             direction: 'model → harness',
@@ -121,6 +128,8 @@ window.__ModuleLoader__.load({
           }
         }
         window.addEventListener('message', onMessage)
+        signal?.addEventListener('abort', onAbort, { once: true })
+        if (signal?.aborted) { onAbort(); return }
         console.info(`${LOG_HOP1} harness → model ${HOST_SSO_REQUEST}`, {
           direction: 'harness → model',
           type: HOST_SSO_REQUEST,
@@ -138,10 +147,58 @@ window.__ModuleLoader__.load({
       })
     }
 
-    async function fetchSsoTicket() {
+    async function fetchSsoTicket(signal) {
       const api = window.zhishuPlatform
       if (api && typeof api.getSsoToken === 'function') return fetchSsoTicketFromDesktop()
-      return fetchSsoTicketFromHost()
+      return fetchSsoTicketFromHost(signal)
+    }
+
+    /** Authenticate tools even when the knowledge-base workbench is closed. */
+    function installToolAuthentication(ctx) {
+      ctx.effect(() => {
+        const lifetime = new AbortController()
+        const endpoint = '/api/zhishu-knowledge/auth'
+        let pending, signedIn = true, revision = 0
+        const request = (init = {}) => fetch(endpoint, { credentials: 'same-origin', cache: 'no-store',
+          ...init, signal: lifetime.signal })
+        const sync = () => {
+          if (pending || !signedIn || lifetime.signal.aborted) return pending
+          const current = revision
+          pending = (async () => {
+            const status = await request()
+            // A profile-owned upstream bundle keeps its own configured authentication.
+            if (status.status === 404) return
+            if (!status.ok) throw new Error('knowledge_auth_status_failed')
+            const state = await status.json()
+            if (state.mode !== 'sso' || state.authenticated) return
+            const ticket = await fetchSsoTicket(lifetime.signal)
+            if (revision !== current || lifetime.signal.aborted) return
+            const response = await request({ method: 'POST', headers: { 'content-type': 'application/json' },
+              body: JSON.stringify(ticket) })
+            if (!response.ok) throw new Error('knowledge_auth_handoff_failed')
+          })().catch(() => {
+            if (!lifetime.signal.aborted && signedIn) console.warn('[Knowledge tools] Authentication unavailable; reopen the platform session and retry.')
+          }).finally(() => { pending = undefined })
+          return pending
+        }
+        const accountChanged = state => {
+          signedIn = state?.authenticated === true
+          revision++
+          if (signedIn) { void sync(); return }
+          void Promise.resolve(pending).then(() => request({ method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ action: 'logout' }) })).catch(() => {
+            if (!lifetime.signal.aborted) console.warn('[Knowledge tools] Could not clear authentication; close the runtime before switching accounts.')
+          })
+        }
+        const space = window.dshModelSpace
+        const unsubscribe = space?.onStateChanged?.(accountChanged)
+        if (typeof space?.state === 'function') {
+          void space.state().then(accountChanged).catch(() => accountChanged({ authenticated: false }))
+        } else void sync()
+        const timer = window.setInterval(sync, 30_000)
+        const stopReset = ctx.on('connection/reset', sync)
+        return () => { revision++; lifetime.abort(); window.clearInterval(timer); unsubscribe?.(); stopReset?.() }
+      }, 'knowledge-base: tool authentication')
     }
 
     function installStyles() {
@@ -392,6 +449,7 @@ window.__ModuleLoader__.load({
     const inject = ['slots', 'desktopWorkbenches', 'sidebarSoftPanels']
     function apply(ctx) {
       installStyles()
+      installToolAuthentication(ctx)
 
       const disposeRegister = ctx.desktopWorkbenches.register({
         title: '知识库',

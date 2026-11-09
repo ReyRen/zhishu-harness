@@ -141,7 +141,7 @@ Smoke-test without real user data first. Verify actual sandbox enforcement, non-
 
 Related code: [Master](https://github.com/ReyRen/gcs-harness-master), [Worker](https://github.com/ReyRen/gcs-harness-worker). Master runs under systemd. Swarm only deploys trusted Worker Global Services; Worker uses host networking and manages users on an isolated local bridge. Use real node URLs, not routing mesh. Worker control port `18082` is restricted to Master/local administration and requires its private Token.
 
-On `172.18.29.80`, inspect the systemd unit. Back up both configuration copies, preserve ownership and modes, and update `dsh.localImageID` in both to the verified image. Current paths are:
+On `172.18.29.80`, inspect the systemd unit. Back up both configuration copies, preserve ownership and modes, and update `dsh.image` in both to the verified image name (for example, `zhishu-harness:main-<commit>`). Each Worker must already resolve that local name to the exact image ID verified for its architecture. Current paths are:
 
 - `/root/go/src/gcs-harness-master/dist/linux-amd64/master.json` (running configuration).
 - `/etc/gcs-harness-master/master.json` (maintained copy).
@@ -155,7 +155,7 @@ curl --fail --silent http://127.0.0.1:18088/healthz
 
 Do not restart until both copies agree. The configured workers list contains explicit node addresses. The Master must remain a single instance; any unreachable configured Worker blocks scheduling to avoid a second JFS writer. Drain users before removing a Worker from configuration.
 
-Query each Worker's `GET /internal/v1/state` with `X-GCS-Worker-Token` loaded privately from the shared token file. For each existing user, sequentially POST `/internal/v1/containers/{userID}/rollout` with `{"imageID":"sha256:..."}`. The Worker stops and retains the old container, starts the replacement, waits for healthy and verifies its internal login credential; a failed replacement is stopped before the old container restarts. Stop release on the first failure. Never log credentials or send Worker/DSH tokens to the frontend.
+Query each Worker's `GET /internal/v1/state` with `X-GCS-Worker-Token` loaded privately from the shared token file. For each existing user, sequentially POST `/internal/v1/containers/{userID}/rollout` with `{"image":"zhishu-harness:main-<commit>"}`. The Worker stops and retains the old container, starts the replacement, waits for healthy and verifies its internal login credential; a failed replacement is stopped before the old container restarts. Stop release on the first failure. Never log credentials or send Worker/DSH tokens to the frontend.
 
 Every image update includes both the Master's default-image configuration and the existing-user rollouts. Building or retagging alone does not complete a release. Before reporting success, confirm the configured default and every current user's actual image ID match the new image, so the next Web launch uses it; keep each user's existing JFS directory.
 

@@ -16,7 +16,8 @@ export function apply(ctx) {
     if (message?.command !== 'weknora-probe') return
     void (async () => {
       await ctx.loader.await()
-      const instances = [...ctx.loader.entries()].filter(entry => entry.options.name === '@wxg-prc-cpg/dsh-weknora')
+      const instances = [...ctx.loader.entries()].filter(entry => entry.options.name === '@wxg-prc-cpg/dsh-weknora'
+        || entry.options.name.replaceAll('\\', '/').endsWith('/weknora/index.mjs'))
       assert.equal(instances.length, 1)
       const handle = await ctx.agents.create({
         sessionId: message.sessionId, meta: { cwd: message.workspace, agentPreset: 'standard' },
