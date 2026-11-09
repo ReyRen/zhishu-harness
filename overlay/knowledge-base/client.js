@@ -265,7 +265,7 @@ window.__ModuleLoader__.load({
       }, KnowledgePicker))
 
       function KnowledgePicker({ useKnowledgeRequest, loadCatalog, save, dismiss, t }) {
-        const request = useKnowledgeRequest()
+        const request = useKnowledgeRequest(value => value)
         const [ids, setIds] = React.useState([])
         const [bases, setBases] = React.useState(null)
         const [query, setQuery] = React.useState('')

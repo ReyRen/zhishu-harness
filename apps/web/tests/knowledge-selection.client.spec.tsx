@@ -8,6 +8,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, expect, it, vi } from 'vitest'
 import * as primitives from '@deepseek-ai/dsh-client-ui-primitives'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 
 const source = await readFile(resolve(import.meta.dirname, '../../../overlay/knowledge-base/client.js'), 'utf8')
 const disposers: Array<() => void> = []
@@ -69,9 +70,9 @@ function fixture() {
   })
   const injected = definition!.inject()
   const store = injected.hooks.knowledgeRequest
+  const useKnowledgeRequest = bindSnapshotSelector(store)
   function FixtureRoot() {
-    // This test adapter supplies the framework's hook seat to the actual registered component.
-    const useKnowledgeRequest = () => React.useSyncExternalStore(listener => store.subscribe(listener), () => store.getSnapshot())
+    // Use the production selector-hook bridge; a whole-value hook double hides missing selectors.
     return React.createElement(Component!, { ...injected, useKnowledgeRequest, t })
   }
   render(<FixtureRoot />)
