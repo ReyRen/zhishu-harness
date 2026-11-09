@@ -80,6 +80,23 @@ function rowLabels(): string[] {
 }
 
 describe('PopupSelectView', () => {
+  it('renders inline multi-selection with independent checked/highlight states and closes with Tab', async () => {
+    const onSelect = vi.fn()
+    const { popup, consume, search } = await mountOpen({ multiple: true, onSelect,
+      searchLabels: () => ({ placeholder: '搜索知识库', empty: '暂无知识库', noResults: '没有匹配', hint: '可多选，勾选后立即生效' }) })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.getByRole('listbox').getAttribute('aria-multiselectable')).toBe('true')
+    expect(screen.getByText('可多选，勾选后立即生效')).toBeTruthy()
+    await act(async () => { fireEvent.click(screen.getByRole('option', { name: 'Dark' })) })
+    expect(screen.getByRole('option', { name: 'Dark' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('option', { name: 'Light' }).getAttribute('aria-selected')).toBe('true')
+    fireEvent.keyDown(search, { key: 'ArrowDown' })
+    await act(async () => { fireEvent.keyDown(search, { key: 'Enter' }) })
+    expect(screen.getByRole('option', { name: 'Sepiawarm' }).getAttribute('aria-selected')).toBe('true')
+    expect(consume).toHaveBeenCalledTimes(1)
+    fireEvent.keyDown(search, { key: 'Tab' })
+    expect(popup.state.getSnapshot().open).toBe(false)
+  })
   it('renders provider groups and selects the same fuzzy-ranked row the user sees', async () => {
     const alpha = { name: 'alpha', label: 'Alpha provider' }
     const beta = { name: 'beta', label: 'Beta provider' }

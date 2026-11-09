@@ -65,7 +65,7 @@ export function PopupSelectView({ popup, t }: PopupSelectViewProps) {
   // the browser never scrolls the active row into view — do it here.
   useEffect(() => {
     if (active === null) return
-    cardRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' })
+    cardRef.current?.querySelector('[data-highlighted="true"]')?.scrollIntoView({ block: 'nearest' })
   }, [active, rows, state.confirming])
 
   // Any outside pointer interaction dismisses —
@@ -117,6 +117,11 @@ export function PopupSelectView({ popup, t }: PopupSelectViewProps) {
       // the shell HOLDS focus, and native traversal would leave an open card
       // whose search input lost focus.
       case 'Tab':
+        if (state.multiple && state.status === 'ready') {
+          ev.preventDefault()
+          popup.dismiss({ focusComposer: true })
+          return
+        }
         // With nothing to settle — still loading, failed, or filtered empty —
         // the keystroke stays the browser's, which is how the error strip's
         // retry button remains reachable.
@@ -137,7 +142,8 @@ export function PopupSelectView({ popup, t }: PopupSelectViewProps) {
     <div
       key={option.id}
       role="option"
-      aria-selected={index === state.active}
+      aria-selected={state.multiple ? option.active === true : index === state.active}
+      data-highlighted={index === state.active}
       aria-label={option.badge === undefined ? undefined : `${option.label} ${option.badge}`}
       className={clsx(css.row, index === state.active && css.rowActive)}
       onClick={() => { void popup.select(index) }}
@@ -172,6 +178,7 @@ export function PopupSelectView({ popup, t }: PopupSelectViewProps) {
             readOnly={state.submitting}
             onChange={(ev) => { popup.setSearch(ev.currentTarget.value) }}
           />
+          {state.searchLabels?.hint !== undefined && <div className={css.status}>{state.searchLabels.hint}</div>}
           {state.error !== null && (
             <div className={css.error} role="alert">
               <span className={css.errorText}>{state.error}</span>
@@ -184,7 +191,7 @@ export function PopupSelectView({ popup, t }: PopupSelectViewProps) {
           {state.submitting && <div className={css.status}>{t('status.applying')}</div>}
           {state.status === 'ready' && rows.length === 0 && <div className={css.status}>{emptyLabel}</div>}
           {state.status === 'ready' && (
-            <div ref={viewportRef} role="listbox" aria-label={t('listbox.aria', { command: String(state.command) })} className={css.viewport}>
+            <div ref={viewportRef} role="listbox" aria-multiselectable={state.multiple || undefined} aria-label={t('listbox.aria', { command: String(state.command) })} className={css.viewport}>
               {groups.map(({ group, rows: groupRows }) => group === undefined
                 ? <Fragment key="ungrouped">{groupRows.map(option => renderOption(option, optionIndex++))}</Fragment>
                 : <MenuGroup key={`group:${group.name}`} label={group.label}>

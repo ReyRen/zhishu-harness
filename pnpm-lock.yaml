@@ -1014,6 +1014,9 @@ importers:
       '@deepseek-ai/dsh-agent-team':
         specifier: workspace:*
         version: link:../../packages/team/agent-team
+      '@deepseek-ai/dsh-client-locale':
+        specifier: workspace:*
+        version: link:../../packages/client/locale
       '@deepseek-ai/dsh-client-modules':
         specifier: workspace:*
         version: link:../../packages/client/modules
@@ -1023,6 +1026,9 @@ importers:
       '@deepseek-ai/dsh-client-test-runtime':
         specifier: workspace:*
         version: link:../../packages/test-support/client-runtime
+      '@deepseek-ai/dsh-client-ui-commands':
+        specifier: workspace:*
+        version: link:../../packages/client/ui-commands
       '@deepseek-ai/dsh-client-ui-deliverables':
         specifier: workspace:*
         version: link:../../packages/client/ui-deliverables

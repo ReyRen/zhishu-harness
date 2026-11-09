@@ -33,11 +33,11 @@ export type TokenSegment =
  * session wiring passes its session projection; the controller only carries
  * it from open() to the callbacks).
  */
-export interface PopupSpec<TCtx> extends Pick<PopupSelectSpec, 'searchLabels' | 'searchMode'> {
+export interface PopupSpec<TCtx> extends Pick<PopupSelectSpec, 'searchLabels' | 'searchMode' | 'multiple'> {
   /** Load the option rows once per open (retry after failure reuses the same signal). */
   options(context: TCtx, signal: AbortSignal): Promise<readonly SelectOption[]>
   /** Settle the picked option against the open-time context. */
-  onSelect(option: SelectOption, context: TCtx): void | Promise<void>
+  onSelect(option: SelectOption, context: TCtx, selection?: readonly SelectOption[]): void | Promise<void>
 }
 
 /** Injected session-wiring callbacks of one controller (tests pass fakes). */
@@ -57,6 +57,8 @@ export interface PopupSelectDeps {
 /** Popup shell state (the shell component renders from here; closed = render null). */
 export interface PopupState {
   readonly open: boolean
+  /** Acknowledged toggles stay open and preserve the local search/highlight. */
+  readonly multiple: boolean
   /** Command name the shell is open for (null while closed). */
   readonly command: string | null
   /** Options-load lifecycle; 'failed' keeps the shell open for retry(). */
@@ -87,7 +89,7 @@ export interface PopupState {
 }
 
 const CLOSED: PopupState = {
-  open: false, command: null, status: 'pending', options: [], search: '', searchLabels: null, searchMode: 'substring', active: 0,
+  open: false, multiple: false, command: null, status: 'pending', options: [], search: '', searchLabels: null, searchMode: 'substring', active: 0,
   submitting: false, confirming: null, acknowledged: false, error: null,
 }
 
@@ -136,6 +138,7 @@ interface OpenBinding<TCtx> {
   readonly context: TCtx
   readonly segment: TokenSegment
   readonly abort: AbortController
+  consumed: boolean
 }
 
 /** The shell's error-strip line for a settlement failure. */
@@ -171,9 +174,9 @@ export class PopupSelectController<TCtx = unknown> {
   open(command: string, spec: PopupSpec<TCtx>, context: TCtx, segment: TokenSegment): void {
     const searchLabels = spec.searchLabels?.() ?? null
     this.binding?.abort.abort()
-    const binding: OpenBinding<TCtx> = { command, spec, context, segment, abort: new AbortController() }
+    const binding: OpenBinding<TCtx> = { command, spec, context, segment, abort: new AbortController(), consumed: false }
     this.binding = binding
-    this.state.set({ ...CLOSED, open: true, command, searchLabels, searchMode: spec.searchMode ?? 'substring' })
+    this.state.set({ ...CLOSED, open: true, multiple: spec.multiple === true, command, searchLabels, searchMode: spec.searchMode ?? 'substring' })
     this.load(binding)
   }
 
@@ -293,8 +296,10 @@ export class PopupSelectController<TCtx = unknown> {
     const s = this.state.getSnapshot()
     if (this.binding !== binding || !s.open || s.submitting) return
     this.state.set({ ...s, submitting: true, confirming: null, acknowledged: false, error: null })
+    const options = s.multiple ? s.options.map(row => row.id === option.id ? { ...row, active: row.active !== true } : row) : s.options
     try {
-      await binding.spec.onSelect(option, binding.context)
+      if (s.multiple) await binding.spec.onSelect(option, binding.context, options.filter(row => row.active === true))
+      else await binding.spec.onSelect(option, binding.context)
     } catch (error) {
       console.error(`[ui-commands] popupSelect onSelect failed for /${binding.command}:`, error)
       if (this.binding !== binding) return // dismissed/reopened/disposed while onSelect flew
@@ -302,7 +307,15 @@ export class PopupSelectController<TCtx = unknown> {
       return
     }
     if (this.binding !== binding) return // late success: no state write, no consumption
-    this.deps.consume(binding.segment)
+    if (!binding.consumed) {
+      this.deps.consume(binding.segment)
+      binding.consumed = true
+    }
+    if (this.binding !== binding) return // consume can synchronously retire the session's shell
+    if (s.multiple) {
+      this.state.set({ ...this.state.getSnapshot(), options, submitting: false, error: null })
+      return
+    }
     this.binding = null
     this.state.set(CLOSED)
     this.deps.focusComposer()
