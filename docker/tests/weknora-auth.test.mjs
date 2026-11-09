@@ -16,7 +16,7 @@ async function fixture(t, options = {}) {
       let raw = ''
       for await (const part of req) raw += part
       const body = raw ? JSON.parse(raw) : undefined
-      calls.push({ path: req.url, method: req.method, authorization: req.headers.authorization, apiKey: req.headers['x-api-key'], body })
+      calls.push({ path: req.url, method: req.method, authorization: req.headers.authorization, apiKey: req.headers['x-api-key'], requestID: req.headers['x-request-id'], body })
       const send = (status, body) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)) }
       if (req.url === '/api/v1/auth/platform-sso/exchange') {
         const user = body.access_token.replace('platform-', '')
@@ -68,6 +68,18 @@ test('authorized tools use Bearer credentials without forwarding private bridge 
   assert.equal(f.calls[1].apiKey, undefined)
   assert.equal(JSON.stringify(f.runtime.state()).includes('fixture.'), false)
   assert.equal(JSON.stringify(f.runtime.state()).includes('refresh-'), false)
+})
+
+test('trusted retrieval correlation reaches existing backend request logs without credentials', async t => {
+  const f = await fixture(t)
+  await f.runtime.signIn({ access_token: 'platform-369' })
+  const requestID = 'harness.369.session-hash.call-hash.fixture'
+  const response = await f.request('/knowledge-bases', { headers: { 'X-Request-ID': requestID } })
+  await response.arrayBuffer()
+  assert.equal(f.calls.at(-1).requestID, requestID)
+  const ignored = await f.request('/knowledge-bases', { headers: { 'X-Request-ID': 'untrusted-correlation' } })
+  await ignored.arrayBuffer()
+  assert.equal(f.calls.at(-1).requestID, undefined)
 })
 
 test('untrusted loopback calls and unsupported paths never reach the backend', async t => {

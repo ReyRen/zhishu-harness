@@ -48,7 +48,7 @@ const backend = createServer((request, response) => {
     } else if (url.pathname === '/api/v1/knowledge/search') {
       send(200, { data: [] })
     } else if (url.pathname === '/api/v1/knowledge/doc-backups') {
-      send(200, { data: { id: 'doc-backups', title: 'Backup policy', description: 'Retention policy' } })
+      send(200, { data: { id: 'doc-backups', knowledge_base_id: `kb-${user}`, title: 'Backup policy', description: 'Retention policy' } })
     } else if (url.pathname === '/api/v1/chunks/doc-backups') {
       send(200, { data: [chunk], total: 1, page: 1, page_size: 30 })
     } else if (url.pathname === '/api/v1/sessions') {
@@ -121,7 +121,7 @@ async function probe(user, installed = false, sso = false) {
               assert.equal(response.status, 200)
               assert.deepEqual(await response.json(), { mode: 'sso', authenticated: true })
             }
-            child.send({ command: 'weknora-probe', workspace,
+            child.send({ command: 'weknora-probe', workspace, knowledgeBaseId: `kb-${user}`,
               sessionId: installed ? 'weknora-smoke-installed' : sso ? 'weknora-smoke-sso' : 'weknora-smoke' },
               error => { if (error) reject(error) })
           })().catch(reject)
@@ -135,6 +135,7 @@ async function probe(user, installed = false, sso = false) {
       })
     })
     assert.equal(result.unloaded, true)
+    assert.equal(result.selectionRequired, !installed)
     assert.equal(JSON.stringify(result).includes(`smoke-user-${user}`), false, 'Credentials never reach the transcript')
     const manifest = JSON.parse(await readFile(join(home, 'profiles/web/package.json'), 'utf8'))
     if (!installed) {
@@ -169,7 +170,7 @@ try {
   console.log(JSON.stringify({ plugin: '@wxg-prc-cpg/dsh-weknora', tools: first.names,
     agentConversation: true, independentCredentials: true, profileInstallRequired: false,
     installedBundleDeduplicated: true, platformSSO: true, ownerOnlyHandoff: true,
-    forbiddenScopeRejected: true, unloadRemovesTools: true }))
+    forbiddenScopeRejected: true, explicitSessionSelection: true, unloadRemovesTools: true }))
 } finally {
   backend.closeAllConnections()
   await new Promise((resolve, reject) => backend.close(error => error ? reject(error) : resolve()))

@@ -201,12 +201,107 @@ window.__ModuleLoader__.load({
       }, 'knowledge-base: tool authentication')
     }
 
+    function installKnowledgePicker(ctx) {
+      const namespace = 'zhishu.knowledge-selection'
+      const dictionaries = {
+        zh: { title: '知识库', description: '选择本会话使用的知识库', placeholder: '搜索可用知识库',
+          empty: '暂无可用知识库', noResults: '没有匹配的知识库', off: '不使用知识库',
+          offDetail: '普通问答，不调用知识库工具', selected: '知识库：', clear: '取消知识库选择',
+          unavailable: '知识库暂不可用，请重新打开平台会话后重试', failed: '切换知识库失败，请重试', clearing: '取消中…' },
+        en: { title: 'Knowledge base', description: 'Choose knowledge for this conversation', placeholder: 'Search available knowledge bases',
+          empty: 'No knowledge bases available', noResults: 'No matching knowledge bases', off: 'Do not use knowledge',
+          offDetail: 'Answer without knowledge tools', selected: 'Knowledge: ', clear: 'Clear knowledge selection',
+          unavailable: 'Knowledge unavailable. Reopen the platform session and retry.', failed: 'Could not change knowledge. Retry.', clearing: 'Clearing…' },
+      }
+      ctx.effect(() => ctx.locale.register(namespace, dictionaries), 'knowledge: picker dictionaries')
+      const t = ctx.locale.bind(namespace)
+      const live = sessionID => ctx.sessions.binding(sessionID)?.session
+      const stateOf = sessionID => live(sessionID)?.projections.faceOf('zhishuKnowledge').getSnapshot()
+      const request = async (path, signal) => {
+        const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', signal })
+        if (!response.ok) throw new Error(t('unavailable'))
+        return response.json()
+      }
+      const catalog = async signal => {
+        const result = await request('/api/zhishu-knowledge/catalog', signal)
+        if (!Array.isArray(result?.knowledgeBases) || result.knowledgeBases.some(base =>
+          typeof base?.id !== 'string' || typeof base.name !== 'string')) throw new Error(t('unavailable'))
+        return result
+      }
+      const select = async (sessionID, id) => {
+        const session = live(sessionID)
+        if (!session) throw new Error(t('failed'))
+        const result = await ctx.remote.commands.execute(sessionID, `/knowledge ${id}`, [])
+        if (!result.ok || result.value?.result.kind !== 'success') throw new Error(t('failed'))
+      }
+      ctx.effect(() => ctx.commandUi.decorate({
+        name: 'knowledge',
+        available: session => stateOf(session.sessionId) !== undefined,
+        ui: {
+          kind: 'popupSelect',
+          searchLabels: () => ({ placeholder: t('placeholder'), empty: t('empty'), noResults: t('noResults') }),
+          async options(session, signal) {
+            const result = await catalog(signal)
+            const selected = stateOf(session.sessionId)?.knowledgeBaseId
+            return [{ id: 'off', label: t('off'), detail: t('offDetail'), active: selected === null },
+              ...result.knowledgeBases.map(base => ({ id: base.id, label: base.name, active: base.id === selected }))]
+          },
+          onSelect: (option, session) => select(session.sessionId, option.id),
+        },
+      }), 'knowledge: /knowledge picker')
+
+      function KnowledgeSelection({ useProjection, sessionID, clear, loadCatalog, t }) {
+        const selection = useProjection('zhishuKnowledge')
+        const id = selection?.knowledgeBaseId
+        const [label, setLabel] = React.useState('')
+        const [error, setError] = React.useState('')
+        const [busy, setBusy] = React.useState(false)
+        const lifetime = React.useRef(0)
+        React.useEffect(() => { setBusy(false); return () => { lifetime.current++ } }, [sessionID])
+        React.useEffect(() => {
+          setError(''); setLabel(id || '')
+          if (!id) return
+          const controller = new AbortController()
+          void loadCatalog(controller.signal).then(result => {
+            if (controller.signal.aborted) return
+            const base = result.knowledgeBases.find(base => base.id === id)
+            if (!base) { setError(t('unavailable')); return }
+            setLabel(base.name)
+          }).catch(() => { if (!controller.signal.aborted) setError(t('unavailable')) })
+          return () => controller.abort()
+        }, [id, sessionID, loadCatalog, t])
+        if (!id) return null
+        const remove = async () => {
+          const revision = lifetime.current
+          setBusy(true); setError('')
+          try { await clear() }
+          catch { if (lifetime.current === revision) setError(t('failed')) }
+          finally { if (lifetime.current === revision) setBusy(false) }
+        }
+        return h('div', { className: 'zhishuKbChoice' },
+          h('span', { className: 'zhishuKbChoiceName', title: label }, t('selected') + label),
+          h('button', { type: 'button', className: 'zhishuKbChoiceClear', disabled: busy,
+            'aria-label': t('clear'), title: t('clear'), onClick: remove }, busy ? t('clearing') : '×'),
+          error ? h('span', { role: 'alert', className: 'zhishuKbChoiceError' }, error) : null)
+      }
+      ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
+        name: 'conversation.input.left', id: 'zhishu-knowledge-selection',
+        locale: namespace,
+        inject: sessionID => ({ sessionID, loadCatalog: catalog, clear: () => select(sessionID, 'off') }),
+      }, KnowledgeSelection))
+    }
+
     function installStyles() {
       if (document.getElementById(STYLE_ID)) return
       const style = document.createElement('style')
       style.id = STYLE_ID
       style.dataset.plugin = '@zhishu/dsh-overlay-knowledge-base'
       style.textContent = `
+        .zhishuKbChoice{display:flex;align-items:center;flex-wrap:wrap;gap:4px;min-width:0;max-width:100%;font-weight:400}
+        .zhishuKbChoiceName{max-width:200px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .zhishuKbChoiceClear{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 4px;border:0;border-radius:4px;background:transparent;color:inherit;font:inherit;font-size:16px;cursor:pointer}
+        .zhishuKbChoiceClear:disabled{opacity:.55;cursor:default}
+        .zhishuKbChoiceError{color:var(--dsw-alias-label-error);font-size:12px;max-width:260px}
         .zhishuKb{display:flex;flex:1;min-width:0;min-height:0;height:100%;flex-direction:column;background:var(--dsw-alias-bg-primary,#fff);color:var(--dsw-alias-label-primary)}
         .zhishuKbToolbar{display:flex;align-items:center;gap:8px;flex:none;min-height:40px;padding:6px 12px;border-bottom:1px solid var(--dsw-alias-border-secondary,rgba(0,0,0,.08))}
         .zhishuKbToolbarTitle{flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -446,10 +541,11 @@ window.__ModuleLoader__.load({
       )
     }
 
-    const inject = ['slots', 'desktopWorkbenches', 'sidebarSoftPanels']
+    const inject = ['slots', 'desktopWorkbenches', 'sidebarSoftPanels', 'commandUi', 'sessions', 'locale', 'connection', 'remote', 'remote.commands']
     function apply(ctx) {
       installStyles()
       installToolAuthentication(ctx)
+      installKnowledgePicker(ctx)
 
       const disposeRegister = ctx.desktopWorkbenches.register({
         title: '知识库',
