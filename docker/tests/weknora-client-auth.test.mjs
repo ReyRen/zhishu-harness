@@ -44,6 +44,9 @@ async function fixture(t, { mode = 'sso', status = 200, deferTicket = false } = 
     desktopWorkbenches: { register() { return () => {} } },
     sidebarSoftPanels: { registerOpener() { return () => {} } },
     slots: { inject() {} },
+    commandUi: { decorate() { return () => {} } },
+    sessions: { binding() {} },
+    locale: { register() { return () => {} }, bind() { return key => key } },
   }
   plugin.apply(ctx)
   t.after(async () => {

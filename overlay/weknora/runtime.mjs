@@ -138,6 +138,8 @@ export function createKnowledgeRuntime({ baseUrl, platformUserID, tenantId, requ
       const body = incoming.method === 'POST' ? await bodyBytes(incoming, TOOL_BODY_LIMIT) : undefined
       const token = await authorization(controller.signal)
       const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json', accept: incoming.headers.accept || 'application/json' }
+      const requestID = incoming.headers['x-request-id']
+      if (typeof requestID === 'string' && /^harness\.[A-Za-z0-9._-]{1,240}$/u.test(requestID)) headers['X-Request-ID'] = requestID
       if (tenantId) headers['X-Tenant-ID'] = tenantId
       let response
       try {
