@@ -357,6 +357,23 @@ describe('candidates', () => {
   })
 
   describe('menu presentation (design doc for #3567)', () => {
+    it('reads decorated Host labels per menu pass and keeps the canonical pick identity', async () => {
+      const { command, source } = await bench()
+      let label = '知识库'
+      const run = vi.fn()
+      const dispose = command.decorate({ name: 'plan', label: () => label, hideAlias: true,
+        available: () => true, ui: { kind: 'action', run } })
+      expect((await source.candidates(proj('s1'), req(''))).find(row => row.name === 'plan'))
+        .toMatchObject({ name: 'plan', label: '知识库', hideAlias: true })
+      expect((await source.candidates(proj('s1'), req('知识'))).map(row => row.name)).toContain('plan')
+      menuPick(source, 'plan', proj('s1'))
+      expect(run).toHaveBeenCalledWith(proj('s1'))
+      label = 'Knowledge bases'
+      expect((await source.candidates(proj('s1'), req(''))).find(row => row.name === 'plan')?.label).toBe(label)
+      dispose()
+      expect((await source.candidates(proj('s1'), req(''))).find(row => row.name === 'plan'))
+        .not.toHaveProperty('hideAlias')
+    })
     /** First-party definitions plus an unrelated command, in Host registration order. */
     const SHIPPED: CommandDescriptor[] = [
       { definitionId: CommandDefinitionId('@deepseek-ai/dsh-command-compact'), name: 'compact', description: 'Compact older conversation history' },

@@ -125,6 +125,10 @@ export interface CommandContribution {
 export interface CommandDecoration {
   /** The HOST command name this decorates (without the leading slash). */
   readonly name: string
+  /** Localized menu title, read on each candidate pass; execution keeps the Host name. */
+  label?(): string
+  /** Hide the command-name alias while retaining name-based matching and dispatch. */
+  readonly hideAlias?: boolean
   /** Capability filter, called with a fresh projection per bare invocation. */
   available(session: ClientSessionContext): boolean
   /** The bare-invocation UI. */

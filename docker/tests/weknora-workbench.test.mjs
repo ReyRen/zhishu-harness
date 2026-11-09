@@ -12,6 +12,7 @@ function fixture({ owned = false, failure, ownershipFailure } = {}) {
   // The platform has already authenticated. Effects unrelated to this click are not mounted.
   const state = [true, false, false, '', '']
   const React = {
+    createSnapshotStore(value) { return { getSnapshot: () => value, set(next) { value = next } } },
     createElement(type, props, ...children) { return { type, props: props || {}, children } },
     useState(initial) { const id = cursor++; if (!(id in state)) state[id] = initial; return [state[id], value => { state[id] = value }] },
     useRef(value) { return { current: value } }, useEffect() {}, useLayoutEffect() {},

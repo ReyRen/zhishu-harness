@@ -35,23 +35,23 @@ export async function apply(ctx, config) {
   const proxied = { ...resolved, ...transport, tenantId: resolved.apiKey ? resolved.tenantId : undefined }
   const selection = await installSelection(ctx, new WeknoraClient(proxied), resolved.knowledgeBaseIds)
   const descriptions = {
-    list_knowledge_bases: 'Show the knowledge base explicitly selected by the user for this conversation.',
-    search: 'Search only the user-selected knowledge base and return passages with document references. Do not widen the scope. Empty results mean no evidence was found.',
-    read_document: 'Read a document belonging to the user-selected knowledge base, using its knowledge_id from retrieval.',
-    ask: 'Ask WeKnora to compose a cited answer using only the user-selected knowledge base. Uses a fresh scoped RAG session; custom agents, prior session IDs and web search are not allowed.',
+    list_knowledge_bases: 'Show the knowledge bases explicitly selected by the user for this conversation.',
+    search: 'Search only the user-selected knowledge bases and return passages with document references. Do not widen the scope. Empty results mean no evidence was found.',
+    read_document: 'Read a document belonging to the user-selected knowledge bases, using its knowledge_id from retrieval.',
+    ask: 'Ask WeKnora to compose a cited answer using only the user-selected knowledge bases. Uses a fresh scoped RAG session; custom agents, prior session IDs and web search are not allowed.',
   }
   for (const definition of createTools(new WeknoraClient(proxied), proxied)) {
     ctx.tools.register({ ...definition,
       description: descriptions[definition.name.slice(resolved.toolPrefix.length + 1)],
       execute(args, context) {
-        return selection.run(context, async (id, signal) => {
-          const config = { ...proxied, knowledgeBaseIds: [id], agentId: undefined }
+        return selection.run(context, async (ids, signal) => {
+          const config = { ...proxied, knowledgeBaseIds: ids, agentId: undefined }
           const requestID = knowledgeRequestID(platformUserID, context.agent.id, context.callId)
-          const client = new SelectedKnowledgeClient(config, id, requestID)
+          const client = new SelectedKnowledgeClient(config, ids, requestID)
           const current = createTools(client, config).find(tool => tool.name === definition.name)
-          return current.execute(selectedArguments(args, id), { ...context, signal })
+          return current.execute(selectedArguments(args, ids), { ...context, signal })
         })
       },
-    }, { when: ({ agent }) => selection.selectionOf(agent) !== null })
+    }, { when: ({ agent }) => selection.selectionOf(agent).length > 0 })
   }
 }
