@@ -141,7 +141,7 @@ printf '%s %s\n' "$IMAGE" "$IMAGE_ID"
 
 相关代码：[Master](https://github.com/ReyRen/gcs-harness-master)、[Worker](https://github.com/ReyRen/gcs-harness-worker)。Master 使用 systemd。Swarm 仅部署受信任 Worker Global Service；Worker 使用 host 网络，在隔离的本地 bridge 上管理用户。必须用节点真实 URL，不能用 routing mesh。Worker 控制端口 `18082` 限 Master/本机管理访问，并要求私有内部 Token。
 
-在 `172.18.29.80` 检查 systemd unit，备份两份配置，保留属主和权限，把两份 `dsh.localImageID` 均更新为已验证镜像。当前路径：
+在 `172.18.29.80` 检查 systemd unit，备份两份配置，保留属主和权限，把两份 `dsh.image` 均更新为已验证镜像名称（例如 `zhishu-harness:main-<commit>`）。各 Worker 必须已在本机将该名称解析到本架构验证过的精确 Image ID。当前路径：
 
 - `/root/go/src/gcs-harness-master/dist/linux-amd64/master.json`：运行配置。
 - `/etc/gcs-harness-master/master.json`：维护副本。
@@ -155,7 +155,7 @@ curl --fail --silent http://127.0.0.1:18088/healthz
 
 两份配置一致后才能重启。workers 列表显式填写节点地址。Master 只支持单实例；任一配置 Worker 不可达就拒绝调度，防止第二个 JFS 写入者。删除节点配置前必须排空用户。
 
-私下从共享 Token 文件读取 `X-GCS-Worker-Token`，查询各 Worker 的 `GET /internal/v1/state`。逐个用户 POST `/internal/v1/containers/{userID}/rollout`，请求体为 `{"imageID":"sha256:..."}`。Worker 停止并保留旧容器，启动新容器，等待 healthy 并验证内部登录凭据；新版本失败先停新容器，再重启旧容器。首个失败就停止发布。不要记录凭据或将 Worker/DSH Token 返回前端。
+私下从共享 Token 文件读取 `X-GCS-Worker-Token`，查询各 Worker 的 `GET /internal/v1/state`。逐个用户 POST `/internal/v1/containers/{userID}/rollout`，请求体为 `{"image":"zhishu-harness:main-<commit>"}`。Worker 停止并保留旧容器，启动新容器，等待 healthy 并验证内部登录凭据；新版本失败先停新容器，再重启旧容器。首个失败就停止发布。不要记录凭据或将 Worker/DSH Token 返回前端。
 
 每次镜像更新都包括 Master 默认镜像配置更新和现有用户容器替换。仅构建或重新打标签不算发布完成。报告成功前，确认配置中的默认镜像与每个当前用户实际运行的 Image ID 都指向新镜像，保证下次 Web launch 使用新版；各用户继续使用原 JFS 目录。
 
