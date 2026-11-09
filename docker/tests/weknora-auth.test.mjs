@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { test } from 'node:test'
 import { createKnowledgeRuntime } from '../../overlay/weknora/runtime.mjs'
+import { apply } from '../../overlay/weknora/index.mjs'
 
 function token(user, expires = Date.now() + 3600_000) {
   return `fixture.${Buffer.from(JSON.stringify({ sub: user, exp: Math.floor(expires / 1000) })).toString('base64url')}.signature`
@@ -156,4 +157,29 @@ test('closing during startup prevents a late listener from retaining credentials
   await assert.rejects(pending, { code: 'knowledge_runtime_closed' })
   await assert.rejects(runtime.listen(), { code: 'knowledge_runtime_closed' })
   await runtime.close()
+})
+
+test('profile configuration cannot replace the Worker identity or select a shared API key', async t => {
+  const previous = process.env.DSH_PLATFORM_USER_ID
+  t.after(() => {
+    if (previous === undefined) delete process.env.DSH_PLATFORM_USER_ID
+    else process.env.DSH_PLATFORM_USER_ID = previous
+  })
+  process.env.DSH_PLATFORM_USER_ID = '369'
+  await assert.rejects(apply({}, { apiKey: 'shared-key', platformUserID: '506' }), /require SSO/u)
+  process.env.DSH_PLATFORM_USER_ID = '../invalid'
+  await assert.rejects(apply({}, {}), /Worker-assigned/u)
+})
+
+test('a Worker runtime without a trusted environment identity refuses to activate', async t => {
+  const oldUser = process.env.DSH_PLATFORM_USER_ID, oldAuthority = process.env.DSH_PUBLIC_AUTHORITY
+  t.after(() => {
+    if (oldUser === undefined) delete process.env.DSH_PLATFORM_USER_ID
+    else process.env.DSH_PLATFORM_USER_ID = oldUser
+    if (oldAuthority === undefined) delete process.env.DSH_PUBLIC_AUTHORITY
+    else process.env.DSH_PUBLIC_AUTHORITY = oldAuthority
+  })
+  delete process.env.DSH_PLATFORM_USER_ID
+  process.env.DSH_PUBLIC_AUTHORITY = 'dsh-u-test:3081'
+  await assert.rejects(apply({}, { platformUserID: '506' }), /Worker must provide/u)
 })

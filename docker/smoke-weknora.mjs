@@ -88,6 +88,7 @@ async function probe(user, installed = false, sso = false) {
     delete environment.WEKNORA_API_KEY
     environment.DSH_PLATFORM_USER_ID = `user-${user}`
   } else delete environment.DSH_PLATFORM_USER_ID
+  delete environment.DSH_PUBLIC_AUTHORITY
   delete environment.VITEST
   const child = owner.start(process.execPath, [join(repository, 'apps/cli/lib/bin.js'),
     '--profile', 'web', '--patch', patch, '--host', '127.0.0.1', '--port', '0', '--no-open'],

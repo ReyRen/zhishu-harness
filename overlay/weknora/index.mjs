@@ -7,11 +7,14 @@ export const inject = ['tools', 'connection']
 /** Register an owner-authenticated handoff and keep the upstream tool implementations. */
 export async function apply(ctx, config) {
   const resolved = resolveConfig(config)
-  if (config.platformUserID !== undefined && config.platformUserID !== '' && (typeof config.platformUserID !== 'string'
-    || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(config.platformUserID))) {
-    throw new Error('platformUserID must be the Worker-assigned user identifier')
+  // User profiles may configure tools, but cannot replace the Worker-assigned identity.
+  const platformUserID = process.env.DSH_PLATFORM_USER_ID || undefined
+  if (platformUserID && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(platformUserID)) {
+    throw new Error('DSH_PLATFORM_USER_ID must be the Worker-assigned user identifier')
   }
-  const platformUserID = config.platformUserID || undefined
+  if (process.env.DSH_PUBLIC_AUTHORITY?.startsWith('dsh-u-') && !platformUserID) {
+    throw new Error('Worker must provide DSH_PLATFORM_USER_ID for platform knowledge authentication')
+  }
   const route = '/api/zhishu-knowledge/auth'
   if (resolved.apiKey) {
     if (platformUserID) throw new Error('Per-user platform runtimes require SSO, not shared WeKnora API keys')
@@ -20,9 +23,6 @@ export async function apply(ctx, config) {
       async fetch() { return Response.json({ mode: 'api-key', authenticated: true }) },
     }))
     return
-  }
-  if (process.env.DSH_PUBLIC_AUTHORITY?.startsWith('dsh-u-') && !platformUserID) {
-    throw new Error('Worker must provide DSH_PLATFORM_USER_ID for platform knowledge authentication')
   }
   const runtime = createKnowledgeRuntime({ ...resolved, platformUserID })
   ctx.effect(() => () => runtime.close(), 'weknora: close SSO transport')
