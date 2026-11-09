@@ -482,10 +482,10 @@ window.__ModuleLoader__.load({
         setChatOpen(true)
         setAsking(true)
         setError('')
-        const current = typeof service.currentSession === 'function' ? service.currentSession() : null
-        const owned = current && typeof service.ownsSession === 'function' ? service.ownsSession(current) : false
         void (async () => {
           try {
+            const current = service.currentSession()
+            const owned = current && service.ownsSession(current)
             if (!owned) await service.newSession()
           } catch (err) {
             setError(err instanceof Error ? err.message : String(err))
@@ -547,6 +547,16 @@ window.__ModuleLoader__.load({
       installToolAuthentication(ctx)
       installKnowledgePicker(ctx)
 
+      // Workbench frame props carry the registry's service context. Ownership
+      // operations must instead retain this registered provider's Cordis caller.
+      const actions = {
+        currentSession: () => ctx.desktopWorkbenches.currentSession(),
+        ownsSession: id => ctx.desktopWorkbenches.ownsSession(id),
+        newSession: () => ctx.desktopWorkbenches.newSession(),
+      }
+      function KnowledgeWorkbenchEntry(props) {
+        return h(KnowledgeWorkbench, { ...props, service: actions })
+      }
       const disposeRegister = ctx.desktopWorkbenches.register({
         title: '知识库',
         titleEn: 'Knowledge Base',
@@ -555,7 +565,7 @@ window.__ModuleLoader__.load({
         category: '知识',
         customFrame: true,
         headerLayout: 'compact',
-      }, KnowledgeWorkbench)
+      }, KnowledgeWorkbenchEntry)
 
       const disposeOpener = ctx.sidebarSoftPanels.registerOpener(WORKBENCH_ID, () => {
         ctx.desktopWorkbenches.run(ctx.desktopWorkbenches.open(WORKBENCH_ID))

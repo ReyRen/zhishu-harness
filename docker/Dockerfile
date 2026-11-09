@@ -148,7 +148,7 @@ ENV pnpm_config_registry=http://127.0.0.1:4873
 
 FROM runtime AS validated
 
-RUN --network=none node --test /opt/dsh/docker/tests/weknora-auth.test.mjs /opt/dsh/docker/tests/weknora-client-auth.test.mjs /opt/dsh/docker/tests/weknora-selection.test.mjs /opt/dsh/docker/tests/weknora-picker.test.mjs /opt/dsh/docker/tests/weknora-selection-runtime.mjs \
+RUN --network=none node --test /opt/dsh/docker/tests/weknora-auth.test.mjs /opt/dsh/docker/tests/weknora-client-auth.test.mjs /opt/dsh/docker/tests/weknora-selection.test.mjs /opt/dsh/docker/tests/weknora-picker.test.mjs /opt/dsh/docker/tests/weknora-selection-runtime.mjs /opt/dsh/docker/tests/weknora-workbench.test.mjs \
   && node /opt/dsh/docker/smoke-office.mjs \
   && node /opt/dsh/docker/smoke-market.mjs \
   && node /opt/dsh/docker/smoke-memory.mjs \
