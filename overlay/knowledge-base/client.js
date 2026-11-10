@@ -595,8 +595,23 @@ window.__ModuleLoader__.load({
         headerLayout: 'compact',
       }, KnowledgeWorkbenchEntry)
 
+      let openingWorkbench = null
+      let disposed = false
+      // The built-in entry is available before this user's first workbench write.
+      function openKnowledgeWorkbench() {
+        if (disposed) return Promise.resolve()
+        if (openingWorkbench) return openingWorkbench
+        openingWorkbench = (async () => {
+          const service = ctx.desktopWorkbenches
+          if (!service.ready) await service.load()
+          if (disposed) return
+          if (!service.state.added.includes(WORKBENCH_ID)) await service.add(WORKBENCH_ID)
+          if (!disposed) await service.open(WORKBENCH_ID)
+        })().finally(() => { openingWorkbench = null })
+        return openingWorkbench
+      }
       const disposeOpener = ctx.sidebarSoftPanels.registerOpener(WORKBENCH_ID, () => {
-        ctx.desktopWorkbenches.run(ctx.desktopWorkbenches.open(WORKBENCH_ID))
+        ctx.desktopWorkbenches.run(openKnowledgeWorkbench())
       })
 
       ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
@@ -606,8 +621,10 @@ window.__ModuleLoader__.load({
         label: '知识库',
       }, KnowledgeIcon))
 
-      ctx.effect(() => () => {
+      ctx.effect(() => async () => {
+        disposed = true
         disposeOpener?.()
+        try { await openingWorkbench } catch (error) { /* The opener's run() owns failure reporting. */ }
         disposeRegister?.()
       }, 'knowledge-base: unregister workbench')
     }
