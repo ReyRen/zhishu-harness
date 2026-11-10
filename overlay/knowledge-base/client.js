@@ -205,11 +205,11 @@ window.__ModuleLoader__.load({
     function installKnowledgePicker(ctx) {
       const namespace = 'zhishu.knowledge-selection'
       const dictionaries = {
-        zh: { title: '知识库', description: '可多选，勾选后立即生效', placeholder: '搜索可用知识库',
+        zh: { title: '知识库', placeholder: '搜索可用知识库',
           empty: '暂无可用知识库', noResults: '没有匹配的知识库', selected: '知识库：', multiple: '知识库 · 已选 {count} 个',
           unavailable: '知识库暂不可用，请重新打开平台会话后重试', failed: '切换知识库失败，请重试',
           revoked: '不可用，请取消选择', changed: '会话的知识库选择已更改，请重新打开选择器' },
-        en: { title: 'Knowledge bases', description: 'Select one or more; each change applies immediately', placeholder: 'Search available knowledge bases',
+        en: { title: 'Knowledge bases', placeholder: 'Search available knowledge bases',
           empty: 'No knowledge bases available', noResults: 'No matching knowledge bases', selected: 'Knowledge: ', multiple: 'Knowledge · {count} selected',
           unavailable: 'Knowledge unavailable. Reopen the platform session and retry.', failed: 'Could not change knowledge. Retry.',
           revoked: 'Unavailable; uncheck to continue', changed: 'Knowledge selection changed. Reopen the picker.' },
@@ -249,7 +249,7 @@ window.__ModuleLoader__.load({
         available: session => stateOf(session.sessionId) !== undefined,
         ui: {
           kind: 'popupSelect', multiple: true,
-          searchLabels: () => ({ placeholder: t('placeholder'), empty: t('empty'), noResults: t('noResults'), hint: t('description') }),
+          searchLabels: () => ({ placeholder: t('placeholder'), empty: t('empty'), noResults: t('noResults') }),
           async options(session, signal) {
             const result = await catalog(signal)
             const ids = selectedOf(session.sessionId)
