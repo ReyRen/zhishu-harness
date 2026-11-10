@@ -76,6 +76,38 @@ function spec(overrides: Partial<PopupSpec<Ctx>> = {}): PopupSpec<Ctx> {
   }
 }
 
+it('maps selected-only rows after each removal and clears hidden checks only after acknowledgment', async () => {
+  const onClear = vi.fn().mockRejectedValueOnce(new Error('Clear denied'))
+  const { popup, deps } = await readyPopup({ multiple: true, onClear })
+  await popup.select(0)
+  popup.setSelectedOnly(true)
+  await popup.select(0)
+  expect(filterOptions(popup.state.getSnapshot().options, '', 'substring', true).map(row => row.id)).toEqual(['light'])
+  popup.setSearch('not-visible')
+  await popup.clearSelection()
+  expect(popup.state.getSnapshot().options[1]?.active).toBe(true)
+  expect(popup.state.getSnapshot().error).toBe('Clear denied')
+  await popup.clearSelection()
+  expect(popup.state.getSnapshot().options.every(row => row.active === false)).toBe(true)
+  expect(popup.state.getSnapshot()).toMatchObject({ open: true, selectedOnly: true, search: 'not-visible', active: 0 })
+  expect(deps.consume).toHaveBeenCalledTimes(1)
+})
+
+it('never consumes a control-opened draft and revokes a late clear when another popup opens', async () => {
+  const clearing = Promise.withResolvers<undefined>()
+  const deps = makeDeps(), popup = new PopupSelectController<Ctx>(deps)
+  popup.open('theme', spec({ multiple: true, onClear: () => clearing.promise }), CTX_A)
+  await Promise.resolve()
+  await popup.select(0)
+  const pending = popup.clearSelection()
+  popup.open('other', spec(), CTX_A)
+  clearing.resolve(undefined)
+  await pending
+  expect(deps.consume).not.toHaveBeenCalled()
+  expect(popup.state.getSnapshot()).toMatchObject({ command: 'other', multiple: false })
+  expect(popup.state.getSnapshot().options[1]?.active).toBe(true)
+})
+
 /** Fake session wiring: records consume/focus calls; consume answer is settable per test. */
 function makeDeps(consumeResult = true) {
   const consume = vi.fn((_segment: TokenSegment) => consumeResult)

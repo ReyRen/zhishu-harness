@@ -78,6 +78,49 @@
   letter-spacing: 0.2px;
 }
 
+.multiLabel {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.selectionControls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 2px;
+}
+
+.selectionFilter,
+.clearSelection {
+  padding: 4px 7px;
+  border: 0;
+  border-radius: var(--dsw-radius-md);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.selectionFilter[aria-pressed=true],
+.selectionFilter:hover,
+.clearSelection:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.clearSelection {
+  margin-left: auto;
+}
+
+.selectionFilter:disabled,
+.clearSelection:disabled {
+  opacity: .55;
+  cursor: default;
+}
+
 .detail {
   flex: 1;
   min-width: 0;

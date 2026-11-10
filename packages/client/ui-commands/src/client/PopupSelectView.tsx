@@ -48,8 +48,9 @@ export function PopupSelectView({ popup, t }: PopupSelectViewProps) {
   const cardRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
-  const rows = useMemo(() => filterOptions(state.options, state.search, state.searchMode),
-    [state.options, state.search, state.searchMode])
+  const rows = useMemo(() => filterOptions(state.options, state.search, state.searchMode, state.selectedOnly),
+    [state.options, state.search, state.searchMode, state.selectedOnly])
+  const selectedCount = state.options.filter(option => option.active === true).length
   const groups = useMemo(() => groupOptions(rows), [rows])
   useEffect(() => {
     const viewport = viewportRef.current
@@ -92,11 +93,12 @@ export function PopupSelectView({ popup, t }: PopupSelectViewProps) {
   if (!state.open) return null
 
   const confirmation = state.confirming?.confirmation
-  const emptyLabel = state.searchLabels === null
+  const emptyLabel = state.selectedOnly && selectedCount === 0 ? t('multi.empty') : state.searchLabels === null
     ? t('status.empty')
     : state.options.length === 0 ? state.searchLabels.empty : state.searchLabels.noResults
 
   const onKeyDown = (ev: React.KeyboardEvent<HTMLDivElement>): void => {
+    if (ev.target instanceof HTMLButtonElement && ev.key !== 'Escape') return
     // ArrowLeft/ArrowRight fall through on purpose: the search input keeps
     // its native caret movement.
     switch (ev.key) {
@@ -112,14 +114,10 @@ export function PopupSelectView({ popup, t }: PopupSelectViewProps) {
         ev.preventDefault()
         void popup.select(state.active)
         return
-      // Tab settles like Enter and Shift+Tab dismisses like Escape, so the
-      // card's keys mean what they mean in the composer. Both must be consumed:
-      // the shell HOLDS focus, and native traversal would leave an open card
-      // whose search input lost focus.
+      // Multi-pickers keep native traversal to their filter and clear controls.
+      // Single-pickers settle with Tab and dismiss with Shift+Tab.
       case 'Tab':
         if (state.multiple && state.status === 'ready') {
-          ev.preventDefault()
-          popup.dismiss({ focusComposer: true })
           return
         }
         // With nothing to settle — still loading, failed, or filtered empty —
@@ -150,7 +148,7 @@ export function PopupSelectView({ popup, t }: PopupSelectViewProps) {
       onMouseEnter={() => { popup.highlight(index) }}
     >
       <span className={css.label}>
-        <span className={css.labelText}>{option.label}</span>
+        <span className={clsx(css.labelText, state.multiple && css.multiLabel)}>{option.label}</span>
         {option.badge !== undefined && <sup className={css.badge}>{option.badge}</sup>}
       </span>
       {option.detail !== undefined && <span className={css.detail}>{option.detail}</span>}
@@ -167,6 +165,9 @@ export function PopupSelectView({ popup, t }: PopupSelectViewProps) {
           style={{ maxHeight }}
           aria-label={t('overlay.aria', { command: String(state.command) })}
           onKeyDown={onKeyDown}
+          onBlur={(event) => {
+            if (state.multiple && event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget)) popup.dismiss()
+          }}
         >
           <input
             ref={searchRef}
@@ -179,6 +180,16 @@ export function PopupSelectView({ popup, t }: PopupSelectViewProps) {
             onChange={(ev) => { popup.setSearch(ev.currentTarget.value) }}
           />
           {state.searchLabels?.hint !== undefined && <div className={css.status}>{state.searchLabels.hint}</div>}
+          {state.multiple && state.status === 'ready' && (
+            <div className={css.selectionControls}>
+              <button type="button" className={css.selectionFilter} aria-pressed={!state.selectedOnly} disabled={state.submitting}
+                onClick={() => { popup.setSelectedOnly(false) }}>{t('multi.all')}</button>
+              <button type="button" className={css.selectionFilter} aria-pressed={state.selectedOnly} disabled={state.submitting}
+                onClick={() => { popup.setSelectedOnly(true) }}>{t('multi.selected', { count: selectedCount })}</button>
+              {state.canClear && <button type="button" className={css.clearSelection} disabled={state.submitting || selectedCount === 0}
+                onClick={() => { void popup.clearSelection() }}>{t('multi.clear')}</button>}
+            </div>
+          )}
           {state.error !== null && (
             <div className={css.error} role="alert">
               <span className={css.errorText}>{state.error}</span>

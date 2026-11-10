@@ -20,7 +20,8 @@ async function fixture(t) {
     on() { return () => {} },
     locale: { register(namespace, dictionaries) { this.dictionary = dictionaries.zh; return () => {} },
       bind() { return key => this.dictionary[key] } },
-    commandUi: { decorate(value) { registrations.push(value); return () => {} }, dismiss() {} },
+    commandUi: { decorate(value) { registrations.push(value); return () => {} }, dismiss() {},
+      openPopup(name, sessionID, signal) { calls.push({ popup: name, sessionID, signal }) } },
     desktopWorkbenches: { register() { return () => {} } }, sidebarSoftPanels: { registerOpener() { return () => {} } },
     slots: { inject(name, setup) { setup() }, register(definition, component) { slots.push({ definition, component }); return () => {} } },
     sessions: { binding(id) {
@@ -79,12 +80,15 @@ test('each acknowledged toggle commits the complete set through the native human
   assert.deepEqual(f.selected.get('session-b'), ['kb-b'])
   assert.ok(f.calls.some(call => call.line === '/knowledge kb-a kb-b' && call.sessionID === 'session-a'))
   assert.equal(f.calls.some(call => call.path?.includes('/selection?')), false)
-  const chip = f.slots.find(slot => slot.definition.id === 'zhishu-knowledge-selection')
-  await chip.definition.inject('session-a').remove('kb-a')
+  await f.picker.ui.onSelect(options[0], session, [options[1]])
   assert.deepEqual(Array.from(f.selected.get('session-a')), ['kb-b'])
-  await chip.definition.inject('session-a').clear()
+  await f.picker.ui.onClear(session)
   assert.deepEqual(Array.from(f.selected.get('session-a')), [])
   assert.deepEqual(f.selected.get('session-b'), ['kb-b'])
+  const summary = f.slots.find(slot => slot.definition.id === 'zhishu-knowledge-selection')
+  const signal = AbortSignal.timeout(1000)
+  await summary.definition.inject('session-a').open(signal)
+  assert.ok(f.calls.some(call => call.popup === 'knowledge' && call.sessionID === 'session-a' && call.signal === signal))
 })
 
 test('rejected changes retain the previous selection and failed or aborted catalogs cannot produce stale options', async t => {
@@ -104,5 +108,6 @@ test('a stale open picker cannot overwrite a selection changed elsewhere', async
   const options = await f.picker.ui.options(session, AbortSignal.timeout(1000))
   f.selected.set('session-a', ['kb-b'])
   await assert.rejects(f.picker.ui.onSelect(options[0], session, [options[0]]), /已更改/u)
+  await assert.rejects(f.picker.ui.onClear(session), /已更改/u)
   assert.equal(f.calls.some(call => call.line), false)
 })

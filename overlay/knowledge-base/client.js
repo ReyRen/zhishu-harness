@@ -6,6 +6,7 @@ window.__ModuleLoader__.load({
     Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' })
 
     const React = require('react')
+    const { IconChevronDownOutlineRegular } = require('@deepseek-ai/dsh-client-ui-primitives')
     const h = React.createElement
 
     const IFRAME_URL = 'http://172.18.36.230:5175/weknora/sso/platform'
@@ -205,12 +206,12 @@ window.__ModuleLoader__.load({
       const namespace = 'zhishu.knowledge-selection'
       const dictionaries = {
         zh: { title: '知识库', description: '可多选，勾选后立即生效', placeholder: '搜索可用知识库',
-          empty: '暂无可用知识库', noResults: '没有匹配的知识库', selected: '知识库：', clear: '取消知识库选择',
-          unavailable: '知识库暂不可用，请重新打开平台会话后重试', failed: '切换知识库失败，请重试', clearAll: '清空知识库',
+          empty: '暂无可用知识库', noResults: '没有匹配的知识库', selected: '知识库：', multiple: '知识库 · 已选 {count} 个',
+          unavailable: '知识库暂不可用，请重新打开平台会话后重试', failed: '切换知识库失败，请重试',
           revoked: '不可用，请取消选择', changed: '会话的知识库选择已更改，请重新打开选择器' },
         en: { title: 'Knowledge bases', description: 'Select one or more; each change applies immediately', placeholder: 'Search available knowledge bases',
-          empty: 'No knowledge bases available', noResults: 'No matching knowledge bases', selected: 'Knowledge: ', clear: 'Clear knowledge selection',
-          unavailable: 'Knowledge unavailable. Reopen the platform session and retry.', failed: 'Could not change knowledge. Retry.', clearAll: 'Clear all knowledge',
+          empty: 'No knowledge bases available', noResults: 'No matching knowledge bases', selected: 'Knowledge: ', multiple: 'Knowledge · {count} selected',
+          unavailable: 'Knowledge unavailable. Reopen the platform session and retry.', failed: 'Could not change knowledge. Retry.',
           revoked: 'Unavailable; uncheck to continue', changed: 'Knowledge selection changed. Reopen the picker.' },
       }
       ctx.effect(() => ctx.locale.register(namespace, dictionaries), 'knowledge: picker dictionaries')
@@ -237,6 +238,11 @@ window.__ModuleLoader__.load({
         if (!result.ok || result.value?.result.kind !== 'success') throw new Error(t('failed'))
       }
       const openedSelections = new WeakMap()
+      const changeSelection = async (session, ids) => {
+        if (JSON.stringify(selectedOf(session.sessionId)) !== JSON.stringify(openedSelections.get(session))) throw new Error(t('changed'))
+        await select(session.sessionId, ids)
+        openedSelections.set(session, ids)
+      }
       ctx.effect(() => ctx.commandUi.decorate({
         name: 'knowledge',
         label: () => t('title'), hideAlias: true,
@@ -253,57 +259,60 @@ window.__ModuleLoader__.load({
                 .map(id => ({ id, label: id + ' · ' + t('revoked'), active: true }))]
           },
           async onSelect(_option, session, selection) {
-            if (JSON.stringify(selectedOf(session.sessionId)) !== JSON.stringify(openedSelections.get(session))) throw new Error(t('changed'))
             const ids = selection.map(option => option.id).sort()
-            await select(session.sessionId, ids)
-            openedSelections.set(session, ids)
+            await changeSelection(session, ids)
           },
+          onClear: session => changeSelection(session, []),
         },
       }), 'knowledge: native multi-select popup')
       ctx.effect(() => () => ctx.commandUi.dismiss('knowledge'), 'knowledge: close picker on unload')
 
-      function KnowledgeSelection({ useProjection, sessionID, remove, clear, loadCatalog, t }) {
+      function KnowledgeSelection({ useProjection, sessionID, open, loadCatalog, t }) {
         const selection = useProjection('zhishuKnowledge')
         const ids = selection?.knowledgeBaseIds || []
-        const key = ids.join(' ')
+        const key = ids.length === 1 ? ids[0] : ''
         const [labels, setLabels] = React.useState({})
         const [error, setError] = React.useState('')
         const [busy, setBusy] = React.useState(false)
-        const lifetime = React.useRef(0)
-        React.useEffect(() => { setBusy(false); return () => { lifetime.current++ } }, [sessionID])
+        const lifetime = React.useRef(null)
+        React.useEffect(() => {
+          const controller = new AbortController()
+          lifetime.current = controller; setBusy(false); setError('')
+          return () => controller.abort()
+        }, [sessionID])
         React.useEffect(() => {
           setError(''); setLabels({})
           if (!key) return
           const controller = new AbortController()
           void loadCatalog(controller.signal).then(result => {
             if (controller.signal.aborted) return
-            if (ids.some(id => !result.knowledgeBases.some(base => base.id === id))) setError(t('unavailable'))
+            if (!result.knowledgeBases.some(base => base.id === key)) setError(t('unavailable'))
             setLabels(Object.fromEntries(result.knowledgeBases.map(base => [base.id, base.name])))
           }).catch(() => { if (!controller.signal.aborted) setError(t('unavailable')) })
           return () => controller.abort()
         }, [key, sessionID, loadCatalog, t])
-        if (!ids.length) return null
-        const change = async action => {
-          const revision = lifetime.current
+        const show = async () => {
+          const controller = lifetime.current
+          if (!controller || busy) return
           setBusy(true); setError('')
-          try { await action() }
-          catch { if (lifetime.current === revision) setError(t('failed')) }
-          finally { if (lifetime.current === revision) setBusy(false) }
+          try { await open(controller.signal) }
+          catch { if (!controller.signal.aborted) setError(t('failed')) }
+          finally { if (!controller.signal.aborted) setBusy(false) }
         }
+        const label = ids.length === 0 ? t('title') : ids.length === 1 && labels[ids[0]]
+          ? t('selected') + labels[ids[0]] : t('multiple', { count: ids.length })
         return h('div', { className: 'zhishuKbChoice' },
-          ...ids.map(id => h('span', { key: id, className: 'zhishuKbChoiceTag' },
-            h('span', { className: 'zhishuKbChoiceName', title: labels[id] || id }, t('selected') + (labels[id] || id)),
-            h('button', { type: 'button', className: 'zhishuKbChoiceClear', disabled: busy,
-              'aria-label': t('clear') + '：' + (labels[id] || id), title: t('clear'), onClick: () => change(() => remove(id)) }, '×'))),
-          ids.length > 1 ? h('button', { type: 'button', className: 'zhishuKbChoiceClear', disabled: busy,
-            onClick: () => change(clear) }, t('clearAll')) : null,
+          h('button', { type: 'button', className: 'zhishuKbChoiceTrigger', disabled: busy, 'aria-haspopup': 'listbox',
+            'aria-label': label, 'data-selected': ids.length > 0, onClick: show },
+          h(KnowledgeIcon, { size: 14 }), h('span', { className: 'zhishuKbChoiceName' }, label),
+          h(IconChevronDownOutlineRegular, { size: 12 })),
           error ? h('span', { role: 'alert', className: 'zhishuKbChoiceError' }, error) : null)
       }
       ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
         name: 'conversation.input.left', id: 'zhishu-knowledge-selection',
         locale: namespace,
-        inject: sessionID => ({ sessionID, loadCatalog: catalog, clear: () => select(sessionID, []),
-          remove: id => select(sessionID, selectedOf(sessionID).filter(value => value !== id)) }),
+        inject: sessionID => ({ sessionID, loadCatalog: catalog,
+          open: signal => ctx.commandUi.openPopup('knowledge', sessionID, signal) }),
       }, KnowledgeSelection))
     }
 
@@ -313,11 +322,13 @@ window.__ModuleLoader__.load({
       style.id = STYLE_ID
       style.dataset.plugin = '@zhishu/dsh-overlay-knowledge-base'
       style.textContent = `
-        .zhishuKbChoice{display:flex;align-items:center;flex-wrap:wrap;gap:4px;min-width:0;max-width:100%;font-weight:400}
-        .zhishuKbChoiceTag{display:inline-flex;align-items:center;max-width:100%;min-width:0}
-        .zhishuKbChoiceName{max-width:200px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-        .zhishuKbChoiceClear{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 4px;border:0;border-radius:4px;background:transparent;color:inherit;font:inherit;font-size:16px;cursor:pointer}
-        .zhishuKbChoiceClear:disabled{opacity:.55;cursor:default}
+        .zhishuKbChoice{display:flex;align-items:center;gap:4px;min-width:0;max-width:100%;font-weight:400}
+        .zhishuKbChoiceTrigger{display:inline-flex;align-items:center;gap:4px;min-width:0;max-width:180px;height:28px;padding:0 6px;border:0;border-radius:var(--dsw-radius-md);background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;cursor:pointer}
+        .zhishuKbChoiceTrigger[data-selected=true]{color:var(--dsw-alias-label-primary)}
+        .zhishuKbChoiceTrigger:hover{background:var(--dsw-alias-interactive-bg-hover)}
+        .zhishuKbChoiceTrigger:disabled{opacity:.55;cursor:default}
+        .zhishuKbChoiceTrigger svg{flex:none}
+        .zhishuKbChoiceName{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
         .zhishuKbChoiceError{color:var(--dsw-alias-label-error);font-size:12px;max-width:260px}
         .zhishuKb{display:flex;flex:1;min-width:0;min-height:0;height:100%;flex-direction:column;background:var(--dsw-alias-bg-primary,#fff);color:var(--dsw-alias-label-primary)}
         .zhishuKbToolbar{display:flex;align-items:center;gap:8px;flex:none;min-height:40px;padding:6px 12px;border-bottom:1px solid var(--dsw-alias-border-secondary,rgba(0,0,0,.08))}
