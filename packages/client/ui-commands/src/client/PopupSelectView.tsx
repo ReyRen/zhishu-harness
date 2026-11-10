@@ -144,6 +144,7 @@ export function PopupSelectView({ popup, t }: PopupSelectViewProps) {
       data-highlighted={index === state.active}
       aria-label={option.badge === undefined ? undefined : `${option.label} ${option.badge}`}
       className={clsx(css.row, index === state.active && css.rowActive)}
+      onMouseDown={(event) => { event.preventDefault() }}
       onClick={() => { void popup.select(index) }}
       onMouseEnter={() => { popup.highlight(index) }}
     >

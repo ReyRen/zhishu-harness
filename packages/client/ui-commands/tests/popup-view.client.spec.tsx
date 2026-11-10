@@ -123,6 +123,19 @@ describe('PopupSelectView', () => {
     fireEvent.keyDown(screen.getByRole('button', { name: '全部' }), { key: 'Escape' })
     expect(popup.state.getSnapshot().open).toBe(false)
   })
+
+  it('keeps search focus on a mouse press so blur dismissal cannot discard a multi-selection click', async () => {
+    const onSelect = vi.fn()
+    const { popup, search } = await mountOpen({ multiple: true, onSelect })
+    const row = screen.getByRole('option', { name: 'Dark' })
+    expect(document.activeElement).toBe(search)
+    expect(fireEvent.mouseDown(row, { button: 0 })).toBe(false)
+    await act(async () => { fireEvent.click(row) })
+    expect(onSelect).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('option', { name: 'Dark' }).getAttribute('aria-selected')).toBe('true')
+    expect(popup.state.getSnapshot().open).toBe(true)
+    expect(document.activeElement).toBe(search)
+  })
   it('renders provider groups and selects the same fuzzy-ranked row the user sees', async () => {
     const alpha = { name: 'alpha', label: 'Alpha provider' }
     const beta = { name: 'beta', label: 'Beta provider' }
