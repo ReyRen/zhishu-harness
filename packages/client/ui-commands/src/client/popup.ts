@@ -38,6 +38,8 @@ export interface PopupSpec<TCtx> extends Pick<PopupSelectSpec, 'searchLabels' | 
   options(context: TCtx, signal: AbortSignal): Promise<readonly SelectOption[]>
   /** Settle the picked option against the open-time context. */
   onSelect(option: SelectOption, context: TCtx, selection?: readonly SelectOption[]): void | Promise<void>
+  /** Clear the complete selection through the owning business action. */
+  onClear?(context: TCtx): void | Promise<void>
 }
 
 /** Injected session-wiring callbacks of one controller (tests pass fakes). */
@@ -59,6 +61,10 @@ export interface PopupState {
   readonly open: boolean
   /** Acknowledged toggles stay open and preserve the local search/highlight. */
   readonly multiple: boolean
+  /** Show only checked options while preserving the catalog order. */
+  readonly selectedOnly: boolean
+  /** The owner supplied an explicit clear action. */
+  readonly canClear: boolean
   /** Command name the shell is open for (null while closed). */
   readonly command: string | null
   /** Options-load lifecycle; 'failed' keeps the shell open for retry(). */
@@ -89,21 +95,23 @@ export interface PopupState {
 }
 
 const CLOSED: PopupState = {
-  open: false, multiple: false, command: null, status: 'pending', options: [], search: '', searchLabels: null, searchMode: 'substring', active: 0,
+  open: false, multiple: false, selectedOnly: false, canClear: false, command: null, status: 'pending', options: [], search: '', searchLabels: null, searchMode: 'substring', active: 0,
   submitting: false, confirming: null, acknowledged: false, error: null,
 }
 
 /**
  * Filter rows using substring matching, or rank labels fuzzily within each group.
- * Blank search keeps every row; fuzzy matching preserves group order.
+ * Blank search keeps every row in the selected scope; fuzzy matching preserves group order.
  * @param options - the loaded rows.
  * @param search - the shell's search text.
  * @param mode - the command's policy; defaults to substring over label and detail.
+ * @param selectedOnly - restrict rows to checked options before searching.
  * @returns the original option objects in the order shown and used for selection.
  */
 export function filterOptions(
-  options: readonly SelectOption[], search: string, mode: PopupSearchMode = 'substring',
+  options: readonly SelectOption[], search: string, mode: PopupSearchMode = 'substring', selectedOnly = false,
 ): readonly SelectOption[] {
+  if (selectedOnly) options = options.filter(option => option.active === true)
   const query = search.trim().toLowerCase()
   const groups = groupOptions(options)
   const ordered = groups.some(group => group.group !== undefined) ? groups.flatMap(group => group.rows) : options
@@ -136,7 +144,7 @@ interface OpenBinding<TCtx> {
   readonly command: string
   readonly spec: PopupSpec<TCtx>
   readonly context: TCtx
-  readonly segment: TokenSegment
+  readonly segment: TokenSegment | undefined
   readonly abort: AbortController
   consumed: boolean
 }
@@ -169,14 +177,14 @@ export class PopupSelectController<TCtx = unknown> {
    * @param command - command name the shell serves.
    * @param spec - the registered popupSelect spec.
    * @param context - open-time context snapshot, handed verbatim to options/onSelect.
-   * @param segment - open-time token segment snapshot for post-select consumption.
+   * @param segment - token snapshot; omitted for controls that preserve the draft.
    */
-  open(command: string, spec: PopupSpec<TCtx>, context: TCtx, segment: TokenSegment): void {
+  open(command: string, spec: PopupSpec<TCtx>, context: TCtx, segment?: TokenSegment): void {
     const searchLabels = spec.searchLabels?.() ?? null
     this.binding?.abort.abort()
     const binding: OpenBinding<TCtx> = { command, spec, context, segment, abort: new AbortController(), consumed: false }
     this.binding = binding
-    this.state.set({ ...CLOSED, open: true, multiple: spec.multiple === true, command, searchLabels, searchMode: spec.searchMode ?? 'substring' })
+    this.state.set({ ...CLOSED, open: true, multiple: spec.multiple === true, canClear: spec.onClear !== undefined, command, searchLabels, searchMode: spec.searchMode ?? 'substring' })
     this.load(binding)
   }
 
@@ -218,6 +226,26 @@ export class PopupSelectController<TCtx = unknown> {
   }
 
   /**
+   * Filter a multi-picker to checked rows without changing its selection.
+   * @param selectedOnly - whether unchecked rows are hidden.
+   */
+  setSelectedOnly(selectedOnly: boolean): void {
+    const s = this.state.getSnapshot()
+    if (!s.open || !s.multiple || s.status !== 'ready' || s.submitting || s.confirming !== null || selectedOnly === s.selectedOnly) return
+    this.state.set({ ...s, selectedOnly, active: 0 })
+  }
+
+  /** Clear all checked rows after the owner's clear action acknowledges success. */
+  async clearSelection(): Promise<void> {
+    const binding = this.binding
+    const s = this.state.getSnapshot()
+    const clear = binding?.spec.onClear?.bind(binding.spec)
+    if (binding === null || clear === undefined || !s.open || !s.multiple || s.status !== 'ready' || s.submitting || s.confirming !== null) return
+    if (!s.options.some(option => option.active === true)) return
+    await this.applySelection(binding, s.options.map(option => ({ ...option, active: false })), () => clear(binding.context))
+  }
+
+  /**
    * Move the highlight across the filtered rows (wraps around; no-op unless
    * options are ready and no selection is in flight).
    * @param dir - +1 down, -1 up.
@@ -225,7 +253,7 @@ export class PopupSelectController<TCtx = unknown> {
   move(dir: 1 | -1): void {
     const s = this.state.getSnapshot()
     if (!s.open || s.status !== 'ready' || s.submitting || s.confirming !== null) return
-    const rows = filterOptions(s.options, s.search, s.searchMode)
+    const rows = filterOptions(s.options, s.search, s.searchMode, s.selectedOnly)
     if (rows.length === 0) return
     const active = (s.active + dir + rows.length) % rows.length
     this.state.set({ ...s, active })
@@ -239,7 +267,7 @@ export class PopupSelectController<TCtx = unknown> {
   highlight(index: number): void {
     const s = this.state.getSnapshot()
     if (!s.open || s.status !== 'ready' || s.submitting || s.confirming !== null) return
-    if (index < 0 || index >= filterOptions(s.options, s.search, s.searchMode).length || index === s.active) return
+    if (index < 0 || index >= filterOptions(s.options, s.search, s.searchMode, s.selectedOnly).length || index === s.active) return
     this.state.set({ ...s, active: index })
   }
 
@@ -257,7 +285,7 @@ export class PopupSelectController<TCtx = unknown> {
     const binding = this.binding
     const s = this.state.getSnapshot()
     if (binding === null || !s.open || s.status !== 'ready' || s.submitting || s.confirming !== null) return
-    const option = filterOptions(s.options, s.search, s.searchMode)[index]
+    const option = filterOptions(s.options, s.search, s.searchMode, s.selectedOnly)[index]
     if (option === undefined) return
     if (option.confirmation !== undefined) {
       this.state.set({ ...s, confirming: option, acknowledged: false, error: null })
@@ -294,12 +322,21 @@ export class PopupSelectController<TCtx = unknown> {
   /** Run the business settlement for an already admitted option. */
   private async settle(binding: OpenBinding<TCtx>, option: SelectOption): Promise<void> {
     const s = this.state.getSnapshot()
+    const options = s.multiple ? s.options.map(row => row.id === option.id ? { ...row, active: row.active !== true } : row) : s.options
+    await this.applySelection(binding, options, () => s.multiple
+      ? binding.spec.onSelect(option, binding.context, options.filter(row => row.active === true))
+      : binding.spec.onSelect(option, binding.context))
+  }
+
+  /** Settle one owner action; rejected or superseded actions cannot publish proposed checks. */
+  private async applySelection(
+    binding: OpenBinding<TCtx>, options: readonly SelectOption[], apply: () => void | Promise<void>,
+  ): Promise<void> {
+    const s = this.state.getSnapshot()
     if (this.binding !== binding || !s.open || s.submitting) return
     this.state.set({ ...s, submitting: true, confirming: null, acknowledged: false, error: null })
-    const options = s.multiple ? s.options.map(row => row.id === option.id ? { ...row, active: row.active !== true } : row) : s.options
     try {
-      if (s.multiple) await binding.spec.onSelect(option, binding.context, options.filter(row => row.active === true))
-      else await binding.spec.onSelect(option, binding.context)
+      await apply()
     } catch (error) {
       console.error(`[ui-commands] popupSelect onSelect failed for /${binding.command}:`, error)
       if (this.binding !== binding) return // dismissed/reopened/disposed while onSelect flew
@@ -307,13 +344,15 @@ export class PopupSelectController<TCtx = unknown> {
       return
     }
     if (this.binding !== binding) return // late success: no state write, no consumption
-    if (!binding.consumed) {
+    if (!binding.consumed && binding.segment !== undefined) {
       this.deps.consume(binding.segment)
       binding.consumed = true
     }
     if (this.binding !== binding) return // consume can synchronously retire the session's shell
     if (s.multiple) {
-      this.state.set({ ...this.state.getSnapshot(), options, submitting: false, error: null })
+      const current = this.state.getSnapshot()
+      const count = filterOptions(options, current.search, current.searchMode, current.selectedOnly).length
+      this.state.set({ ...current, options, active: Math.max(0, Math.min(current.active, count - 1)), submitting: false, error: null })
       return
     }
     this.binding = null

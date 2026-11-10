@@ -181,6 +181,28 @@ export class CommandUiRuntime extends Service implements CommandUiContract {
   }
 
   /**
+   * Open a resolvable command's registered popup without consuming a draft.
+   * @param name - command name without a slash.
+   * @param sessionID - retained session addressed by the control.
+   * @param signal - cancels catalog resolution before opening.
+   * @returns when opened; unavailable commands and catalog failures reject.
+   */
+  async openPopup(name: string, sessionID: SessionId, signal: AbortSignal): Promise<void> {
+    const sessions = this.sessions()
+    const binding = sessions.binding(sessionID)
+    if (binding === undefined) throw new Error('command popup requires a retained session')
+    await this.directory.ensureReady(sessionID, signal)
+    if (signal.aborted || sessions.binding(sessionID) !== binding) return
+    const session: ClientSessionContext = { sessionId: sessionID }
+    const contribution = this.live.contributions.get(name)
+    const command = contribution ?? (this.directory.resolve(sessionID, name) === undefined ? undefined : this.live.decorations.get(name))
+    if (command === undefined || !command.available(session) || command.ui.kind !== 'popupSelect') {
+      throw new Error('command popup is unavailable')
+    }
+    this.popupFor(binding.ctx).open(name, command.ui, session)
+  }
+
+  /**
    * Resolve the per-session popup controller (lazy; dies with the session
    * scope). The controller's consume callback dispatches the scoped
    * consume-token event back to this session; focusComposer reaches the
