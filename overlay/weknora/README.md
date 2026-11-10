@@ -2,6 +2,8 @@
 
 English | [中文](README.zh.md)
 
+The picker and tool catalog combine the current workspace's bases with bases shared to it, deduplicated by knowledge-base ID. Both lists use the same credentials, tenant scope and deployment allowlist. Shared-list failures stop catalog validation; revoked sharing stops the next selected tool call. Retrieval keeps the receiver's identity so gcs-webnora checks the source workspace and sharing permissions.
+
 Every platform Web and Desktop profile loads `@wxg-prc-cpg/dsh-weknora@0.1.0` from its private installation. Users do not install a market plugin or change their profiles. A profile that already owns this bundle supplies its own copy, avoiding duplicate registrations. Headless and SDK profiles do not load platform Web overlays.
 
 Type `/` and choose “知识库” (“Knowledge bases” in English) to search and multi-select in the native dropdown above the composer. It lists only bases available to the signed-in user and the deployment allowlist. Checks apply immediately after acknowledgment; failures retain the previous selection. The composer keeps one entry: no selection shows its title, one shows the name, and several show a count. Click it to reopen without changing drafts or attachments. The dropdown shows full names, All and Selected filters, search, and clear-all. Tab reaches these controls; an outside click, Escape, or focus leaving closes it. Resumed and forked conversations retain logged selections; new conversations default to no knowledge. Clearing choices stops retrieval without removing historical evidence. The internal command remains `knowledge`; its English alias is hidden in the menu.

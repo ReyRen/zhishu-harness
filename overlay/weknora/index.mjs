@@ -1,7 +1,7 @@
 /** Adapt the installed WeKnora tools to the platform user's verified SSO session. */
 import { createTools, resolveConfig, WeknoraClient } from '@wxg-prc-cpg/dsh-weknora'
 import { createKnowledgeRuntime } from './runtime.mjs'
-import { installSelection, knowledgeRequestID, SelectedKnowledgeClient, selectedArguments } from './selection.mjs'
+import { AccessibleKnowledgeClient, installSelection, knowledgeRequestID, SelectedKnowledgeClient, selectedArguments } from './selection.mjs'
 
 export const inject = ['tools', 'connection', 'commands', 'sessionProjections']
 
@@ -33,7 +33,7 @@ export async function apply(ctx, config) {
     }), 'weknora: owner-only SSO handoff')
   }
   const proxied = { ...resolved, ...transport, tenantId: resolved.apiKey ? resolved.tenantId : undefined }
-  const selection = await installSelection(ctx, new WeknoraClient(proxied), resolved.knowledgeBaseIds)
+  const selection = await installSelection(ctx, new AccessibleKnowledgeClient(proxied), resolved.knowledgeBaseIds)
   const descriptions = {
     list_knowledge_bases: 'Show the knowledge bases explicitly selected by the user for this conversation.',
     search: 'Search only the user-selected knowledge bases and return passages with document references. Do not widen the scope. Empty results mean no evidence was found.',

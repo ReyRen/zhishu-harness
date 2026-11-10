@@ -87,8 +87,22 @@ test('untrusted loopback calls and unsupported paths never reach the backend', a
   assert.equal((await fetch(f.transport.baseUrl + '/knowledge-bases')).status, 401)
   assert.equal((await f.request('/knowledge-bases', { headers: { 'X-API-Key': 'z'.repeat(64) } })).status, 401)
   assert.equal((await f.request('/auth/me')).status, 404)
+  assert.equal((await f.request('/shared-knowledge-bases', { method: 'POST' })).status, 404)
   assert.equal((await f.request('/../knowledge-bases')).status, 404)
   assert.equal(f.calls.length, 0)
+})
+
+test('shared catalog reads use the same authenticated user and never forward the bridge secret', async t => {
+  const f = await fixture(t)
+  assert.equal((await f.request('/shared-knowledge-bases')).status, 401)
+  await f.runtime.signIn({ access_token: 'platform-369' })
+  const response = await f.request('/shared-knowledge-bases')
+  assert.equal(response.status, 200)
+  await response.arrayBuffer()
+  const request = f.calls.at(-1)
+  assert.equal(request.path, '/api/v1/shared-knowledge-bases')
+  assert.equal(request.apiKey, undefined)
+  assert.equal(JSON.parse(Buffer.from(request.authorization.split('.')[1], 'base64url')).sub, '369')
 })
 
 test('expired credentials refresh once across concurrent retrievals', async t => {
