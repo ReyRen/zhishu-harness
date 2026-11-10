@@ -39,22 +39,25 @@ const backend = createServer((request, response) => {
     if (!['a', 'b'].includes(user)) { send(401, { error: 'Invalid credential' }); return }
     assert.equal(url.searchParams.has('resource_urls'), false, 'Default internal handles do not request public file URLs')
     requests.push({ user, method: request.method, path: url.pathname, body, tenant: request.headers['x-tenant-id'] })
+    const selectedKB = request.headers.authorization ? `kb-${user}-shared` : `kb-${user}`
     if (body?.knowledge_base_ids?.includes('forbidden')) { send(403, { error: 'Knowledge base access denied' }); return }
     if (url.pathname === '/api/v1/knowledge-bases') {
       send(200, { data: [{ id: `kb-${user}`, name: `Policies ${user}`, description: 'Backup policies' }] })
+    } else if (url.pathname === '/api/v1/shared-knowledge-bases') {
+      send(200, { data: [{ knowledge_base: { id: `kb-${user}-shared`, name: `Shared policies ${user}` }, permission: 'viewer' }] })
     } else if (url.pathname === '/api/v1/knowledge-search') {
-      assert.deepEqual(body.knowledge_base_ids, [`kb-${user}`])
+      assert.deepEqual(body.knowledge_base_ids, [selectedKB])
       send(200, { data: [chunk] })
     } else if (url.pathname === '/api/v1/knowledge/search') {
       send(200, { data: [] })
     } else if (url.pathname === '/api/v1/knowledge/doc-backups') {
-      send(200, { data: { id: 'doc-backups', knowledge_base_id: `kb-${user}`, title: 'Backup policy', description: 'Retention policy' } })
+      send(200, { data: { id: 'doc-backups', knowledge_base_id: selectedKB, title: 'Backup policy', description: 'Retention policy' } })
     } else if (url.pathname === '/api/v1/chunks/doc-backups') {
       send(200, { data: [chunk], total: 1, page: 1, page_size: 30 })
     } else if (url.pathname === '/api/v1/sessions') {
       send(200, { data: { id: `answer-${user}` } })
     } else if (url.pathname === `/api/v1/knowledge-chat/answer-${user}`) {
-      assert.deepEqual(body.knowledge_base_ids, [`kb-${user}`])
+      assert.deepEqual(body.knowledge_base_ids, [selectedKB])
       response.writeHead(200, { 'content-type': 'text/event-stream' })
       for (const event of [
         { response_type: 'answer', content: text },
@@ -121,7 +124,7 @@ async function probe(user, installed = false, sso = false) {
               assert.equal(response.status, 200)
               assert.deepEqual(await response.json(), { mode: 'sso', authenticated: true })
             }
-            child.send({ command: 'weknora-probe', workspace, knowledgeBaseId: `kb-${user}`,
+            child.send({ command: 'weknora-probe', workspace, knowledgeBaseId: sso ? `kb-${user}-shared` : `kb-${user}`,
               sessionId: installed ? 'weknora-smoke-installed' : sso ? 'weknora-smoke-sso' : 'weknora-smoke' },
               error => { if (error) reject(error) })
           })().catch(reject)
@@ -158,6 +161,8 @@ try {
   const first = await probe('a')
   await probe('b')
   await probe('b', false, true)
+  assert.ok(requests.some(request => request.path === '/api/v1/knowledge-search'
+    && request.body?.knowledge_base_ids?.includes('kb-b-shared')))
   for (const user of ['a', 'b']) {
     assert.ok(requests.some(request => request.user === user && request.path === '/api/v1/knowledge-search'))
     assert.ok(requests.filter(request => request.user === user).every(request => request.tenant === `tenant-${user}`))
@@ -169,7 +174,7 @@ try {
   await probe('a', true)
   console.log(JSON.stringify({ plugin: '@wxg-prc-cpg/dsh-weknora', tools: first.names,
     agentConversation: true, independentCredentials: true, profileInstallRequired: false,
-    installedBundleDeduplicated: true, platformSSO: true, ownerOnlyHandoff: true,
+    installedBundleDeduplicated: true, platformSSO: true, ownerOnlyHandoff: true, sharedKnowledgeSelection: true,
     forbiddenScopeRejected: true, explicitSessionSelection: true, unloadRemovesTools: true }))
 } finally {
   backend.closeAllConnections()

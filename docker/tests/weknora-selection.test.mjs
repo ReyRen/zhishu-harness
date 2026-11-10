@@ -57,6 +57,7 @@ async function fixture(t, ids = ['kb-a']) {
       calls.push({ path, body, requestID: request.headers['x-request-id'] })
       const send = data => { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(data)) }
       if (path === '/api/v1/knowledge-bases') send({ data: [{ id: 'kb-a', name: 'Selected' }, { id: 'kb-b', name: 'Other' }, { id: 'kb-c', name: 'Unselected' }] })
+      else if (path === '/api/v1/shared-knowledge-bases') send({ data: [] })
       else if (path.startsWith('/api/v1/knowledge/')) send({ data: { id: path.split('/').at(-1), knowledge_base_id: 'kb-'+path.slice(-1) } })
       else if (path.startsWith('/api/v1/chunks/')) send({ data: [{ content: 'Selected evidence', chunk_index: 0 }], total: 1 })
       else if (path === '/api/v1/knowledge-search') send({ data: [{ id: 'chunk-a', knowledge_id: 'doc-a', content: 'Selected evidence' }] })

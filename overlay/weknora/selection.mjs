@@ -1,7 +1,7 @@
 /** User-selected, Session-owned retrieval scope over the installed WeKnora client. */
 import { createHash, randomUUID } from 'node:crypto'
 import { z } from 'zod'
-import { WeknoraClient } from '@wxg-prc-cpg/dsh-weknora'
+import { WeknoraClient, WeknoraApiError } from '@wxg-prc-cpg/dsh-weknora'
 
 export const SELECTION_KEY = 'zhishuKnowledge'
 export const SELECT_COMMAND = 'knowledge'
@@ -44,6 +44,24 @@ export const selectionProjection = {
   wire: { viewSchema: selectionSchema, view: state => state.selection },
 }
 
+/** Discover owned and shared KBs using the same credential and tenant scope. */
+export class AccessibleKnowledgeClient extends WeknoraClient {
+  async listKnowledgeBases(signal) {
+    const owned = await super.listKnowledgeBases(signal)
+    const shared = await this.fetchJson('/shared-knowledge-bases', { method: 'GET' }, signal)
+    if (!Array.isArray(shared?.data) || shared.data.some(row =>
+      typeof row?.knowledge_base?.id !== 'string')) {
+      throw new WeknoraApiError('Invalid shared knowledge catalog response', 502)
+    }
+    const unique = new Map(owned.map(base => [base.id, base]))
+    for (const row of shared.data) {
+      const base = row.knowledge_base
+      if (!unique.has(base.id)) unique.set(base.id, base)
+    }
+    return [...unique.values()]
+  }
+}
+
 /** Resolve only the catalog the current credential and deployment allow. */
 export async function visibleBases(client, allowedIds, signal) {
   const bases = await client.listKnowledgeBases(signal)
@@ -53,7 +71,7 @@ export async function visibleBases(client, allowedIds, signal) {
 }
 
 /** All retrieval methods enforce the selected KB set, including document-only calls. */
-export class SelectedKnowledgeClient extends WeknoraClient {
+export class SelectedKnowledgeClient extends AccessibleKnowledgeClient {
   constructor(config, knowledgeBaseIds, requestID) {
     super(config)
     this.knowledgeBaseIds = knowledgeBaseIds
