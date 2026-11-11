@@ -7,6 +7,7 @@ import type { ComponentType } from 'react'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { ClientSessionContext } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { IconProps } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
 /** Copy for an option that must be acknowledged before onSelect can run. */
 export interface SelectConfirmation {
@@ -53,6 +54,8 @@ export interface PopupSearchLabels {
   readonly empty: string
   /** Nonempty catalog with no matching rows. */
   readonly noResults: string
+  /** Optional guidance shown above the options, such as immediate multi-selection. */
+  readonly hint?: string
 }
 
 /**
@@ -63,6 +66,8 @@ export interface PopupSearchLabels {
  */
 export interface PopupSelectSpec {
   readonly kind: 'popupSelect'
+  /** Keep the popup open after each acknowledged toggle; option.active is the checked state. */
+  readonly multiple?: boolean
   /** Defaults to substring search; fuzzy-label ranks names within each group. */
   readonly searchMode?: PopupSearchMode
   /**
@@ -71,7 +76,10 @@ export interface PopupSelectSpec {
    */
   searchLabels?(): PopupSearchLabels
   options(session: ClientSessionContext, signal: AbortSignal): Promise<readonly SelectOption[]>
-  onSelect(option: SelectOption, session: ClientSessionContext): void | Promise<void>
+  /** In multiple mode, selection is the proposed complete set; a rejection leaves the checkmarks unchanged. */
+  onSelect(option: SelectOption, session: ClientSessionContext, selection?: readonly SelectOption[]): void | Promise<void>
+  /** Clear a multi-selection; checks change only after this callback succeeds. */
+  onClear?(session: ClientSessionContext): void | Promise<void>
 }
 
 /**
@@ -125,6 +133,10 @@ export interface CommandContribution {
 export interface CommandDecoration {
   /** The HOST command name this decorates (without the leading slash). */
   readonly name: string
+  /** Localized menu title, read on each candidate pass; execution keeps the Host name. */
+  label?(): string
+  /** Hide the command-name alias while retaining name-based matching and dispatch. */
+  readonly hideAlias?: boolean
   /** Capability filter, called with a fresh projection per bare invocation. */
   available(session: ClientSessionContext): boolean
   /** The bare-invocation UI. */
@@ -145,6 +157,14 @@ export interface CommandUiContract {
   decorate(decoration: CommandDecoration): () => void
   /** Close this command's open popups and confirmations without consuming composer drafts. */
   dismiss(name: string): void
+  /**
+   * Open a registered popup from a control without consuming the composer draft.
+   * @param name - registered command name without a slash.
+   * @param sessionID - retained session addressed by the control.
+   * @param signal - cancels catalog resolution before opening.
+   * @returns when the popup has opened; unavailable commands reject.
+   */
+  openPopup(name: string, sessionID: SessionId, signal: AbortSignal): Promise<void>
   /** Resolve the per-session popup controller for one session scope (wiring/overlay layer). */
   popupFor(actx: ClientContext): unknown
 }

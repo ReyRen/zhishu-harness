@@ -197,6 +197,54 @@ const themeContribution = (over: Partial<CommandContribution> = {}): CommandCont
 const req = (query: string, position: 'leading' | 'inline' = 'leading') =>
   ({ query, position, drilled: false, signal: new AbortController().signal })
 
+describe('control-opened popup', () => {
+  it('uses the retained session and host decoration without consuming drafts or executing commands', async () => {
+    const b = await bench(), onSelect = vi.fn()
+    b.command.decorate({ name: 'plan', available: () => true, ui: themeUi({ onSelect }) })
+    const consume = vi.fn(() => true as const)
+    b.mint('s1').ctx.on('slash/input-consume-token', consume)
+    await b.command.openPopup('plan', sid('s1'), new AbortController().signal)
+    const popup = b.command.popupFor(b.mint('s1').ctx)
+    await vi.waitFor(() => { expect(popup.state.getSnapshot().status).toBe('ready') })
+    await popup.select(0)
+    expect(onSelect).toHaveBeenCalledWith({ id: 'dark', label: 'Dark' }, proj('s1'))
+    expect(consume).not.toHaveBeenCalled()
+    expect(b.executeCalls).toEqual([])
+    expect(b.command.popupFor(b.mint('s2').ctx).state.getSnapshot().open).toBe(false)
+  })
+
+  it('rejects missing host rows, unavailable capabilities and action commands', async () => {
+    const b = await bench(), signal = new AbortController().signal
+    b.command.decorate({ name: 'missing', available: () => true, ui: themeUi() })
+    b.command.decorate({ name: 'plan', available: () => false, ui: themeUi() })
+    b.command.decorate({ name: 'goal', available: () => true, ui: { kind: 'action', run: vi.fn() } })
+    for (const name of ['missing', 'plan', 'goal']) {
+      await expect(b.command.openPopup(name, sid('s1'), signal)).rejects.toThrow('unavailable')
+    }
+    await b.mint('s1').fiber.dispose()
+    await expect(b.command.openPopup('plan', sid('s1'), signal)).rejects.toThrow('retained session')
+  })
+
+  it('does not open after a pending catalog is cancelled or its session is released', async () => {
+    const catalog = Promise.withResolvers<{ commands: CommandDescriptor[] }>()
+    const b = await bench({ commands: () => catalog.promise })
+    b.command.decorate({ name: 'plan', available: () => true, ui: themeUi() })
+    const controller = new AbortController()
+    const aborted = b.command.openPopup('plan', sid('s1'), controller.signal)
+    const assertion = expect(aborted).rejects.toThrow()
+    controller.abort()
+    await assertion
+    const pending = b.command.openPopup('plan', sid('s2'), new AbortController().signal)
+    const released = expect(pending).rejects.toThrow('released')
+    const scope = b.mint('s2')
+    await scope.fiber.dispose()
+    catalog.resolve({ commands: S1_CMDS })
+    await released
+    expect(b.sessions.binding(sid('s2'))).toBeUndefined()
+    expect(b.command.popupFor(b.mint('s1').ctx).state.getSnapshot().open).toBe(false)
+  })
+})
+
 describe('registration', () => {
   it('reports missing initialization dependencies', () => {
     const missingLocale = new Context()
@@ -357,6 +405,23 @@ describe('candidates', () => {
   })
 
   describe('menu presentation (design doc for #3567)', () => {
+    it('reads decorated Host labels per menu pass and keeps the canonical pick identity', async () => {
+      const { command, source } = await bench()
+      let label = '知识库'
+      const run = vi.fn()
+      const dispose = command.decorate({ name: 'plan', label: () => label, hideAlias: true,
+        available: () => true, ui: { kind: 'action', run } })
+      expect((await source.candidates(proj('s1'), req(''))).find(row => row.name === 'plan'))
+        .toMatchObject({ name: 'plan', label: '知识库', hideAlias: true })
+      expect((await source.candidates(proj('s1'), req('知识'))).map(row => row.name)).toContain('plan')
+      menuPick(source, 'plan', proj('s1'))
+      expect(run).toHaveBeenCalledWith(proj('s1'))
+      label = 'Knowledge bases'
+      expect((await source.candidates(proj('s1'), req(''))).find(row => row.name === 'plan')?.label).toBe(label)
+      dispose()
+      expect((await source.candidates(proj('s1'), req(''))).find(row => row.name === 'plan'))
+        .not.toHaveProperty('hideAlias')
+    })
     /** First-party definitions plus an unrelated command, in Host registration order. */
     const SHIPPED: CommandDescriptor[] = [
       { definitionId: CommandDefinitionId('@deepseek-ai/dsh-command-compact'), name: 'compact', description: 'Compact older conversation history' },

@@ -143,6 +143,16 @@ describe('MenuView', () => {
     expect(screen.getByRole('status', { name: '正在加载…' })).toBeTruthy()
   })
 
+  it('can omit a localized row alias without changing the picked identity', () => {
+    const { onPick } = mount(openState({ groups: [{ source: 'command', status: 'ready',
+      items: [{ name: 'knowledge', label: '知识库', hideAlias: true }] }],
+    }))
+    const option = screen.getByRole('option', { name: '知识库' })
+    expect(option.textContent).toBe('知识库')
+    fireEvent.mouseDown(option)
+    expect(onPick).toHaveBeenCalledWith('command', 0)
+  })
+
   it('renders retained items instead of skeletons while a refinement is pending', () => {
     mount(openState({
       groups: [{ source: 'command', status: 'pending', items: [{ name: 'goal' }] }],

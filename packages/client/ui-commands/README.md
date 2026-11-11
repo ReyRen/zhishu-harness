@@ -29,9 +29,15 @@ Mount this plugin alongside `ui-input-trigger` and `ui-conversation`; the `/` so
 
 ### Kinds and decorations
 
+Decorations may supply a localized `label()` and `hideAlias: true` for the menu row. Labels are read on each candidate pass; hiding an alias changes presentation only. Matching and dispatch retain the Host command name, with no new parser alias.
+
 A contribution is a client-owned command; a host-name collision fails loudly. Its UI is a popupSelect spec or an action: a callback a bare invocation runs after the trigger token is consumed, without submitting a message. Business packages own their actions and availability; the composer registers File through this same API. A decoration adds a bare-invocation popup or action to an existing host command while preserving its catalog row, argument claim, and lifecycle logging; it never fires without a matching host row. Menu queries fuzzy-match ordered, case-insensitive subsequences of command names and titles, with prefixes first and no section headings.
 
 A popupSelect spec may supply `searchLabels()` to resolve its placeholder, empty-catalog text, and no-match text for each opening. Omitted labels retain the shell's generic copy; labels from one popup never carry into the next.
+
+`multiple: true` reuses the dropdown above the composer for multi-selection: `option.active` marks a checked row, and the callback's third argument contains the complete proposed selection after that toggle. Only a successful `onSelect` updates checks; failures retain the previous checks and show an error. All and Selected filters share the local search. An optional `onClear(session)` clears the complete selection after acknowledgment, including hidden rows. Tab reaches these controls; Escape, an outside click, or focus leaving closes the list. `searchLabels().hint` explains immediate application. Omitting `multiple` preserves single-select behavior.
+
+Controls can call `ctx.commandUi.openPopup(name, sessionID, signal)` to open the same registered picker without consuming drafts or attachments. The session must be retained and the command available; decorations still require a host catalog row. Catalog failures reject, and aborted or released sessions cannot open a stale picker. Slash-opened pickers consume their trigger only on the first successful action; control-opened pickers never consume input.
 
 Options may carry `group: { name, label }`: `name` identifies the group and `label` supplies its localized sticky heading. Equal names share one group; groups retain first-occurrence order in the loaded options, including when a query hides earlier rows. Ungrouped options form one headingless block at their first occurrence. Groups without matching rows are hidden.
 

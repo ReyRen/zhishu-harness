@@ -54,7 +54,7 @@ docker run --rm --init --network none --entrypoint node "$IMAGE" /opt/dsh/docker
 
 ## Offline plugin market
 
-The image also carries the [built-in WeKnora tools](../overlay/weknora/README.md) for every Web user. Backend authentication remains deployment configuration; the container example forwards `WEKNORA_*` values. The build's [WeKnora smoke](smoke-weknora.mjs) uses a mock backend and a deterministic model without external network access.
+The image also carries the [built-in WeKnora tools](../overlay/weknora/README.md) for every Web user. Opening the built-in knowledge-base entry adds its workbench to the current user's saved list if needed, then opens it; a failed save prevents navigation. The platform client authenticates tools with the current user's SSO; Workers supply `DSH_PLATFORM_USER_ID` and `WEKNORA_BASE_URL`. The container example forwards `WEKNORA_*` values. The build's [WeKnora smoke](smoke-weknora.mjs) uses a mock backend and a deterministic model without external network access.
 
 The image includes the same [private catalog and community tarballs](../market-registry/README.md) as Desktop, plus Verdaccio and its locked Linux dependencies. Startup imports every bundled tarball, then starts the registry at `127.0.0.1:4873` and the catalog at `127.0.0.1:4874` before Web. Both listeners remain inside each container; no host ports or extra proxy routes are needed. Publishing is disabled and missing packages do not fall back to public npm. A failed service stops the container rather than leaving Web connected to a broken market.
 
@@ -65,6 +65,8 @@ The container also sets `npm_config_registry` and `pnpm_config_registry` to its 
 ```bash
 docker run --rm --init --network none --entrypoint node "$IMAGE" /opt/dsh/docker/smoke-market.mjs
 ```
+
+The optional paper-reader plugin stores its library under `DSH_HOME/storages/dsh-paper-reader` by default; `DSH_PAPER_READER_DATA` overrides that path. With the standard JFS mount, documents survive container replacement. Its translation engine and optional OCR services require separate offline preparation and endpoint configuration.
 
 Offline coverage applies to shipped Office/runtime resources and bundled market packages, not arbitrary npm/GitHub plugins, model inference or web search. Those require their configured services. Desktop-only operating-system integrations and browser-restricted capabilities are not supplied by installing server dependencies.
 

@@ -25,6 +25,49 @@ const GATED: SelectOption = {
 
 const SEGMENT: TokenSegment = { via: 'enter', token: '/theme' }
 
+it('keeps acknowledged multi-toggles open, sends complete selections, and consumes the trigger once', async () => {
+  const onSelect = vi.fn<PopupSpec<Ctx>['onSelect']>()
+  const { popup, deps } = await readyPopup({ multiple: true, onSelect })
+  await popup.select(0)
+  expect(onSelect.mock.calls[0]?.[2]?.map(row => row.id)).toEqual(['dark', 'light'])
+  expect(popup.state.getSnapshot().open).toBe(true)
+  popup.setSearch('warm')
+  await popup.select(0)
+  expect(onSelect.mock.calls[1]?.[2]?.map(row => row.id)).toEqual(['dark', 'light', 'sepia'])
+  expect(popup.state.getSnapshot().search).toBe('warm')
+  expect(deps.consume).toHaveBeenCalledTimes(1)
+  expect(deps.focusComposer).not.toHaveBeenCalled()
+  popup.setSearch('')
+  await popup.select(0)
+  await popup.select(1)
+  await popup.select(2)
+  expect(onSelect.mock.calls[4]?.[2]).toEqual([])
+  expect(popup.state.getSnapshot().open).toBe(true)
+  popup.dismiss({ focusComposer: true })
+  expect(popup.state.getSnapshot().open).toBe(false)
+  expect(deps.focusComposer).toHaveBeenCalledTimes(1)
+})
+
+it('does not mark a rejected toggle or let a dismissed multi-select settlement change a newer opening', async () => {
+  const onSelect = vi.fn().mockRejectedValueOnce(new Error('Denied'))
+  const { popup, deps } = await readyPopup({ multiple: true, onSelect })
+  await popup.select(0)
+  expect(popup.state.getSnapshot().options[0]?.active).not.toBe(true)
+  expect(popup.state.getSnapshot().error).toBe('Denied')
+  expect(deps.consume).not.toHaveBeenCalled()
+  let settle!: () => void
+  onSelect.mockImplementationOnce(() => new Promise<void>((resolve) => { settle = resolve }))
+  const pending = popup.select(0)
+  popup.dismiss()
+  popup.open('theme', spec(), CTX_A, SEGMENT)
+  await Promise.resolve()
+  settle()
+  await pending
+  expect(popup.state.getSnapshot().multiple).toBe(false)
+  expect(popup.state.getSnapshot().options[0]?.active).not.toBe(true)
+  expect(deps.consume).not.toHaveBeenCalled()
+})
+
 function spec(overrides: Partial<PopupSpec<Ctx>> = {}): PopupSpec<Ctx> {
   return {
     options: () => Promise.resolve(OPTIONS),
@@ -32,6 +75,38 @@ function spec(overrides: Partial<PopupSpec<Ctx>> = {}): PopupSpec<Ctx> {
     ...overrides,
   }
 }
+
+it('maps selected-only rows after each removal and clears hidden checks only after acknowledgment', async () => {
+  const onClear = vi.fn().mockRejectedValueOnce(new Error('Clear denied'))
+  const { popup, deps } = await readyPopup({ multiple: true, onClear })
+  await popup.select(0)
+  popup.setSelectedOnly(true)
+  await popup.select(0)
+  expect(filterOptions(popup.state.getSnapshot().options, '', 'substring', true).map(row => row.id)).toEqual(['light'])
+  popup.setSearch('not-visible')
+  await popup.clearSelection()
+  expect(popup.state.getSnapshot().options[1]?.active).toBe(true)
+  expect(popup.state.getSnapshot().error).toBe('Clear denied')
+  await popup.clearSelection()
+  expect(popup.state.getSnapshot().options.every(row => row.active === false)).toBe(true)
+  expect(popup.state.getSnapshot()).toMatchObject({ open: true, selectedOnly: true, search: 'not-visible', active: 0 })
+  expect(deps.consume).toHaveBeenCalledTimes(1)
+})
+
+it('never consumes a control-opened draft and revokes a late clear when another popup opens', async () => {
+  const clearing = Promise.withResolvers<undefined>()
+  const deps = makeDeps(), popup = new PopupSelectController<Ctx>(deps)
+  popup.open('theme', spec({ multiple: true, onClear: () => clearing.promise }), CTX_A)
+  await Promise.resolve()
+  await popup.select(0)
+  const pending = popup.clearSelection()
+  popup.open('other', spec(), CTX_A)
+  clearing.resolve(undefined)
+  await pending
+  expect(deps.consume).not.toHaveBeenCalled()
+  expect(popup.state.getSnapshot()).toMatchObject({ command: 'other', multiple: false })
+  expect(popup.state.getSnapshot().options[1]?.active).toBe(true)
+})
 
 /** Fake session wiring: records consume/focus calls; consume answer is settable per test. */
 function makeDeps(consumeResult = true) {

@@ -6,6 +6,7 @@ window.__ModuleLoader__.load({
     Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' })
 
     const React = require('react')
+    const { IconChevronDownOutlineRegular } = require('@deepseek-ai/dsh-client-ui-primitives')
     const h = React.createElement
 
     const IFRAME_URL = 'http://172.18.36.230:5175/weknora/sso/platform'
@@ -37,7 +38,7 @@ window.__ModuleLoader__.load({
     }
 
     function maskToken(token) {
-      return typeof token === 'string' && token ? `${token.slice(0, 8)}…(${token.length})` : token
+      return typeof token === 'string' && token ? '[redacted]' : undefined
     }
 
     function readTicket(ticket) {
@@ -68,7 +69,7 @@ window.__ModuleLoader__.load({
      * Container / private web: postMessage the embedding model page.
      * Message types differ from weknora:sso-* (separate hop, separate origin).
      */
-    function fetchSsoTicketFromHost() {
+    function fetchSsoTicketFromHost(signal) {
       return new Promise((resolve, reject) => {
         if (window.parent === window) {
           reject(new Error('当前环境无法领取平台登录票据。请在智枢桌面端或平台 Harness 页使用知识库。'))
@@ -76,6 +77,7 @@ window.__ModuleLoader__.load({
         }
         const nonce = newNonce()
         const timer = window.setTimeout(() => {
+          signal?.removeEventListener('abort', onAbort)
           window.removeEventListener('message', onMessage)
           console.error(`${LOG_HOP1} harness ⏱ waiting model response timed out`, {
             direction: 'harness → model (no reply)',
@@ -86,6 +88,11 @@ window.__ModuleLoader__.load({
           })
           reject(new Error('向平台宿主领取登录票据超时。'))
         }, HOST_SSO_TIMEOUT_MS)
+        const onAbort = () => {
+          window.clearTimeout(timer)
+          window.removeEventListener('message', onMessage)
+          reject(new Error('Knowledge authentication cancelled'))
+        }
         const onMessage = (event) => {
           if (event.source !== window.parent) return
           const data = event.data
@@ -100,6 +107,7 @@ window.__ModuleLoader__.load({
             return
           }
           window.clearTimeout(timer)
+          signal?.removeEventListener('abort', onAbort)
           window.removeEventListener('message', onMessage)
           console.info(`${LOG_HOP1} harness ← model ${HOST_SSO_RESPONSE}`, {
             direction: 'model → harness',
@@ -121,6 +129,8 @@ window.__ModuleLoader__.load({
           }
         }
         window.addEventListener('message', onMessage)
+        signal?.addEventListener('abort', onAbort, { once: true })
+        if (signal?.aborted) { onAbort(); return }
         console.info(`${LOG_HOP1} harness → model ${HOST_SSO_REQUEST}`, {
           direction: 'harness → model',
           type: HOST_SSO_REQUEST,
@@ -138,10 +148,172 @@ window.__ModuleLoader__.load({
       })
     }
 
-    async function fetchSsoTicket() {
+    async function fetchSsoTicket(signal) {
       const api = window.zhishuPlatform
       if (api && typeof api.getSsoToken === 'function') return fetchSsoTicketFromDesktop()
-      return fetchSsoTicketFromHost()
+      return fetchSsoTicketFromHost(signal)
+    }
+
+    /** Authenticate tools even when the knowledge-base workbench is closed. */
+    function installToolAuthentication(ctx) {
+      ctx.effect(() => {
+        const lifetime = new AbortController()
+        const endpoint = '/api/zhishu-knowledge/auth'
+        let pending, signedIn = true, revision = 0
+        const request = (init = {}) => fetch(endpoint, { credentials: 'same-origin', cache: 'no-store',
+          ...init, signal: lifetime.signal })
+        const sync = () => {
+          if (pending || !signedIn || lifetime.signal.aborted) return pending
+          const current = revision
+          pending = (async () => {
+            const status = await request()
+            // A profile-owned upstream bundle keeps its own configured authentication.
+            if (status.status === 404) return
+            if (!status.ok) throw new Error('knowledge_auth_status_failed')
+            const state = await status.json()
+            if (state.mode !== 'sso' || state.authenticated) return
+            const ticket = await fetchSsoTicket(lifetime.signal)
+            if (revision !== current || lifetime.signal.aborted) return
+            const response = await request({ method: 'POST', headers: { 'content-type': 'application/json' },
+              body: JSON.stringify(ticket) })
+            if (!response.ok) throw new Error('knowledge_auth_handoff_failed')
+          })().catch(() => {
+            if (!lifetime.signal.aborted && signedIn) console.warn('[Knowledge tools] Authentication unavailable; reopen the platform session and retry.')
+          }).finally(() => { pending = undefined })
+          return pending
+        }
+        const accountChanged = state => {
+          signedIn = state?.authenticated === true
+          revision++
+          if (signedIn) { void sync(); return }
+          void Promise.resolve(pending).then(() => request({ method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ action: 'logout' }) })).catch(() => {
+            if (!lifetime.signal.aborted) console.warn('[Knowledge tools] Could not clear authentication; close the runtime before switching accounts.')
+          })
+        }
+        const space = window.dshModelSpace
+        const unsubscribe = space?.onStateChanged?.(accountChanged)
+        if (typeof space?.state === 'function') {
+          void space.state().then(accountChanged).catch(() => accountChanged({ authenticated: false }))
+        } else void sync()
+        const timer = window.setInterval(sync, 30_000)
+        const stopReset = ctx.on('connection/reset', sync)
+        return () => { revision++; lifetime.abort(); window.clearInterval(timer); unsubscribe?.(); stopReset?.() }
+      }, 'knowledge-base: tool authentication')
+    }
+
+    function installKnowledgePicker(ctx) {
+      const namespace = 'zhishu.knowledge-selection'
+      const dictionaries = {
+        zh: { title: '知识库', placeholder: '搜索可用知识库',
+          empty: '暂无可用知识库', noResults: '没有匹配的知识库', selected: '知识库：', multiple: '知识库 · 已选 {count} 个',
+          unavailable: '知识库暂不可用，请重新打开平台会话后重试', failed: '切换知识库失败，请重试',
+          revoked: '不可用，请取消选择', changed: '会话的知识库选择已更改，请重新打开选择器' },
+        en: { title: 'Knowledge bases', placeholder: 'Search available knowledge bases',
+          empty: 'No knowledge bases available', noResults: 'No matching knowledge bases', selected: 'Knowledge: ', multiple: 'Knowledge · {count} selected',
+          unavailable: 'Knowledge unavailable. Reopen the platform session and retry.', failed: 'Could not change knowledge. Retry.',
+          revoked: 'Unavailable; uncheck to continue', changed: 'Knowledge selection changed. Reopen the picker.' },
+      }
+      ctx.effect(() => ctx.locale.register(namespace, dictionaries), 'knowledge: picker dictionaries')
+      const t = ctx.locale.bind(namespace)
+      const live = sessionID => ctx.sessions.binding(sessionID)?.session
+      const stateOf = sessionID => live(sessionID)?.projections.faceOf('zhishuKnowledge').getSnapshot()
+      const request = async (path, signal) => {
+        const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', signal })
+        if (!response.ok) throw new Error(t('unavailable'))
+        return response.json()
+      }
+      const catalog = async signal => {
+        const result = await request('/api/zhishu-knowledge/catalog', signal)
+        if (!Array.isArray(result?.knowledgeBases) || result.knowledgeBases.some(base =>
+          typeof base?.id !== 'string' || typeof base.name !== 'string')) throw new Error(t('unavailable'))
+        return result
+      }
+      const selectedOf = sessionID => stateOf(sessionID)?.knowledgeBaseIds || []
+      const select = async (sessionID, ids) => {
+        const session = live(sessionID)
+        if (!session) throw new Error(t('failed'))
+        const names = [...new Set(ids)].sort().join(' ') || 'off'
+        const result = await ctx.remote.commands.execute(sessionID, `/knowledge ${names}`, [])
+        if (!result.ok || result.value?.result.kind !== 'success') throw new Error(t('failed'))
+      }
+      const openedSelections = new WeakMap()
+      const changeSelection = async (session, ids) => {
+        if (JSON.stringify(selectedOf(session.sessionId)) !== JSON.stringify(openedSelections.get(session))) throw new Error(t('changed'))
+        await select(session.sessionId, ids)
+        openedSelections.set(session, ids)
+      }
+      ctx.effect(() => ctx.commandUi.decorate({
+        name: 'knowledge',
+        label: () => t('title'), hideAlias: true,
+        available: session => stateOf(session.sessionId) !== undefined,
+        ui: {
+          kind: 'popupSelect', multiple: true,
+          searchLabels: () => ({ placeholder: t('placeholder'), empty: t('empty'), noResults: t('noResults') }),
+          async options(session, signal) {
+            const result = await catalog(signal)
+            const ids = selectedOf(session.sessionId)
+            openedSelections.set(session, ids)
+            return [...result.knowledgeBases.map(base => ({ id: base.id, label: base.name, active: ids.includes(base.id) })),
+              ...ids.filter(id => !result.knowledgeBases.some(base => base.id === id))
+                .map(id => ({ id, label: id + ' · ' + t('revoked'), active: true }))]
+          },
+          async onSelect(_option, session, selection) {
+            const ids = selection.map(option => option.id).sort()
+            await changeSelection(session, ids)
+          },
+          onClear: session => changeSelection(session, []),
+        },
+      }), 'knowledge: native multi-select popup')
+      ctx.effect(() => () => ctx.commandUi.dismiss('knowledge'), 'knowledge: close picker on unload')
+
+      function KnowledgeSelection({ useProjection, sessionID, open, loadCatalog, t }) {
+        const selection = useProjection('zhishuKnowledge')
+        const ids = selection?.knowledgeBaseIds || []
+        const key = ids.length === 1 ? ids[0] : ''
+        const [labels, setLabels] = React.useState({})
+        const [error, setError] = React.useState('')
+        const [busy, setBusy] = React.useState(false)
+        const lifetime = React.useRef(null)
+        React.useEffect(() => {
+          const controller = new AbortController()
+          lifetime.current = controller; setBusy(false); setError('')
+          return () => controller.abort()
+        }, [sessionID])
+        React.useEffect(() => {
+          setError(''); setLabels({})
+          if (!key) return
+          const controller = new AbortController()
+          void loadCatalog(controller.signal).then(result => {
+            if (controller.signal.aborted) return
+            if (!result.knowledgeBases.some(base => base.id === key)) setError(t('unavailable'))
+            setLabels(Object.fromEntries(result.knowledgeBases.map(base => [base.id, base.name])))
+          }).catch(() => { if (!controller.signal.aborted) setError(t('unavailable')) })
+          return () => controller.abort()
+        }, [key, sessionID, loadCatalog, t])
+        const show = async () => {
+          const controller = lifetime.current
+          if (!controller || busy) return
+          setBusy(true); setError('')
+          try { await open(controller.signal) }
+          catch { if (!controller.signal.aborted) setError(t('failed')) }
+          finally { if (!controller.signal.aborted) setBusy(false) }
+        }
+        const label = ids.length === 0 ? t('title') : ids.length === 1 && labels[ids[0]]
+          ? t('selected') + labels[ids[0]] : t('multiple', { count: ids.length })
+        return h('div', { className: 'zhishuKbChoice' },
+          h('button', { type: 'button', className: 'zhishuKbChoiceTrigger', disabled: busy, 'aria-haspopup': 'listbox',
+            'aria-label': label, 'data-selected': ids.length > 0, onClick: show },
+          h(KnowledgeIcon, { size: 14 }), h('span', { className: 'zhishuKbChoiceName' }, label),
+          h(IconChevronDownOutlineRegular, { size: 12 })),
+          error ? h('span', { role: 'alert', className: 'zhishuKbChoiceError' }, error) : null)
+      }
+      ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
+        name: 'conversation.input.left', id: 'zhishu-knowledge-selection',
+        locale: namespace,
+        inject: sessionID => ({ sessionID, loadCatalog: catalog,
+          open: signal => ctx.commandUi.openPopup('knowledge', sessionID, signal) }),
+      }, KnowledgeSelection))
     }
 
     function installStyles() {
@@ -150,6 +322,14 @@ window.__ModuleLoader__.load({
       style.id = STYLE_ID
       style.dataset.plugin = '@zhishu/dsh-overlay-knowledge-base'
       style.textContent = `
+        .zhishuKbChoice{display:flex;align-items:center;gap:4px;min-width:0;max-width:100%;font-weight:400}
+        .zhishuKbChoiceTrigger{display:inline-flex;align-items:center;gap:4px;min-width:0;max-width:180px;height:28px;padding:0 6px;border:0;border-radius:var(--dsw-radius-md);background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;cursor:pointer}
+        .zhishuKbChoiceTrigger[data-selected=true]{color:var(--dsw-alias-label-primary)}
+        .zhishuKbChoiceTrigger:hover{background:var(--dsw-alias-interactive-bg-hover)}
+        .zhishuKbChoiceTrigger:disabled{opacity:.55;cursor:default}
+        .zhishuKbChoiceTrigger svg{flex:none}
+        .zhishuKbChoiceName{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .zhishuKbChoiceError{color:var(--dsw-alias-label-error);font-size:12px;max-width:260px}
         .zhishuKb{display:flex;flex:1;min-width:0;min-height:0;height:100%;flex-direction:column;background:var(--dsw-alias-bg-primary,#fff);color:var(--dsw-alias-label-primary)}
         .zhishuKbToolbar{display:flex;align-items:center;gap:8px;flex:none;min-height:40px;padding:6px 12px;border-bottom:1px solid var(--dsw-alias-border-secondary,rgba(0,0,0,.08))}
         .zhishuKbToolbarTitle{flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -330,10 +510,10 @@ window.__ModuleLoader__.load({
         setChatOpen(true)
         setAsking(true)
         setError('')
-        const current = typeof service.currentSession === 'function' ? service.currentSession() : null
-        const owned = current && typeof service.ownsSession === 'function' ? service.ownsSession(current) : false
         void (async () => {
           try {
+            const current = service.currentSession()
+            const owned = current && service.ownsSession(current)
             if (!owned) await service.newSession()
           } catch (err) {
             setError(err instanceof Error ? err.message : String(err))
@@ -389,10 +569,22 @@ window.__ModuleLoader__.load({
       )
     }
 
-    const inject = ['slots', 'desktopWorkbenches', 'sidebarSoftPanels']
+    const inject = ['slots', 'desktopWorkbenches', 'sidebarSoftPanels', 'commandUi', 'sessions', 'locale', 'connection', 'remote', 'remote.commands']
     function apply(ctx) {
       installStyles()
+      installToolAuthentication(ctx)
+      installKnowledgePicker(ctx)
 
+      // Workbench frame props carry the registry's service context. Ownership
+      // operations must instead retain this registered provider's Cordis caller.
+      const actions = {
+        currentSession: () => ctx.desktopWorkbenches.currentSession(),
+        ownsSession: id => ctx.desktopWorkbenches.ownsSession(id),
+        newSession: () => ctx.desktopWorkbenches.newSession(),
+      }
+      function KnowledgeWorkbenchEntry(props) {
+        return h(KnowledgeWorkbench, { ...props, service: actions })
+      }
       const disposeRegister = ctx.desktopWorkbenches.register({
         title: '知识库',
         titleEn: 'Knowledge Base',
@@ -401,10 +593,25 @@ window.__ModuleLoader__.load({
         category: '知识',
         customFrame: true,
         headerLayout: 'compact',
-      }, KnowledgeWorkbench)
+      }, KnowledgeWorkbenchEntry)
 
+      let openingWorkbench = null
+      let disposed = false
+      // The built-in entry is available before this user's first workbench write.
+      function openKnowledgeWorkbench() {
+        if (disposed) return Promise.resolve()
+        if (openingWorkbench) return openingWorkbench
+        openingWorkbench = (async () => {
+          const service = ctx.desktopWorkbenches
+          if (!service.ready) await service.load()
+          if (disposed) return
+          if (!service.state.added.includes(WORKBENCH_ID)) await service.add(WORKBENCH_ID)
+          if (!disposed) await service.open(WORKBENCH_ID)
+        })().finally(() => { openingWorkbench = null })
+        return openingWorkbench
+      }
       const disposeOpener = ctx.sidebarSoftPanels.registerOpener(WORKBENCH_ID, () => {
-        ctx.desktopWorkbenches.run(ctx.desktopWorkbenches.open(WORKBENCH_ID))
+        ctx.desktopWorkbenches.run(openKnowledgeWorkbench())
       })
 
       ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
@@ -414,8 +621,10 @@ window.__ModuleLoader__.load({
         label: '知识库',
       }, KnowledgeIcon))
 
-      ctx.effect(() => () => {
+      ctx.effect(() => async () => {
+        disposed = true
         disposeOpener?.()
+        try { await openingWorkbench } catch (error) { /* The opener's run() owns failure reporting. */ }
         disposeRegister?.()
       }, 'knowledge-base: unregister workbench')
     }

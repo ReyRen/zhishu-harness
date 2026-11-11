@@ -80,6 +80,62 @@ function rowLabels(): string[] {
 }
 
 describe('PopupSelectView', () => {
+  it('renders inline multi-selection and keeps Tab available for filter controls until focus leaves', async () => {
+    const onSelect = vi.fn()
+    const { popup, consume, search } = await mountOpen({ multiple: true, onSelect,
+      searchLabels: () => ({ placeholder: '搜索知识库', empty: '暂无知识库', noResults: '没有匹配', hint: '可多选，勾选后立即生效' }) })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.getByRole('listbox').getAttribute('aria-multiselectable')).toBe('true')
+    expect(screen.getByText('可多选，勾选后立即生效')).toBeTruthy()
+    await act(async () => { fireEvent.click(screen.getByRole('option', { name: 'Dark' })) })
+    expect(screen.getByRole('option', { name: 'Dark' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('option', { name: 'Light' }).getAttribute('aria-selected')).toBe('true')
+    fireEvent.keyDown(search, { key: 'ArrowDown' })
+    await act(async () => { fireEvent.keyDown(search, { key: 'Enter' }) })
+    expect(screen.getByRole('option', { name: 'Sepiawarm' }).getAttribute('aria-selected')).toBe('true')
+    expect(consume).toHaveBeenCalledTimes(1)
+    expect(fireEvent.keyDown(search, { key: 'Tab' })).toBe(true)
+    expect(popup.state.getSnapshot().open).toBe(true)
+    const selected = screen.getByRole('button', { name: '已选（3）' })
+    act(() => { selected.focus() })
+    fireEvent.click(selected)
+    expect(screen.getAllByRole('option')).toHaveLength(3)
+    const outside = document.createElement('button')
+    document.body.appendChild(outside)
+    act(() => { outside.focus() })
+    expect(popup.state.getSnapshot().open).toBe(false)
+    outside.remove()
+  })
+
+  it('filters checked rows and clears the entire set while search is active, with native keyboard access', async () => {
+    const onClear = vi.fn()
+    const { popup, search } = await mountOpen({ multiple: true, onClear })
+    fireEvent.click(screen.getByRole('button', { name: '已选（1）' }))
+    expect(rowLabels()).toEqual(['Light'])
+    fireEvent.change(search, { target: { value: 'Dark' } })
+    const clear = screen.getByRole('button', { name: '清空选择' })
+    expect(fireEvent.keyDown(clear, { key: 'Enter' })).toBe(true)
+    await act(async () => { fireEvent.click(clear) })
+    expect(onClear).toHaveBeenCalledExactlyOnceWith('ctx-A')
+    expect(screen.getByText('尚未选择任何选项')).toBeTruthy()
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '清空选择' }).disabled).toBe(true)
+    expect(popup.state.getSnapshot().open).toBe(true)
+    fireEvent.keyDown(screen.getByRole('button', { name: '全部' }), { key: 'Escape' })
+    expect(popup.state.getSnapshot().open).toBe(false)
+  })
+
+  it('keeps search focus on a mouse press so blur dismissal cannot discard a multi-selection click', async () => {
+    const onSelect = vi.fn()
+    const { popup, search } = await mountOpen({ multiple: true, onSelect })
+    const row = screen.getByRole('option', { name: 'Dark' })
+    expect(document.activeElement).toBe(search)
+    expect(fireEvent.mouseDown(row, { button: 0 })).toBe(false)
+    await act(async () => { fireEvent.click(row) })
+    expect(onSelect).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('option', { name: 'Dark' }).getAttribute('aria-selected')).toBe('true')
+    expect(popup.state.getSnapshot().open).toBe(true)
+    expect(document.activeElement).toBe(search)
+  })
   it('renders provider groups and selects the same fuzzy-ranked row the user sees', async () => {
     const alpha = { name: 'alpha', label: 'Alpha provider' }
     const beta = { name: 'beta', label: 'Beta provider' }
