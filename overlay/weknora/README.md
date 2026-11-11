@@ -14,7 +14,7 @@ The platform client automatically obtains a `gcs-webnora` SSO ticket and hands i
 
 | Variable | Meaning | Default |
 |---|---|---|
-| `WEKNORA_BASE_URL` | Backend URL; `/api/v1` is appended when absent | `http://localhost:8080/api/v1` |
+| `WEKNORA_BASE_URL` | Backend API URL (not the SSO iframe page); `/api/v1` is appended when absent. Workers/compose inject it for containers; Desktop fills `http://172.18.36.230:5175/weknora/api/v1` when unset | Overlay fallback `http://localhost:8080/api/v1` |
 | `DSH_PLATFORM_USER_ID` | Worker-assigned platform user; the backend must verify this identity during SSO | Unset for standalone Desktop |
 | `WEKNORA_API_KEY` | Explicit standalone machine credential; rejected in Worker-assigned user runtimes | Unset |
 | `WEKNORA_TENANT_ID` | Optional workspace selector; the backend checks membership | The SSO user's active workspace |

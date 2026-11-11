@@ -85,14 +85,16 @@
 
 ### 知识库（WeKnora）：桌面与 Web
 
-知识库 workbench 在 `overlay/knowledge-base`，对所有带 Web 的 profile 加载（不只 desktop）。**Harness ↔ WeKnora 的 `weknora:sso-*` 协议两边共用**；差别只在「谁给知识库发平台票」。
+知识库 UI 在 `overlay/knowledge-base`，对所有带 Web 的 profile 加载（不只 desktop）。它是与**插件页同级的 main panel**（整页 WeKnora iframe），**不是**业务工作台，也不并排挂主会话。页内「AI助手」调用与侧栏「新会话」相同的 `uiWorkspace.startSession()`，回到原生主会话。检索工具与 composer「知识库」多选在 `overlay/weknora`，按**当前说话的 session** 记选库。
+
+**Harness ↔ WeKnora 的 `weknora:sso-*` 协议两边共用**；差别只在「谁给知识库发平台票」。
 
 #### 场景对比
 
 | | 桌面会话空间 | Web / 容器化（model 嵌 harness） |
 |---|---|---|
 | Harness 在哪 | 主窗口文档 `dsh-app://app/` | model `/harnessAgent` 里的 iframe（开发常见 `http://localhost:3002` → 代理到本地或远端 harness） |
-| 知识库 UI | 同一会话页里的 workbench + WeKnora iframe | 同上，跑在 harness iframe 文档里 |
+| 知识库 UI | main panel：整页 WeKnora；对话仍走主会话 | 同上，跑在 harness iframe 文档里 |
 | WeKnora 父页 origin（白名单要认的） | `dsh-app://app` | harness 的 http(s) 源，如 `http://localhost:3002` |
 | 领 `gcs-webnora` | `zhishuPlatform.getSsoToken` → 主进程在已登录业务页 `fetch` | harness → model：`zhishu:sso-request` / `zhishu:sso-response`；model `mintWeknoraSsoTicket()` |
 | 与启动容器的关系 | 无 | `/v1/launch` 用的是 clientId `gcs-harness`，和知识库的 `gcs-webnora` 不是同一个 |
@@ -101,7 +103,7 @@
 
 ```text
 model（平台 cookie，能 getSsoToken）
-  └── harness iframe（知识库 workbench）
+  └── harness iframe（知识库 main panel）
         └── WeKnora iframe（/weknora/sso/platform）
 ```
 
@@ -163,8 +165,9 @@ model（平台 cookie，能 getSsoToken）
 | 会话 ↔ 业务的 IPC、领票、账号缓存 | `apps/desktop/src/model-space/` 与会话侧 `preload-app.ts` | 在会话页里直接拼平台 Cookie 调后台 |
 | 业务页响应桌面事件、向壳上报账号 | model 监听 `zhishu-desktop-*`，以及 `utils/desktop-embed.js` | 在容器化 web profile 里假设存在 `zhishuPlatform` |
 | 容器 harness 内知识库领 WeKnora 票 | model `/harnessAgent` 监听 `zhishu:sso-request` → `mintWeknoraSsoTicket` | 让 WeKnora 跨两层 iframe 直接跟 model 通信；或在容器里假设有平台 cookie |
+| 知识库整页 UI | `overlay/knowledge-base` 注册 `main` + `sidebar.panellist`（`zhishu-knowledge`） | 再注册成业务工作台，或强行并排主会话 |
 
-官方测试设置了 `VITEST` 时不加载 overlay。没有 Web 界面的 profile 也不加载。桌面端带 Web 运行时，会加载。`hide-official-account` 对所有 Web profile 生效，关掉官方账号菜单，左下角回到只有设置的齿轮。`platform-account` 只在 profile 名为 `desktop` 时加载（`DESKTOP_ONLY_OVERLAYS`）。`knowledge-base` 对所有 Web profile 生效：桌面走 IPC 领票，容器 / `dsh:private` 走 model 父页 `zhishu:sso-*` 桥。
+官方测试设置了 `VITEST` 时不加载 overlay。没有 Web 界面的 profile 也不加载。桌面端带 Web 运行时，会加载。`hide-official-account` 对所有 Web profile 生效，关掉官方账号菜单，左下角回到只有设置的齿轮。`platform-account` 只在 profile 名为 `desktop` 时加载（`DESKTOP_ONLY_OVERLAYS`）。`knowledge-base` 对所有 Web profile 生效：整页知识库 panel；桌面走 IPC 领票，容器 / `dsh:private` 走 model 父页 `zhishu:sso-*` 桥。`weknora` overlay 提供主会话 / 工作台会话共用的检索工具与选库。
 
 相关代码在 `apps/desktop/src/model-space/`（会话侧桥在 `preload-app.ts`）：
 
@@ -246,6 +249,7 @@ model 仓库的 `/desktop-entry` 不能要求登录标记。冷启动时 cookie 
 | 变量 | 在哪设 | 作用 |
 |---|---|---|
 | `DSH_MODEL_ORIGIN` | 启动 `pnpm run dev:desktop` 的终端 | 未打包时改平台页地址。不设则用 `http://127.0.0.1:8888` |
+| `WEKNORA_BASE_URL` | 同上（也可不设） | Host 知识库工具 / 选库交票用的 **WeKnora API** 地址（不是 iframe 页）。不设时桌面默认 `http://172.18.36.230:5175/weknora/api/v1`，与 `docker/.env.example` 一致。配错或后端不可达时会出现 `/api/zhishu-knowledge/auth` 502 `knowledge_backend_unavailable` |
 | `DSH_DESKTOP_OPEN_DEVTOOLS` | 同上。不设时开发脚本当作 `1` | 设为 `0` 时，本地开发不自动打开会话页和业务页的开发工具。安装包不看这个变量 |
 | `DSH_MODEL_DELIVERY` | 执行打包命令的终端 | `full`（默认）构建 model、flow、prompt。`lite` 只构建 model 的 `build:delivery:lite` |
 | `DSH_DESKTOP_SKIP_MODEL_BUILD` | 同上 | 设为 `1` 时不重新构建，只拷贝已经打好的 dist |

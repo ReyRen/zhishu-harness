@@ -27,6 +27,7 @@ import {
 } from 'electron'
 import { resolveDesktopPaths } from './paths.ts'
 import { DesktopProjectManager } from './project-manager.ts'
+import { withDesktopWeknoraEnvironment } from './weknora-environment.ts'
 import { DesktopHostFatalError, DesktopHostProcess, DesktopHostUncleanExitError } from './host-process.ts'
 import { DesktopPlatformView, PLATFORM_IPC, platformBounds } from './platform-view.ts'
 import { installDesktopFileDrag } from './file-drag.ts'
@@ -406,9 +407,11 @@ async function main(): Promise<void> {
     ])
     // Packaged builds only remap the catalog when Verdaccio was actually shipped and started.
     // Development still remaps so `pnpm market:registry` is the only source the Host sees.
-    hostEnvironment = development || marketRoot !== undefined
+    const withMarket = development || marketRoot !== undefined
       ? pluginMarketHostEnvironment(base)
       : base
+    // WeKnora tool SSO needs the API base; without it the Host defaults to localhost:8080.
+    hostEnvironment = withDesktopWeknoraEnvironment(withMarket)
     if (!development && marketRoot === undefined) {
       console.warn('desktop plugin market: resources/market-registry is incomplete; Host keeps the default catalog')
     }

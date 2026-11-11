@@ -1,6 +1,7 @@
-# Preinstalled knowledge-base workbench. Registers with the workbench host and
-# adds a soft-active sidebar launcher. Desktop mints SSO via zhishuPlatform IPC;
-# container / dsh web asks the embedding model page over zhishu:sso-* postMessage.
+# Preinstalled knowledge-base main panel (WeKnora iframe UI, like Plugins).
+# Desktop mints SSO via zhishuPlatform IPC; container / dsh web asks the
+# embedding model page over zhishu:sso-* postMessage. Native chat stays on the
+# main conversation; the panel's “AI助手” calls the same startSession as 新会话.
 - insert:
     - id: zhishu-knowledge-base
       name: ./index.js
