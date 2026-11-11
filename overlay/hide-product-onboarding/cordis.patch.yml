@@ -9,9 +9,14 @@
 - id: llm-deepseek-account
   disabled: true
 
+# Platform model definitions are stored once in the authenticated model registry.
+- id: llm-pi-ai
+  disabled: true
+
 - id: ui-settings-models
   config:
     credentialOnboarding: false
+    platformModelManagement: true
 
 - insert:
     - id: zhishu-hide-product-onboarding

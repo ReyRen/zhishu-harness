@@ -57,9 +57,16 @@ export function createKnowledgeRuntime({ baseUrl, platformUserID, tenantId, requ
   const backend = apiURL(baseUrl)
   const capability = randomBytes(32).toString('hex')
   const lifetime = new AbortController()
+  const stateListeners = new Set()
+  let authorizedLifetime = new AbortController()
   let credentials, refreshing, generation = 0
 
-  function clear() { generation++; credentials = undefined; refreshing = undefined }
+  function changed() { for (const listener of stateListeners) listener() }
+  function clear() {
+    generation++; credentials = undefined; refreshing = undefined
+    authorizedLifetime.abort(); authorizedLifetime = new AbortController()
+    changed()
+  }
   function state() { return { mode: 'sso', authenticated: credentials !== undefined } }
 
   async function exchange(path, body, signal) {
@@ -101,6 +108,7 @@ export function createKnowledgeRuntime({ baseUrl, platformUserID, tenantId, requ
     }, signal)
     if (generation !== revision || lifetime.signal.aborted) throw new KnowledgeAuthError('login_superseded', 409)
     credentials = next
+    changed()
     return state()
   }
 
@@ -167,6 +175,40 @@ export function createKnowledgeRuntime({ baseUrl, platformUserID, tenantId, requ
 
   return {
     state, signIn, clear,
+    onStateChanged(listener) {
+      stateListeners.add(listener)
+      return () => stateListeners.delete(listener)
+    },
+    async fetchModels(path, init = {}, tenant) {
+      const method = init.method || 'GET'
+      if (!(method === 'GET' && /^\/(?:auth\/me|models(?:\/[A-Za-z0-9._-]{1,64})?)$/u.test(path))
+        && !(method === 'POST' && /^\/models\/[A-Za-z0-9._-]{1,64}\/harness-chat$/u.test(path))) {
+        throw new KnowledgeAuthError('unsupported_model_operation', 404)
+      }
+      if (tenant !== undefined && !/^[1-9]\d*$/u.test(String(tenant))) throw new KnowledgeAuthError('invalid_model_workspace', 400)
+      const revision = generation
+      const authSignal = authorizedLifetime.signal
+      const signal = AbortSignal.any([lifetime.signal, authSignal, ...(init.signal ? [init.signal] : []), AbortSignal.timeout(chatTimeoutMs)])
+      const token = await authorization(signal)
+      if (generation !== revision) throw new KnowledgeAuthError('login_superseded', 409)
+      let response
+      try {
+        response = await request(`${backend}${path}`, {
+          method, body: init.body, redirect: 'manual', signal,
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', accept: method === 'POST' ? 'text/event-stream' : 'application/json',
+            ...(tenant === undefined ? {} : { 'X-Tenant-ID': String(tenant) }) },
+        })
+      } catch (error) {
+        if (signal.aborted) throw error
+        throw new KnowledgeAuthError('model_backend_unavailable', 502)
+      }
+      if (response.status === 401 && credentials?.token === token) clear()
+      if (response.status >= 300 && response.status < 400) {
+        await response.body?.cancel()
+        throw new KnowledgeAuthError('unexpected_backend_redirect', 502)
+      }
+      return response
+    },
     async handle(request) {
       try {
         if (request.method === 'GET') return Response.json(state(), { headers: { 'cache-control': 'no-store' } })

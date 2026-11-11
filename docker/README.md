@@ -20,6 +20,10 @@ This directory builds `zhishu-harness` into the complete native Web image. Maste
 
 Build only from a clean checkout of the merged `main` on a labeled Worker. The [release guide](../docs/cookbook/updating-platform-fork.md) gives the commands and the image-ID rollout procedure. Docker reuses unchanged dependency layers; `DSH_CLIENT_COMMIT_HASH` records the exact source revision in the frontend and the image's `org.opencontainers.image.revision` label.
 
+## Unified models
+
+The platform [unified-model settings](../overlay/models/README.md) reuse gcs-webnora's model editor inside the native Models section. Deploy its matching backend before this image; the [upgrade guide](../docs/upgrade-guide/v0.2.2-rc.1/platform-unified-models/guide.md) covers existing profile selections and credentials.
+
 ## User Workspaces
 
 The container creates and automatically opens `/storage-root-jfs/user/workspace`, so a user can chat immediately. On the Worker this maps to `/storage-root-jfs/user-<userID>/workspace`. The native Web UI cannot remove this required default Workspace, but users can create and switch to other Workspaces.

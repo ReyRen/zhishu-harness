@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-11-11-platform-unified-model-registry.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-11-11-platform-unified-model-registry.md
+/agent-note-platform-unified-model-registry:
+  en: 2680bd5094dd60fc
+  zh: bee16897f745cd23
+/agent-note-platform-unified-model-registry/problem:
+  en: 4e774d61af4e2dba
+  zh: de30af87fbdc25a5
+/agent-note-platform-unified-model-registry/decision:
+  en: c36a1666e3748746
+  zh: 9a12b5d4a7e4d4d9
+/agent-note-platform-unified-model-registry/alternatives-considered:
+  en: 6d51da7107ec6199
+  zh: 5f56d1d8cc8b4848
+/agent-note-platform-unified-model-registry/consequences:
+  en: 9478780e529995b9
+  zh: e50a43f90ba6928b
