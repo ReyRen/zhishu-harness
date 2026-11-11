@@ -1,6 +1,6 @@
 /**
- * Browser-only overlay row. The visible workbench and sidebar launcher live in
- * client.js; this host entry exists so the desktop profile loads the package.
+ * Browser-only overlay row. The main-panel UI lives in client.js; this host
+ * entry exists so Web profiles load the package.
  */
 export const inject = []
 

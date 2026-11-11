@@ -14,7 +14,7 @@
 
 | 变量 | 含义 | 默认值 |
 |---|---|---|
-| `WEKNORA_BASE_URL` | 后端地址；缺少 `/api/v1` 时自动补上 | `http://localhost:8080/api/v1` |
+| `WEKNORA_BASE_URL` | 后端 API 地址（不是 SSO iframe 页）；缺少 `/api/v1` 时自动补上。容器由 Worker/compose 注入；桌面在未设置时由 Electron 壳写入平台默认 `http://172.18.36.230:5175/weknora/api/v1` | overlay 内回退为 `http://localhost:8080/api/v1` |
 | `DSH_PLATFORM_USER_ID` | Worker 指定的平台用户；后端换证时必须验证该身份 | 独立 Desktop 不设置 |
 | `WEKNORA_API_KEY` | 独立部署显式配置的机器凭据；Worker 用户运行时拒绝它 | 未设置 |
 | `WEKNORA_TENANT_ID` | 可选的空间选择；后端校验成员权限 | SSO 用户的当前空间 |

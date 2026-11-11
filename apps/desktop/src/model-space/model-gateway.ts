@@ -280,13 +280,19 @@ function tunnel(
   const outbound = (target.protocol === 'https:' ? httpsRequest : httpRequest)(target, { method: request.method ?? 'GET', headers })
   outbound.on('upgrade', (incoming, upstream, upstreamHead) => {
     const lines = [`HTTP/1.1 ${String(incoming.statusCode ?? 101)} ${incoming.statusMessage ?? 'Switching Protocols'}`]
-    for (const [name, value] of Object.entries(rewriteResponseHeaders(incoming.headers, target.origin, localOrigin))) {
+    // Ordinary HTTP drops Upgrade/Connection; a 101 handshake must keep them or the browser rejects the socket.
+    const outgoing = rewriteResponseHeaders(incoming.headers, target.origin, localOrigin)
+    outgoing.connection = incoming.headers.connection ?? 'Upgrade'
+    outgoing.upgrade = incoming.headers.upgrade ?? 'websocket'
+    for (const [name, value] of Object.entries(outgoing)) {
       const values = Array.isArray(value) ? value : [value]
       for (const item of values) { if (item !== undefined) lines.push(`${name}: ${item}`) }
     }
     socket.write(`${lines.join('\r\n')}\r\n\r\n`)
     if (upstreamHead.length > 0) socket.write(upstreamHead)
     if (head.length > 0) upstream.write(head)
+    upstream.on('error', () => { socket.destroy() })
+    socket.on('error', () => { upstream.destroy() })
     upstream.pipe(socket)
     socket.pipe(upstream)
   })

@@ -259,6 +259,10 @@ window.__ModuleLoader__.load({
         this.internalSessionOpen = null
         this.lastSession = undefined
         this.nativeLocation = storedNativeLocation()
+        /** @type {Map<string, Function>} Main-session companions (sidebar soft pages; not workbenches). */
+        this.companions = new Map()
+        /** @type {string | null} */
+        this.activeCompanionId = null
         this.publish()
       }
       getSnapshot = () => this.snapshot
@@ -665,8 +669,61 @@ window.__ModuleLoader__.load({
       publish() {
         this.snapshot = { state: this.state, drafts: Object.fromEntries(this.draftNotes), ready: this.ready, error: this.error,
           catalogLoaded: this.catalogLoaded, catalogError: this.catalogError, catalogStale: this.catalogStale, catalogRefreshing: this.catalogRefreshing, checkingUpdates: this.checkingUpdates, pending: this.pending, marketOpen: this.marketOpen,
-          registrationFailures: [...this.registrationFailures.values()], catalog: this.marketCatalog(), categories: this.marketCategories, installs: this.installs, installing: this.installing, native: this.native, togglingPlugin: this.togglingPlugin, removingPlugin: this.removingPlugin, removedWorkbenchIds: [...this.removedWorkbenchIds], restartNeeded: this.restartNeeded, reloadNeeded: this.reloadNeeded, switcherHint: this.switcherHint === true }
+          registrationFailures: [...this.registrationFailures.values()], catalog: this.marketCatalog(), categories: this.marketCategories, installs: this.installs, installing: this.installing, native: this.native, togglingPlugin: this.togglingPlugin, removingPlugin: this.removingPlugin, removedWorkbenchIds: [...this.removedWorkbenchIds], restartNeeded: this.restartNeeded, reloadNeeded: this.reloadNeeded, switcherHint: this.switcherHint === true,
+          activeCompanionId: this.activeCompanionId }
         for (const listener of this.listeners) listener()
+      }
+      /**
+       * Register a main-session companion surface (split UI + native conversation).
+       * Not a workbench: no catalog entry, no sessionBindings.
+       * @param {{ id: string, Component: Function }} descriptor
+       * @returns {() => void}
+       */
+      registerCompanion({ id, Component }) {
+        if (typeof id !== 'string' || !id || typeof Component !== 'function') throw new Error('Invalid companion')
+        this.companions.set(id, Component)
+        return () => {
+          if (this.companions.get(id) !== Component) return
+          this.companions.delete(id)
+          if (this.activeCompanionId === id) {
+            this.activeCompanionId = null
+            if (!this.disposed) this.publish()
+          }
+        }
+      }
+      /** Open a companion; clears the active workbench so main sessions stay visible. */
+      async openCompanion(id) {
+        if (typeof id !== 'string' || !id || !this.companions.has(id)) throw new Error('Companion is not registered.')
+        this.setMarketOpen(false)
+        const ticket = ++this.navigation
+        const signal = this.ctx.layout.beginNavigation()
+        if (this.state.active) await this.commit((state) => { state.active = null })
+        if (this.disposed || signal.aborted || ticket !== this.navigation) return
+        this.activeCompanionId = id
+        this.ctx.layout.selectPanel(null)
+        this.publish()
+      }
+      closeCompanion() {
+        if (this.activeCompanionId == null) return
+        this.activeCompanionId = null
+        this.publish()
+      }
+      /**
+       * Leave the active workbench / companion without changing the main panel.
+       * Used when opening a global panel (e.g. knowledge) so New Session / AI助手
+       * create main-session chats instead of workbench-owned ones.
+       */
+      releaseToMainSession() {
+        this.activeCompanionId = null
+        if (!this.state.active) {
+          this.publish()
+          return Promise.resolve()
+        }
+        const ticket = ++this.navigation
+        return this.commit((state) => { state.active = null }).then(() => {
+          if (this.disposed || ticket !== this.navigation) return
+          // Keep the caller's selected main panel (do not selectPanel(null)).
+        })
       }
       report(error) { if (!this.disposed) { this.error = error instanceof Error ? error.message : String(error); this.publish() } }
       run(promise) { void promise.catch((error) => this.report(error)) }
@@ -1118,6 +1175,7 @@ window.__ModuleLoader__.load({
         if (!this.catalog.has(id) || !this.state.added.includes(id)) throw new Error('请先添加可用的工作台。')
         if (this.activationFor(this.catalog.get(id)) === 'off') throw new Error('工作台插件已关闭，请先开启。')
         if (sessionId && this.state.sessionBindings[sessionId] !== id) throw new Error('会话不属于当前工作台。')
+        this.activeCompanionId = null
         this.rememberNativeSession(this.mainViewSession())
         this.setMarketOpen(false)
         const ticket = ++this.navigation
@@ -1141,6 +1199,7 @@ window.__ModuleLoader__.load({
         if (!workbenchPreference.getSnapshot()) throw new Error('工作台功能已关闭。')
         if (!id || !this.catalog.has(id) || !this.state.added.includes(id)) throw new Error('请先添加可用的工作台。')
         if (this.activationFor(this.catalog.get(id)) === 'off') throw new Error('工作台插件已关闭，请先开启。')
+        this.activeCompanionId = null
         this.rememberNativeSession(this.mainViewSession())
         this.setMarketOpen(false)
         const ticket = ++this.navigation
@@ -2614,19 +2673,30 @@ ${ACCEPTANCE_READING}先确认要公开的仓库和内容，不得公开密钥�
     }
     function Frame({ service, conversation }) {
       useHostLocale(service)
-      const { state, catalog, ready, pending } = useWorkbench(service)
+      const { state, catalog, ready, pending, activeCompanionId } = useWorkbench(service)
       const workbenchEnabled = React.useSyncExternalStore(workbenchPreference.subscribe.bind(workbenchPreference), workbenchPreference.getSnapshot.bind(workbenchPreference))
       // The list snapshot changes whenever the main-view retention moves.
       React.useSyncExternalStore(React.useCallback((listener) => service.ctx.sessions.list.subscribe(listener), [service]), () => service.ctx.sessions.list.getSnapshot())
       const workspaces = React.useSyncExternalStore(React.useCallback((listener) => service.ctx.workspaces.list.subscribe(listener), [service]), () => service.ctx.workspaces.list.getSnapshot())
       const [workspaceId, setWorkspaceId] = React.useState('')
       const frameRef = React.useRef(null)
-      React.useLayoutEffect(() => frameRef.current ? mountNativeDragRegions(frameRef.current) : undefined, [workbenchEnabled])
+      React.useLayoutEffect(() => frameRef.current ? mountNativeDragRegions(frameRef.current) : undefined, [workbenchEnabled, activeCompanionId])
       const [conversationContainer] = React.useState(() => {
         const node = document.createElement('div')
         Object.assign(node.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', minWidth: '0', height: '100%' })
         return node
       })
+      const conversationMount = h(ConversationMount, { container: conversationContainer })
+      // Main-session companions keep the native conversation (no workbench session gate).
+      const Companion = activeCompanionId ? service.companions.get(activeCompanionId) : null
+      if (typeof Companion === 'function') {
+        return h('div', { className: 'dshWb dshWbFrame', ref: frameRef, 'data-dsh-companion-active': activeCompanionId },
+          require('react-dom').createPortal(conversation, conversationContainer),
+          h('div', {
+            className: 'dshWbCustomFrame',
+            style: { position: 'relative', overflow: 'hidden', flex: 1, minHeight: 0, minWidth: 0, width: '100%', maxWidth: '100%', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' },
+          }, h(Companion, { active: true, conversation: conversationMount })))
+      }
       // Disabling Workbench restores the untouched native conversation instead
       // of leaving a disabled Workbench frame in the main area.
       if (!workbenchEnabled) return conversation
@@ -2639,7 +2709,6 @@ ${ACCEPTANCE_READING}先确认要公开的仓库和内容，不得公开密钥�
       const runtimeEntry = typeof entry?.Component === 'function' ? entry : null
       const id = runtimeEntry?.id
       const customFrame = runtimeEntry?.customFrame === true
-      const conversationMount = h(ConversationMount, { container: conversationContainer })
       const currentSession = service.currentSession()
       const hasCurrentSession = !!(entry && currentSession != null && state.sessionBindings[currentSession] === entry.id)
       const disabled = !ready || pending > 0 || service.blocked
@@ -2710,8 +2779,12 @@ ${ACCEPTANCE_READING}先确认要公开的仓库和内容，不得公开密钥�
       ctx.effect(() => ctx.reflect.provide('sidebarSoftPanels', softPanels), 'workbenches: soft sidebar panels')
       const syncSoftSidebar = () => {
         const panelId = ctx.layout?.panelInfo?.getSnapshot?.()?.activePanelId
+        const companionId = service.activeCompanionId
         const active = service.state.active
-        softPanels.setActiveIds(!panelId && active && softPanels.has(active) ? [active] : [])
+        const softId = companionId && softPanels.has(companionId)
+          ? companionId
+          : (active && softPanels.has(active) ? active : null)
+        softPanels.setActiveIds(!panelId && softId ? [softId] : [])
       }
       ctx.effect(() => service.subscribe(syncSoftSidebar), 'workbenches: soft sidebar active sync')
       ctx.effect(() => ctx.layout?.panelInfo?.subscribe?.(syncSoftSidebar), 'workbenches: soft sidebar panel sync')
