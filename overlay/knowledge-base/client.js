@@ -155,10 +155,10 @@ window.__ModuleLoader__.load({
     }
 
     /** Authenticate tools even when the knowledge-base workbench is closed. */
-    function installToolAuthentication(ctx) {
+    function installToolAuthentication(ctx, endpoint = '/api/zhishu-knowledge/auth') {
+      let syncNow = () => Promise.resolve()
       ctx.effect(() => {
         const lifetime = new AbortController()
-        const endpoint = '/api/zhishu-knowledge/auth'
         let pending, signedIn = true, revision = 0
         const request = (init = {}) => fetch(endpoint, { credentials: 'same-origin', cache: 'no-store',
           ...init, signal: lifetime.signal })
@@ -191,6 +191,7 @@ window.__ModuleLoader__.load({
             if (!lifetime.signal.aborted) console.warn('[Knowledge tools] Could not clear authentication; close the runtime before switching accounts.')
           })
         }
+        syncNow = sync
         const space = window.dshModelSpace
         const unsubscribe = space?.onStateChanged?.(accountChanged)
         if (typeof space?.state === 'function') {
@@ -200,6 +201,7 @@ window.__ModuleLoader__.load({
         const stopReset = ctx.on('connection/reset', sync)
         return () => { revision++; lifetime.abort(); window.clearInterval(timer); unsubscribe?.(); stopReset?.() }
       }, 'knowledge-base: tool authentication')
+      return () => syncNow()
     }
 
     function installKnowledgePicker(ctx) {
@@ -368,6 +370,7 @@ window.__ModuleLoader__.load({
     function KnowledgeWorkbench(props) {
       const service = props.service
       const active = props.active === true
+      const modelsOnly = props.modelsOnly === true
       const conversation = props.conversation
       const frameRef = React.useRef(null)
       const nonceRef = React.useRef('')
@@ -376,8 +379,24 @@ window.__ModuleLoader__.load({
       const [asking, setAsking] = React.useState(false)
       const [status, setStatus] = React.useState('')
       const [error, setError] = React.useState('')
+      const [modelsURL, setModelsURL] = React.useState('')
 
       React.useLayoutEffect(installStyles, [])
+
+      React.useEffect(() => {
+        if (!modelsOnly || !active) return undefined
+        const controller = new AbortController()
+        void fetch('/api/zhishu-models/config', { credentials: 'same-origin', cache: 'no-store', signal: controller.signal })
+          .then(async response => {
+            if (!response.ok) throw new Error('model_settings_unavailable')
+            const value = await response.json()
+            const url = new URL(value.settingsURL)
+            if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('invalid_model_settings_url')
+            url.searchParams.set('theme', document.documentElement.style.colorScheme === 'dark' ? 'dark' : 'light')
+            if (!controller.signal.aborted) setModelsURL(url.href)
+          }).catch(() => { if (!controller.signal.aborted) setError(props.modelCopy.refreshFailed) })
+        return () => controller.abort()
+      }, [modelsOnly, active])
 
       React.useEffect(() => {
         const space = window.dshModelSpace
@@ -411,7 +430,8 @@ window.__ModuleLoader__.load({
 
       React.useEffect(() => {
         if (!active || !signedIn) return undefined
-        const allowed = iframeOrigin()
+        if (modelsOnly && !modelsURL) return undefined
+        const allowed = modelsOnly ? (modelsURL ? new URL(modelsURL).origin : '') : iframeOrigin()
         const onMessage = (event) => {
           const frame = frameRef.current
           const fromWeknora = !!(frame && event.source === frame.contentWindow)
@@ -441,6 +461,16 @@ window.__ModuleLoader__.load({
             return
           }
           if (!data || typeof data !== 'object' || Array.isArray(data)) return
+          if (modelsOnly && data.type === 'weknora:models-updated') {
+            const tenantId = String(data.tenant_id || '')
+            if (!/^[1-9]\d*$/.test(tenantId)) return
+            void Promise.resolve(props.authenticate?.()).then(() => fetch('/api/zhishu-models/refresh', { method: 'POST', credentials: 'same-origin', cache: 'no-store',
+              headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tenantId }) }).then(response => {
+              if (!response.ok) throw new Error('model_catalog_refresh_failed')
+              setError('')
+            })).catch(() => setError(props.modelCopy.refreshFailed))
+            return
+          }
           if (data.type !== READY_TYPE) {
             console.info(`${LOG_HOP2} harness ← weknora ignored (not ${READY_TYPE})`, {
               direction: 'weknora → harness',
@@ -503,7 +533,7 @@ window.__ModuleLoader__.load({
           signedIn: true,
         })
         return () => window.removeEventListener('message', onMessage)
-      }, [active, signedIn])
+      }, [active, signedIn, modelsOnly, modelsURL])
 
       const askAi = () => {
         if (!service || asking) return
@@ -526,7 +556,13 @@ window.__ModuleLoader__.load({
       const closeChat = () => setChatOpen(false)
       const showChat = chatOpen
       const frameReady = active && signedIn
-      const gateHint = active && !signedIn ? '请先登录平台，登录后将自动加载知识库。' : ''
+      const gateHint = active && !signedIn ? (modelsOnly ? props.modelCopy.loginRequired : '请先登录平台，登录后将自动加载知识库。') : ''
+
+      if (modelsOnly) return h('div', { className: 'zhishuModelsSettings' },
+        (status || error || gateHint) ? h('div', { className: 'zhishuKbStatus', 'data-error': error ? 'true' : 'false' }, error || status || gateHint) : null,
+        h('iframe', { ref: frameRef, title: props.title, src: frameReady && modelsURL ? modelsURL : 'about:blank',
+          allow: 'clipboard-read; clipboard-write', style: { width: '100%', height: 'min(68vh, 760px)', minHeight: '420px', border: 0, display: 'block' } }),
+      )
 
       return h(
         'div',
@@ -574,6 +610,21 @@ window.__ModuleLoader__.load({
       installStyles()
       installToolAuthentication(ctx)
       installKnowledgePicker(ctx)
+
+      if (window.__DSH_MODELS_ONBOARDING__?.platformModelManagement === true) {
+        const authenticate = installToolAuthentication(ctx, '/api/zhishu-models/auth')
+        const namespace = 'zhishu.models'
+        ctx.effect(() => ctx.locale.register(namespace, {
+          zh: { refreshFailed: '模型配置暂不可用，请重新打开设置', loginRequired: '请先登录平台后再配置模型' },
+          en: { refreshFailed: 'Model settings are unavailable. Reopen Settings to retry.', loginRequired: 'Sign in to the platform to configure models.' },
+        }))
+        const t = ctx.locale.bind(namespace)
+        ctx.slots.inject('settings.section', () => ctx.slots.register({
+          name: 'settings.section', id: 'models', order: 10,
+          label: () => ctx.locale.bind('settings.models')('nav'),
+        }, () => h(KnowledgeWorkbench, { active: true, modelsOnly: true, authenticate, title: ctx.locale.bind('settings.models')('nav'),
+          modelCopy: { refreshFailed: t('refreshFailed'), loginRequired: t('loginRequired') } })))
+      }
 
       // Workbench frame props carry the registry's service context. Ownership
       // operations must instead retain this registered provider's Cordis caller.

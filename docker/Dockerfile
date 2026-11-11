@@ -55,11 +55,13 @@ RUN --mount=type=cache,id=zhishu-harness-pnpm,target=/pnpm/store \
   pnpm install --offline --frozen-lockfile \
   && pnpm run clean
 
-RUN for script in docker/*.mjs; do node --check "$script"; done \
-  && node --test docker/tests/*.test.mjs
+RUN for script in docker/*.mjs; do node --check "$script"; done
 
 RUN test -n "${DSH_CLIENT_COMMIT_HASH}" \
   && DSH_CLIENT_COMMIT_HASH="${DSH_CLIENT_COMMIT_HASH}" pnpm run build
+
+# Model-adapter tests exercise the built LLM contract used by the Web image.
+RUN node --test docker/tests/*.test.mjs
 
 RUN node --import tsx/esm docker/prepare-market.mjs /opt/dsh-market
 
@@ -152,7 +154,8 @@ RUN --network=none node --test /opt/dsh/docker/tests/weknora-auth.test.mjs /opt/
   && node /opt/dsh/docker/smoke-office.mjs \
   && node /opt/dsh/docker/smoke-market.mjs \
   && node /opt/dsh/docker/smoke-memory.mjs \
-  && node /opt/dsh/docker/smoke-weknora.mjs
+  && node /opt/dsh/docker/smoke-weknora.mjs \
+  && node /opt/dsh/docker/smoke-models.mjs
 
 ARG DSH_CLIENT_COMMIT_HASH
 

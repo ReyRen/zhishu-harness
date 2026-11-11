@@ -20,6 +20,10 @@
 
 只在带标签的 Worker 上，从已合并的干净 `main` 工作树构建。[发布指南](../docs/cookbook/updating-platform-fork.zh.md)列出了命令和 Image ID 切换步骤。Docker 会复用未变化的依赖层；`DSH_CLIENT_COMMIT_HASH` 把准确源码版本写入前端及镜像的 `org.opencontainers.image.revision` 标签。
 
+## 统一模型
+
+平台[统一模型设置](../overlay/models/README.zh.md)在原生“模型”分区中复用 gcs-webnora 模型编辑器。先部署配套后端，再部署此镜像；[升级指南](../docs/upgrade-guide/v0.2.2-rc.1/platform-unified-models/guide.zh.md)说明已有 profile 的模型选择与凭据处理方式。
+
 ## 用户工作区
 
 容器会创建并自动打开 `/storage-root-jfs/user/workspace`，因此用户可以立即问答。它在 Worker 上对应 `/storage-root-jfs/user-<userID>/workspace`。原生 Web 不能删除这个必需默认工作区，但用户仍可创建和切换其他工作区。
