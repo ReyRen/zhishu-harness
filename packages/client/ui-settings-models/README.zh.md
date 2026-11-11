@@ -41,6 +41,8 @@ Host 配置 `credentialOnboarding` 默认为 `true`。Electron preload 标记会
 
 ### API 密钥
 
+`platformModelManagement` 默认为 `false`。平台组合可将其设为 `true`，保留引导与语言注册，并由平台模型目录界面提供“模型”分区。平台[统一模型 overlay](../../../overlay/models/README.zh.md)负责该分区；此标记不改变设置外壳或其他分区。
+
 API 密钥输入框初始为空，并通过 `autocomplete="new-password"` 请求浏览器不要自动填入已保存的登录密码。输入非空时，显示与会话密钥遮罩一致的眼睛按钮：**显示密钥**展示当前输入，**隐藏密钥**重新遮住输入。修改或清空输入后会重新遮住密钥。已保存凭据从不读入输入框。
 
 编辑卡片上的主字段是单独一个 **API 密钥**输入框——页面从不询问环境变量名。键入的密钥经 `credentials.set` 以**只写**方式存入 profile 的引用之下，profile 没有引用时便派生 `<ROUTE>_API_KEY`，pi-ai profile 会把这次派生记录为 `apiKeyEnv`，因此 `cordis.patch.yml` 从不携带密钥值。为新的 pi-ai 提供商留空密钥会保存一个不带引用的 profile，从而保留提供商原生认证（例如 Bedrock 凭据链或 Vertex ADC）。profile 有 `apiKeyEnv` 时，字段的占位文字与帮助提示采用该引用；否则按查找顺序采用可配置提供商目录为该路由报告的 `nativeAuth` 凭据变量，并排除 `baseURLEnv` 地址变量。这些显示提示会忽略包含 `oauth` 的引用（不区分大小写），并说明优先使用已保存凭据，其后为显示的环境后备。这项显示过滤不改变[凭据解析顺序](../../../docs/subsystems/credentials.zh.md#resolution)、适配器的完整环境变量列表或显式引用。被过滤的显式引用仍有可用的密钥输入框，使用普通占位文字且不显示帮助提示。没有密钥认证的原生路由不显示密钥字段及认证帮助；显式引用仍会启用该字段。路由没有 `nativeAuth`（例如手动声明的路由）且 profile 没有引用时，显示普通的密钥占位文字，且不显示帮助提示。只有确认引用的凭据已配置时，行才会以绿色实心点标示 API 密钥状态；只有确认具名引用缺失时，才会以红色实心点标示。「应用」成功后会发出本地无障碍状态消息，且绝不回显任何机密内容。

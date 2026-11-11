@@ -133,7 +133,7 @@ export function apply(ctx: ClientContext): void {
     }
   }, 'ui-settings-models: pushed invalidations')
 
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
+  if (!configured.platformModelManagement) ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: 'models',
     order: 10,
