@@ -1,10 +1,11 @@
 /** A platform model owner independent of a user's optional knowledge-tool bundle. */
 import { createKnowledgeRuntime } from '../weknora/runtime.mjs'
 import { installUnifiedModels } from '../weknora/models.mjs'
+import { loadLegacySelections } from './migration.mjs'
 
 export const inject = ['connection', 'llm']
 
-export function apply(ctx, config) {
+export async function apply(ctx, config) {
   const platformUserID = process.env.DSH_PLATFORM_USER_ID || undefined
   if (platformUserID && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(platformUserID)) {
     throw new Error('DSH_PLATFORM_USER_ID must be the Worker-assigned user identifier')
@@ -28,5 +29,6 @@ export function apply(ctx, config) {
     path: '/api/zhishu-models/auth', methods: ['GET', 'POST'], requestBody: 'buffered',
     fetch: request => runtime.handle(request),
   }), 'unified-models: owner-only SSO handoff')
-  installUnifiedModels(ctx, runtime)
+  const legacySelections = await loadLegacySelections(platformUserID)
+  installUnifiedModels(ctx, runtime, legacySelections)
 }

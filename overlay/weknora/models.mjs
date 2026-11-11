@@ -211,7 +211,7 @@ export async function* modelStream(response, row) {
 }
 
 export class UnifiedModelsAdapter extends LlmAdapter {
-  constructor(ctx, runtime) { super(); this.ctx = ctx; this.runtime = runtime; this.tenant = undefined; this.refreshGeneration = 0 }
+  constructor(ctx, runtime, legacySelections = []) { super(); this.ctx = ctx; this.runtime = runtime; this.legacySelections = legacySelections; this.tenant = undefined; this.refreshGeneration = 0 }
   providerInfo() { return { id: UNIFIED_PROVIDER, name: '统一模型' } }
   async request(path, init = {}, tenant) {
     try { return await this.runtime.fetchModels(path, init, tenant) }
@@ -258,26 +258,31 @@ export class UnifiedModelsAdapter extends LlmAdapter {
     const generation = this.refreshGeneration
     const defaults = this.ctx.get('agentDefaultModel')
     const before = defaults?.currentSelection()
-    const next = this.migratable(before) ? migrateSelection(before, rows, tenant) : undefined
+    const next = this.migratable(before) ? await this.selectionFor(before, rows, tenant) : undefined
+    if (generation !== this.refreshGeneration || !this.runtime.state().authenticated) return
     if (defaults && next && sameSelection(before, defaults.currentSelection())) await defaults.saveSelection(next)
     if (generation !== this.refreshGeneration || !this.runtime.state().authenticated) return
     const agents = this.ctx.get('agents')?.list() || []
     for (const agent of agents) {
       if (agent.status !== 'idle') continue
       const before = agent.model.current()
-      const selection = this.migratable(before) ? migrateSelection(before, rows, tenant) : undefined
-      if (selection) agent.model.select(selection)
+      const selection = this.migratable(before) ? await this.selectionFor(before, rows, tenant) : undefined
+      if (selection && generation === this.refreshGeneration && sameSelection(before, agent.model.current())) agent.model.select(selection)
     }
   }
   async migrateAgent(agent) {
     const before = agent.model.current()
     if (!this.runtime.state().authenticated || !this.migratable(before)) return
     const generation = this.refreshGeneration
-    const tenant = await this.scope()
-    const rows = await jsonResponse(await this.request('/models', {}, tenant))
-    if (!Array.isArray(rows)) throw failure('INVALID_MODEL_CATALOG')
-    const selected = migrateSelection(before, rows, tenant)
+    const selected = await this.selectionFor(before)
     if (selected && generation === this.refreshGeneration && sameSelection(before, agent.model.current())) agent.model.select(selected)
+  }
+  async selectionFor(before, rows, tenant) {
+    const mapped = this.legacySelections.find(item => item.provider === before?.provider && item.model === before?.model)
+    const target = mapped ? scopeID(mapped.tenantID) : tenant || await this.scope()
+    if (!rows || target !== tenant) rows = await jsonResponse(await this.request('/models', {}, target))
+    if (!Array.isArray(rows)) throw failure('INVALID_MODEL_CATALOG')
+    return migrateSelection(before, rows, target, this.legacySelections)
   }
   async row(model, signal) {
     const { id, tenant } = parseModelID(model)
@@ -304,9 +309,14 @@ export class UnifiedModelsAdapter extends LlmAdapter {
 function sameSelection(left, right) { return left?.provider === right?.provider && left?.model === right?.model }
 
 /** Migrate references, never credentials. Ambiguous catalogs require a human choice. */
-export function migrateSelection(before, rows, tenant) {
+export function migrateSelection(before, rows, tenant, legacySelections = []) {
   if (before?.provider === UNIFIED_PROVIDER) return undefined
   const chat = rows.filter(row => row.type === 'KnowledgeQA' && row.status === 'active')
+  const mapped = legacySelections.find(item => item.provider === before?.provider && item.model === before?.model)
+  if (mapped) {
+    const row = String(mapped.tenantID) === tenant ? chat.find(row => row.id === mapped.id) : undefined
+    return row ? { provider: UNIFIED_PROVIDER, model: describeModel(row, tenant).id } : undefined
+  }
   const matches = chat.filter(row => row.name === before?.model || row.id === before?.model)
   const defaults = chat.filter(row => row.is_default || row.default_for?.includes('chat'))
   const selected = matches.length === 1 ? matches[0] : matches.length > 1 ? undefined
@@ -314,8 +324,8 @@ export function migrateSelection(before, rows, tenant) {
   return selected ? { provider: UNIFIED_PROVIDER, model: describeModel(selected, tenant).id } : undefined
 }
 
-export function installUnifiedModels(ctx, runtime) {
-  const adapter = new UnifiedModelsAdapter(ctx, runtime)
+export function installUnifiedModels(ctx, runtime, legacySelections = []) {
+  const adapter = new UnifiedModelsAdapter(ctx, runtime, legacySelections)
   ctx.llm.registerAdapter([UNIFIED_PROVIDER], adapter)
   ctx.effect(() => runtime.onStateChanged(() => {
     adapter.tenant = undefined

@@ -15,7 +15,7 @@ export function apply(ctx) {
       await ctx.loader.await()
       const handle = await ctx.agents.create({ sessionId: 'unified-models-smoke',
         meta: { cwd: message.workspace, agentPreset: 'standard' },
-        agentOptions: { provider: 'ds-utcs', model: 'fixture-chat' } })
+        agentOptions: { provider: 'ds-utcs', model: 'legacy-fixture-chat' } })
       try {
         assert.deepEqual(handle.agent.model.current(), { provider: 'zhishu-models', model: '10004:fixture-chat' })
         const chosen = await ctx.commands.execute(handle.agent, '/knowledge kb-a', [], AbortSignal.timeout(5000))

@@ -103,6 +103,9 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: workspace:*
         version: link:packages/llm/llm
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:*
+        version: link:packages/util/home-paths
       '@deepseek-ai/dsh-llm-replay':
         specifier: workspace:*
         version: link:packages/test-support/llm-replay

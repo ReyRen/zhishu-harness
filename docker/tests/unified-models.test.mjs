@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createServer } from 'node:http'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { loadLegacySelections } from '../../overlay/models/migration.mjs'
 import { describeModel, migrateSelection, modelRequest, modelStream, parseModelID, UnifiedModelsAdapter, UNIFIED_PROVIDER } from '../../overlay/weknora/models.mjs'
 import { createKnowledgeRuntime } from '../../overlay/weknora/runtime.mjs'
 
@@ -117,6 +121,30 @@ test('existing selections move to stable model ids only when the registry has an
   assert.deepEqual(migrateSelection(old, [row], '10004'), { provider: UNIFIED_PROVIDER, model: '10004:qwen-chat' })
   assert.equal(migrateSelection(old, [row, { ...row, id: 'another-qwen' }], '10004'), undefined)
   assert.equal(migrateSelection({ provider: UNIFIED_PROVIDER, model: '10004:chosen' }, [row], '10004'), undefined)
+})
+
+test('an owner-verified import map keeps the exact legacy route when model names collide', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'unified-model-map-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const path = join(root, 'map.json')
+  const models = [{ provider: 'ds-utcs', model: row.name, tenantID: 10004, id: 'imported-qwen' }]
+  await writeFile(path, JSON.stringify({ version: 1, platformUserID: '369', models }))
+  const mapping = await loadLegacySelections('369', path)
+  await assert.rejects(loadLegacySelections('568', path), /does not belong/u)
+  await writeFile(path, JSON.stringify({ version: 1, platformUserID: '369', models: [...models, ...models] }))
+  await assert.rejects(loadLegacySelections('369', path), /duplicate/u)
+  await writeFile(path, JSON.stringify({ version: 1, platformUserID: '369', models: [{ ...models[0], id: '../outside' }] }))
+  await assert.rejects(loadLegacySelections('369', path), /invalid selection/u)
+  const before = { provider: 'ds-utcs', model: row.name }
+  const imported = { ...row, id: 'imported-qwen' }
+  assert.deepEqual(migrateSelection(before, [row, imported], '10004', mapping), { provider: UNIFIED_PROVIDER, model: '10004:imported-qwen' })
+  assert.equal(migrateSelection(before, [row], '10004', mapping), undefined, 'deletion must not substitute a different same-name model')
+  const adapter = new UnifiedModelsAdapter(ctx, { async fetchModels(_path, _init, tenant) {
+    assert.equal(tenant, '10004')
+    return Response.json({ success: true, data: [row, imported] })
+  } }, mapping)
+  adapter.tenant = '10002'
+  assert.deepEqual(await adapter.selectionFor(before), { provider: UNIFIED_PROVIDER, model: '10004:imported-qwen' })
 })
 
 test('switching the settings workspace does not hide models pinned by conversations in another authorized workspace', async () => {

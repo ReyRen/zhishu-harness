@@ -14,7 +14,9 @@ Model selections use `<workspaceID>:<modelID>`, so equal names cannot merge mode
 
 ## Existing profiles
 
-The platform overlay disables the old built-in provider configuration page and routes. Existing credentials are not imported or deleted. Models are configured in the shared registry; idle conversations with retired routes move through the native logged model-selection API when the model name has one match, or when a single workspace default or sole model is available. Ambiguous matches require an explicit selection. Active third-party adapter selections and existing unified selections remain unchanged. The model owner loads independently of the optional knowledge-tool bundle.
+The platform overlay disables the old built-in provider configuration page and routes. The operator's gcs-webnora import command migrates existing model definitions and credentials into each verified owner's private workspace without changing existing knowledge-base bindings; it reuses fully equal configurations and preserves distinct connections. The resulting credential-free `DSH_HOME/storages/zhishu-models/legacy-model-map.json` records `version: 1`, `platformUserID` and `models` entries (`provider`, `model`, `tenantID`, `id`). The Host validates its owner and uses these exact aliases before name matching, including when another workspace is active. Old files are retained. Models configured only in a stopped user's profile require this import before rollout.
+
+Idle conversations with retired routes move through the native logged model-selection API using that import map, a unique matching name, a single workspace default or its sole model. Ambiguous matches and deleted mapped models require an explicit selection. Active third-party adapter selections and existing unified selections remain unchanged. The model owner loads independently of the optional knowledge-tool bundle.
 
 ## Verification
 

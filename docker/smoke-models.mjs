@@ -55,6 +55,10 @@ let timer, logs = ''
 try {
   const workspace = join(root, 'workspace')
   await mkdir(workspace)
+  const aliases = join(root, 'home', 'storages', 'zhishu-models')
+  await mkdir(aliases, { recursive: true })
+  await writeFile(join(aliases, 'legacy-model-map.json'), JSON.stringify({ version: 1, platformUserID: 'user-a',
+    models: [{ provider: 'ds-utcs', model: 'legacy-fixture-chat', tenantID: 10004, id: row.id }] }))
   const patch = join(root, 'observer.patch.yml')
   await writeFile(patch, JSON.stringify([{ insert: [{ id: 'models-observer', name: pathToFileURL(join(repository, 'docker/tests/models-observer.mjs')).href }] }]))
   const env = { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !/(?:KEY|SECRET|TOKEN|PASSWORD|^WEKNORA_)/iu.test(key))),
