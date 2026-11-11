@@ -1,8 +1,10 @@
+import { once } from 'node:events'
 import { createServer } from 'node:http'
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { WebSocket, WebSocketServer } from 'ws'
 import {
   ensureGatewayConfig,
   matchRoute,
@@ -101,5 +103,45 @@ describe('model gateway server', () => {
     expect(api.headers.get('set-cookie')).toBe('JSESSIONID=abc; Path=/')
     const parsed = readGatewayConfig(configPath)
     expect(parsed.harness.target).toContain('127.0.0.1')
+  })
+
+  it('keeps Upgrade and Connection on the harness WebSocket handshake', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'model-gateway-ws-'))
+    directories.push(root)
+    const resources = join(root, 'resources')
+    const site = join(resources, 'model-site')
+    mkdirSync(join(site, 'app'), { recursive: true })
+    writeFileSync(join(site, 'app', 'index.html'), '<p>model</p>')
+    writeFileSync(join(site, 'gateway.default.json'), JSON.stringify({
+      upstreams: [{ prefix: '/DistributedAISystem/', target: 'http://127.0.0.1:9' }],
+      harness: { target: 'http://127.0.0.1:9' },
+    }))
+    const upstream = new WebSocketServer({ host: '127.0.0.1', port: 0 })
+    await once(upstream, 'listening')
+    closers.push(async () => {
+      for (const client of upstream.clients) client.terminate()
+      await new Promise<void>((resolve, reject) => {
+        upstream.close((error) => { if (error) reject(error); else resolve() })
+      })
+    })
+    const address = upstream.address()
+    if (address === null || typeof address === 'string') throw new Error('upstream port missing')
+    const configPath = ensureGatewayConfig(resources)
+    writeFileSync(configPath, JSON.stringify({
+      upstreams: [{ prefix: '/DistributedAISystem/', target: `http://127.0.0.1:${String(address.port)}` }],
+      harness: { target: `http://127.0.0.1:${String(address.port)}` },
+    }))
+    const gateway = await startModelGateway({ siteDir: site, configPath })
+    closers.push(() => gateway.close())
+    const connected = once(upstream, 'connection')
+    const client = new WebSocket(`ws://127.0.0.1:${String(MODEL_HARNESS_PORT)}/socket`)
+    const opened = once(client, 'open')
+    await Promise.all([opened, connected])
+    expect(client.readyState).toBe(WebSocket.OPEN)
+    await new Promise<void>((resolve, reject) => {
+      client.once('close', () => { resolve() })
+      client.once('error', reject)
+      client.close()
+    })
   })
 })
