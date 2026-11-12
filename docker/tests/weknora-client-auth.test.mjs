@@ -9,13 +9,13 @@ const turn = () => new Promise(resolve => setImmediate(resolve))
 
 async function fixture(t, { mode = 'sso', status = 200, deferTicket = false } = {}) {
   const effects = [], listeners = new Set(), intervals = new Set(), calls = [], logs = []
-  let plugin, respond, account, disposed = false
+  let plugin, respond, account, picker, disposed = false, defer = deferTicket, catalogUnauthorized = false, authenticated = false
   const parent = { postMessage(message) {
     respond = () => {
       for (const listener of [...listeners]) listener({ source: parent, origin: 'https://platform.test',
         data: { type: 'zhishu:sso-response', nonce: message.nonce, access_token: 'private-platform-ticket', user_id: '369' } })
     }
-    if (!deferTicket) queueMicrotask(respond)
+    if (!defer) queueMicrotask(respond)
   } }
   const window = {
     parent, top: parent,
@@ -33,8 +33,12 @@ async function fixture(t, { mode = 'sso', status = 200, deferTicket = false } = 
   const request = async (path, options) => {
     assert.equal(disposed, false)
     calls.push({ path, options })
-    if (options.method === 'POST') return Response.json({ authenticated: true })
-    return Response.json({ mode, authenticated: false }, { status })
+    if (path.endsWith('/catalog')) {
+      if (catalogUnauthorized) { catalogUnauthorized = false; return new Response(null, { status: 401 }) }
+      return Response.json({ knowledgeBases: [{ id: 'kb-one', name: '资料' }] })
+    }
+    if (options.method === 'POST') { authenticated = true; return Response.json({ authenticated: true }) }
+    return Response.json({ mode, authenticated }, { status })
   }
   runInNewContext(source, { window, document, fetch: request, AbortController, AbortSignal,
     location: { origin: 'https://harness.test' }, console: { info: (...args) => logs.push(args), warn: (...args) => logs.push(args), error: (...args) => logs.push(args) },
@@ -46,7 +50,7 @@ async function fixture(t, { mode = 'sso', status = 200, deferTicket = false } = 
     layout: { panelInfo: { getSnapshot() { return { activePanelId: null } }, subscribe() { return () => {} } } },
     sidebarSoftPanels: { registerOpener() { return () => {} } },
     slots: { inject() {} },
-    commandUi: { decorate() { return () => {} }, dismiss() {} },
+    commandUi: { decorate(value) { picker = value; return () => {} }, dismiss() {} },
     sessions: { binding() {} },
     locale: { register() { return () => {} }, bind() { return key => key } },
   }
@@ -59,7 +63,8 @@ async function fixture(t, { mode = 'sso', status = 200, deferTicket = false } = 
   })
   plugin.apply(ctx)
   await turn()
-  return { calls, logs, window, listeners, respond: () => respond?.(), account: value => account(value),
+  return { calls, logs, window, listeners, picker, respond: () => respond?.(), account: value => account(value),
+    deferNextTicket() { defer = true; authenticated = false }, unauthorizedCatalog() { catalogUnauthorized = true },
     dispose() { for (const effect of effects.reverse()) effect(); effects.length = 0 } }
 }
 
@@ -98,4 +103,34 @@ test('unloading cancels the pending ticket and all timer/message registrations',
   await turn()
   assert.equal(f.calls.length, 1)
   assert.equal(f.listeners.size, 0)
+})
+
+test('repeated signed-in snapshots do not invalidate an in-flight picker authentication', async t => {
+  const f = await fixture(t, { deferTicket: true })
+  f.account({ authenticated: true })
+  const options = f.picker.ui.options({ sessionId: 'session-one' }, AbortSignal.timeout(1000))
+  f.respond()
+  assert.equal((await options)[0].id, 'kb-one')
+})
+
+test('closing one picker does not cancel another caller sharing the SSO handoff', async t => {
+  const f = await fixture(t)
+  f.deferNextTicket()
+  const first = new AbortController()
+  const cancelled = f.picker.ui.options({ sessionId: 'session-one' }, first.signal)
+  const cancellation = assert.rejects(cancelled, { name: 'AbortError' })
+  await turn()
+  const other = f.picker.ui.options({ sessionId: 'session-one' }, AbortSignal.timeout(1000))
+  first.abort()
+  f.respond()
+  await cancellation
+  assert.equal((await other)[0].id, 'kb-one')
+})
+
+test('a catalog 401 obtains a fresh ticket even when Host still reports authenticated', async t => {
+  const f = await fixture(t)
+  f.unauthorizedCatalog()
+  const options = await f.picker.ui.options({ sessionId: 'session-one' }, AbortSignal.timeout(1000))
+  assert.equal(options[0].id, 'kb-one')
+  assert.equal(f.calls.filter(call => call.path.endsWith('/auth') && call.options.method === 'POST').length, 2)
 })

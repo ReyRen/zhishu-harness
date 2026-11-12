@@ -1,6 +1,6 @@
 /** Locale-owned copy for Harness's native shared-model settings. */
 export const platformModelsEn = {
-  title: 'Model settings', intro: 'Configure models once and use them in conversations and knowledge bases.',
+  title: 'Model settings', intro: 'Manage models for conversations, applications and workbenches in one place.',
   workspace: 'Workspace', all: 'All', KnowledgeQA: 'Chat', Embedding: 'Embedding', Rerank: 'Rerank', VLLM: 'Vision', ASR: 'Speech recognition',
   search: 'Search models', add: 'Add model', edit: 'Edit', copy: 'Copy', copySuffix: 'copy', remove: 'Delete',
   refresh: 'Refresh', retry: 'Retry', empty: 'No models in this category', noResults: 'No matching models',
@@ -33,7 +33,7 @@ export type PlatformModelsKey = keyof typeof platformModelsEn
 
 /** Chinese copy uses the same keys as the native English settings. */
 export const platformModelsZh: Record<PlatformModelsKey, string> = {
-  title: '模型设置', intro: '统一配置模型，供对话与知识库选用',
+  title: '模型设置', intro: '统一管理模型，供对话、应用与工作台选用',
   workspace: '空间', all: '全部', KnowledgeQA: '对话模型', Embedding: '嵌入模型', Rerank: '重排模型', VLLM: '视觉模型', ASR: '语音识别',
   search: '搜索模型', add: '添加模型', edit: '编辑', copy: '复制', copySuffix: '副本', remove: '删除',
   refresh: '刷新', retry: '重试', empty: '此分类下还没有模型', noResults: '没有匹配的模型',

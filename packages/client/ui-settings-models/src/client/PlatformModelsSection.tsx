@@ -1,13 +1,19 @@
 /** Native shared-model cards and editor, rendered inside the existing Harness settings shell. */
 import { useEffect, useId, type ReactNode, type SelectHTMLAttributes } from 'react'
 import type { InjectFace } from '@deepseek-ai/dsh-client-ui-slots'
-import { Button, Input, Modal, IconPlusOutlineRegular, IconChevronDownOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
-import { platformModelTenantId, platformModelType, platformModelTypes } from './platform-models-api.ts'
+import { Button, Input, Modal, IconPlusOutlineRegular, IconChevronDownOutlineRegular,
+  IconSearchOutlineRegular, IconRefreshOutlineRegular, IconSparkleRegular, IconDatabaseOutlineRegular,
+  IconLayersOutlineRegular, IconEyeOutlineRegular, IconMicrophoneOutlineRegular,
+} from '@deepseek-ai/dsh-client-ui-primitives'
+import { platformModelRecord, platformModelTenantId, platformModelType, platformModelTypes } from './platform-models-api.ts'
 import type { PlatformModelDraft } from './platform-models-draft.ts'
 import { platformModelExtra, platformModelExtraValues } from './platform-models-draft.ts'
 import { canManagePlatformModels, type PlatformModelsStore, type PlatformModelsState } from './platform-models-store.ts'
 import type { PlatformModelsKey } from './platform-models-locales.ts'
 import css from './PlatformModelsSection.module.css'
+
+const categoryIcons = { KnowledgeQA: IconSparkleRegular, Embedding: IconDatabaseOutlineRegular,
+  Rerank: IconLayersOutlineRegular, VLLM: IconEyeOutlineRegular, ASR: IconMicrophoneOutlineRegular }
 
 /** Narrow page operations and snapshot supplied by the browser plugin. */
 export interface PlatformModelsInjected {
@@ -43,10 +49,17 @@ function ModelEditor({ controller, state, t }: Pick<PlatformModelsInjected, 'con
   )
   return <Modal open title={t(draft.id ? 'editModel' : 'newModel')} closeLabel={t('cancel')}
     onClose={() => { controller.closeEditor() }} className={css.editor ?? ''} contentClassName={css.editorContent ?? ''}
-    footer={<div className={css.footer}>
-      <Button variant="outline" disabled={busy || state.uncertain} onClick={() => { controller.test() }}>{t(state.busy === 'test' ? 'testing' : 'test')}</Button>
-      <div className={css.actions}><Button variant="ghost" disabled={busy} onClick={() => { controller.closeEditor() }}>{t('cancel')}</Button>
-        <Button type="submit" form={formId} disabled={busy || state.uncertain}>{t(state.busy === 'save' ? 'saving' : 'save')}</Button></div>
+    footer={<div className={css.footerPanel}>
+      <div className={css.feedback} aria-live="polite">
+        {extraValues === null && <p className={css.error} role="alert">{t('error_invalidDraft')}</p>}
+        {state.editorError && <p className={css.error} role="alert">{t(`error_${state.editorError}`)}</p>}
+        {state.tested && <p className={state.tested === 'available' ? css.success : css.error}>{t(state.tested === 'available' ? 'available' : 'unavailableTest')}</p>}
+      </div>
+      <div className={css.footer}>
+        <Button variant="outline" disabled={busy || state.uncertain} onClick={() => { controller.test() }}>{t(state.busy === 'test' ? 'testing' : 'test')}</Button>
+        <div className={css.actions}><Button variant="ghost" disabled={busy} onClick={() => { controller.closeEditor() }}>{t('cancel')}</Button>
+          <Button type="submit" form={formId} disabled={busy || state.uncertain}>{t(state.busy === 'save' ? 'saving' : 'save')}</Button></div>
+      </div>
     </div>}>
     <form id={formId} className={css.form} onSubmit={(event) => { event.preventDefault(); controller.save() }}>
       <fieldset className={css.fields} disabled={busy || state.uncertain}>
@@ -117,11 +130,6 @@ function ModelEditor({ controller, state, t }: Pick<PlatformModelsInjected, 'con
           </Field>)}
         </div></details>
       </fieldset>
-      <div className={css.feedback} aria-live="polite">
-        {extraValues === null && <p className={css.error} role="alert">{t('error_invalidDraft')}</p>}
-        {state.editorError && <p className={css.error} role="alert">{t(`error_${state.editorError}`)}</p>}
-        {state.tested && <p className={state.tested === 'available' ? css.success : css.error}>{t(state.tested === 'available' ? 'available' : 'unavailableTest')}</p>}
-      </div>
     </form>
   </Modal>
 }
@@ -149,32 +157,53 @@ export function PlatformModelsSection({ controller, useSnapshot, t }: PlatformMo
       <Field label={t('workspace')}><SelectControl value={state.tenantId || ''} disabled={state.busy !== null || !!state.draft || !!state.deleting} onChange={(event) => { controller.selectSpace(platformModelTenantId(event.target.value)) }}>
         {state.context?.spaces.map(space => <option key={space.id} value={space.id}>{space.name}</option>)}
       </SelectControl></Field>
-      <Input className={css.search ?? ''} aria-label={t('search')} placeholder={t('search')} value={state.query} onChange={(event) => { controller.filter({ query: event.target.value }) }} />
-      <Button size="sm" variant="ghost" disabled={state.refreshing || state.busy !== null} onClick={() => { controller.refresh() }}>{t('refresh')}</Button>
+      <Input className={css.search ?? ''} icon={<IconSearchOutlineRegular size={16} />} aria-label={t('search')} placeholder={t('search')} value={state.query} onChange={(event) => { controller.filter({ query: event.target.value }) }} />
+      <Button size="sm" variant="ghost" icon={<IconRefreshOutlineRegular size={16} />} disabled={state.refreshing || state.busy !== null} onClick={() => { controller.refresh() }}>{t('refresh')}</Button>
     </div>
     <div className={css.tabs} role="group" aria-label={t('type')}>
-      {(['all', ...platformModelTypes] as const).map(type => <button key={type} type="button" className={css.tab} aria-pressed={state.filter === type} onClick={() => { controller.filter({ filter: type }) }}>
-        {t(type)}<span className={css.count}>{type === 'all' ? state.rows.length : state.rows.filter(model => model.type === type).length}</span>
-      </button>)}
+      {(['all', ...platformModelTypes] as const).map((type) => {
+        const Icon = type === 'all' ? IconLayersOutlineRegular : categoryIcons[type]
+        return <button key={type} type="button" className={css.tab} aria-pressed={state.filter === type} onClick={() => { controller.filter({ filter: type }) }}>
+          <Icon size={16} />{t(type)}<span className={css.count}>{type === 'all' ? state.rows.length : state.rows.filter(model => model.type === type).length}</span>
+        </button>
+      })}
     </div>
     {!writable && state.status === 'ready' && <p className={css.hint}>{t('readOnly')}</p>}
     {state.error && <div className={css.notice} role="alert"><p>{t(`error_${state.error}`)}</p><Button size="sm" variant="outline" onClick={() => { controller.refresh() }}>{t('retry')}</Button></div>}
     <div className={css.grid} aria-busy={state.refreshing} aria-label={t('title')}>
       {state.status === 'loading' && state.rows.length === 0
         ? <div className={css.skeletons} role="status" aria-label={t('loading')}>{[0, 1, 2].map(id => <div key={id} className={css.skeleton} />)}</div>
-        : rows.map(model => <article key={model.id} className={css.card}>
-          <div className={css.cardHead}><span className={css.badge}>{t(model.type)}</span>{model.builtin && <span className={css.hint}>{t('builtin')}</span>}</div>
-          <h3 className={css.modelName}>{model.displayName || model.name}</h3>
-          {model.displayName && <p className={css.identifier}>{model.name}</p>}
-          {model.description && <p className={css.description}>{model.description}</p>}
-          <div className={css.cardFoot}><span className={css.hint}>{t(model.status === 'downloading' || model.status === 'download_failed' ? model.status : 'active')}</span>
-            <div className={css.actions}>
-              {canManagePlatformModels(state, model) && <Button size="sm" variant="ghost" disabled={state.busy !== null} onClick={() => { controller.edit(model.type, model) }}>{t('edit')}</Button>}
-              {writable && <Button size="sm" variant="ghost" disabled={state.busy !== null} onClick={() => { controller.copy(model, `${model.displayName || model.name} · ${t('copySuffix')}`) }}>{t('copy')}</Button>}
-              {canManagePlatformModels(state, model) && <Button size="sm" variant="ghost" disabled={state.busy !== null} onClick={() => { controller.confirmDelete(model) }}>{t('remove')}</Button>}
+        : rows.map((model) => {
+          const Icon = categoryIcons[model.type]
+          const provider = state.providers.find(item => item.id === model.parameters.provider)?.label
+            || (typeof model.parameters.provider === 'string' ? model.parameters.provider : t('customProvider'))
+          const embedding = model.parameters.embedding_parameters
+          const capacity = model.type === 'Embedding' && platformModelRecord(embedding)
+            ? embedding.dimension : model.parameters.context_window
+          return <article key={model.id} className={css.card}>
+            <div className={css.cardHead}>
+              <span className={css.modelIcon}><Icon size={20} /></span>
+              <div className={css.modelIdentity}>
+                <span className={css.badge}>{t(model.type)}</span>
+                <h3 className={css.modelName}>{model.displayName || model.name}</h3>
+              </div>
+              {model.builtin && <span className={css.builtin}>{t('builtin')}</span>}
             </div>
-          </div>
-        </article>)}
+            {model.displayName && <p className={css.identifier}>{model.name}</p>}
+            {model.description && <p className={css.description}>{model.description}</p>}
+            <dl className={css.metadata}>
+              <div><dt>{t('provider')}</dt><dd>{model.source === 'local' ? t('local') : provider}</dd></div>
+              {typeof capacity === 'number' && capacity > 0 && <div><dt>{t(model.type === 'Embedding' ? 'dimension' : 'contextWindow')}</dt><dd>{capacity.toLocaleString()}</dd></div>}
+            </dl>
+            <div className={css.cardFoot}><span className={css.status} data-state={model.status}>{t(model.status === 'downloading' || model.status === 'download_failed' ? model.status : 'active')}</span>
+              <div className={css.actions}>
+                {canManagePlatformModels(state, model) && <Button size="sm" variant="ghost" disabled={state.busy !== null} onClick={() => { controller.edit(model.type, model) }}>{t('edit')}</Button>}
+                {writable && <Button size="sm" variant="ghost" disabled={state.busy !== null} onClick={() => { controller.copy(model, `${model.displayName || model.name} · ${t('copySuffix')}`) }}>{t('copy')}</Button>}
+                {canManagePlatformModels(state, model) && <Button size="sm" variant="ghost" disabled={state.busy !== null} onClick={() => { controller.confirmDelete(model) }}>{t('remove')}</Button>}
+              </div>
+            </div>
+          </article>
+        })}
     </div>
     {state.status === 'ready' && !rows.length && <p className={css.empty}>{t(query ? 'noResults' : 'empty')}</p>}
     <ModelEditor controller={controller} state={state} t={t} />
