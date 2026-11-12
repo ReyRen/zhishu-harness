@@ -86,14 +86,14 @@ it('closes the Desktop account menu when the common settings shell opens', async
   try {
     const openSettings = vi.fn()
     const page = render(<AccountLauncher settingsOpen={false} openSettings={openSettings} />)
-    fireEvent.click(page.getByRole('button', { name: '账号', exact: true }))
+    fireEvent.click(page.getByRole('button', { name: '账号' }))
     expect(page.getByRole('menu')).toBeTruthy()
     page.rerender(<AccountLauncher settingsOpen={true} openSettings={openSettings} />)
     expect(page.queryByRole('menu')).toBeNull()
     expect(openSettings).not.toHaveBeenCalled()
     page.rerender(<AccountLauncher settingsOpen={false} openSettings={openSettings} />)
-    fireEvent.click(page.getByRole('button', { name: '账号', exact: true }))
-    fireEvent.click(page.getByRole('menuitem', { name: '设置', exact: true }))
+    fireEvent.click(page.getByRole('button', { name: '账号' }))
+    fireEvent.click(page.getByRole('menuitem', { name: '设置' }))
     expect(openSettings).toHaveBeenCalledOnce()
     expect(page.queryByRole('menu')).toBeNull()
   } finally {
