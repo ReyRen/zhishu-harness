@@ -17,16 +17,17 @@ test('native settings project current-user memberships and redact keys from mode
   const handle = createModelManagement({ async fetchModels(path, init, tenant) {
     seen.push({ path, tenant })
     return Response.json({ success: true, data: path === '/auth/me'
-      ? { user: { is_system_admin: false }, tenant: { id: 10002 }, memberships: [{ tenant_id: 10002, tenant_name: 'Private', role: 'owner' }] }
+      ? { user: { tenant_id: 10002, is_system_admin: false }, tenant: { id: 10003 }, memberships: [{ tenant_id: 10002, tenant_name: 'Private', role: 'owner' }] }
       : [model] })
   } }, () => assert.fail('reads must not invalidate'))
   const context = await handle(new Request('http://harness.test/api/zhishu-models/manage'))
-  assert.deepEqual(await context.json(), { data: { spaces: [{ id: '10002', name: 'Private', role: 'owner' }], currentTenantId: '10002', systemAdmin: false } })
-  const rows = await handle(new Request('http://harness.test/api/zhishu-models/manage?operation=models&tenantId=10002'))
+  assert.deepEqual(await context.json(), { data: { spaces: [{ id: '10002', name: 'Private', role: 'owner' }], homeTenantId: '10002', systemAdmin: false } })
+  const rows = await handle(new Request('http://harness.test/api/zhishu-models/manage?operation=models'))
   assert.equal(rows.status, 200)
   const text = await rows.text()
   assert.ok(!text.includes('never-return') && !text.includes('also-private'))
-  assert.equal(seen[1].tenant, '10002')
+  assert.equal(seen[1].tenant, undefined)
+  assert.equal(seen[1].path, '/models/available')
   assert.equal(rows.headers.get('cache-control'), 'no-store')
 })
 

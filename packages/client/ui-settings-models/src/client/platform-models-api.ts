@@ -27,6 +27,7 @@ export class PlatformModelFailure extends Error {
 /** The shared registry's non-secret row used by settings and editors. */
 export interface PlatformModel {
   id: PlatformModelId
+  ownerTenantId: PlatformModelTenantId
   name: string
   displayName: string
   type: PlatformModelType
@@ -48,7 +49,7 @@ export interface PlatformModelSpace {
 /** Current-user authorization for the model settings page. */
 export interface PlatformModelsContext {
   spaces: PlatformModelSpace[]
-  currentTenantId?: PlatformModelTenantId
+  homeTenantId: PlatformModelTenantId
   systemAdmin: boolean
 }
 
@@ -120,9 +121,9 @@ function providerTask(value: string): string {
 }
 
 /**
- * Validate a workspace id from a wire response or native selector.
- * @param value - untrusted workspace identifier.
- * @returns the validated workspace id.
+ * Validate an internal configuration owner id from a wire response.
+ * @param value - untrusted configuration owner identifier.
+ * @returns the validated configuration owner id.
  */
 export function platformModelTenantId(value: unknown): PlatformModelTenantId {
   if (typeof value !== 'string' || !/^[1-9]\d*$/u.test(value)) invalidResponse()
@@ -158,7 +159,7 @@ export function parsePlatformModel(value: unknown): PlatformModel {
   const parameters = jsonParameters(value.parameters)
   if ('api_key' in parameters || 'app_secret' in parameters) invalidResponse()
   return {
-    id: value.id as PlatformModelId, name: value.name, displayName: optionalString(value.display_name),
+    id: value.id as PlatformModelId, ownerTenantId: platformModelTenantId(typeof value.tenant_id === 'number' && Number.isSafeInteger(value.tenant_id) ? String(value.tenant_id) : value.tenant_id), name: value.name, displayName: optionalString(value.display_name),
     type: platformModelType(value.type), source: value.source, description: optionalString(value.description), parameters,
     builtin: value.is_builtin === true, status: value.status, credentials: configured,
     capabilities: value.capabilities === undefined || value.capabilities === null ? {} : jsonParameters(value.capabilities),
@@ -172,7 +173,7 @@ function parseContext(value: unknown): PlatformModelsContext {
     return { id: platformModelTenantId(item.id), name: item.name, role: item.role }
   })
   return { spaces, systemAdmin: value.systemAdmin,
-    ...(value.currentTenantId === undefined ? {} : { currentTenantId: platformModelTenantId(value.currentTenantId) }) }
+    homeTenantId: platformModelTenantId(value.homeTenantId) }
 }
 
 function parseProvider(value: unknown): PlatformModelProvider {
@@ -242,24 +243,23 @@ export class PlatformModelsApi {
   }
 
   /**
-   * Read the current user's model-workspace memberships.
+   * Read the current user's model configuration permissions.
    * @param signal - consumer cancellation.
-   * @returns authoritative workspace access and current scope.
+   * @returns authoritative ownership permissions and personal configuration destination.
    */
   async context(signal: AbortSignal): Promise<PlatformModelsContext> { return parseContext(await this.call('', undefined, signal)) }
   /**
-   * Read redacted models from one explicitly selected workspace.
-   * @param tenantId - authorized workspace to query.
+   * Read every model available to the current user.
    * @param signal - consumer cancellation.
    * @returns models without saved credential values.
    */
-  async models(tenantId: PlatformModelTenantId, signal: AbortSignal): Promise<PlatformModel[]> {
-    const result = await this.call(`?operation=models&tenantId=${tenantId}`, undefined, signal)
+  async models(signal: AbortSignal): Promise<PlatformModel[]> {
+    const result = await this.call('?operation=models', undefined, signal)
     if (!Array.isArray(result)) invalidResponse()
     return result.map(parsePlatformModel)
   }
   /**
-   * Read backend-owned provider metadata for the selected workspace.
+   * Read backend-owned provider metadata using the personal configuration scope.
    * @param tenantId - authorized workspace to query.
    * @param signal - consumer cancellation.
    * @returns providers with normalized task names and editor metadata.

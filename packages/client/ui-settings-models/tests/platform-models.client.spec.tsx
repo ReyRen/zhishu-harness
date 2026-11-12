@@ -10,12 +10,18 @@ import { platformModelsZh } from '../src/client/platform-models-locales.ts'
 import { createPlatformModelDraft, platformModelDefinition, platformModelTestDraft } from '../src/client/platform-models-draft.ts'
 
 afterEach(cleanup)
-const saved = { id: 'model-one', name: 'Qwen-test', display_name: '对话测试', type: 'KnowledgeQA', source: 'remote',
+const saved = { id: 'model-one', tenant_id: 10002, name: 'Qwen-test', display_name: '对话测试', type: 'KnowledgeQA', source: 'remote',
   status: 'active', parameters: { base_url: 'http://model.test/v1', provider: 'openai', context_window: 10000,
     extra_config: { api: 'openai-completions' }, spec: { reasoning: true } }, credentials: { api_key: { configured: true } } }
 
-async function bench(options: { role?: string; rejectCredential?: boolean; rejectDelete?: boolean; loseSave?: boolean } = {}) {
-  const rows = [{ ...saved }]
+async function bench(options: {
+  role?: string
+  rejectCredential?: boolean
+  rejectDelete?: boolean
+  loseSave?: boolean
+  multiSpace?: boolean
+} = {}) {
+  const rows = [{ ...saved }, ...(options.multiSpace ? [{ ...saved, id: 'shared-model', tenant_id: 10003, display_name: '协作模型' }] : [])]
   const writes: Array<Record<string, unknown>> = []
   let reads = 0
   let signout: ((value: boolean) => void) | undefined
@@ -31,14 +37,19 @@ async function bench(options: { role?: string; rejectCredential?: boolean; rejec
       if (body.operation === 'test') return Response.json({ data: { available: true } })
       if (body.operation === 'create' || body.operation === 'update') {
         if (options.loseSave) throw new TypeError('Network disconnected')
-        const model = { ...saved, ...(body.model as object), id: body.id || 'new-model' }
+        const model = { ...saved, ...(body.model as object), id: typeof body.id === 'string' ? body.id : 'new-model' }
+        const index = rows.findIndex(row => row.id === model.id)
+        if (index < 0) rows.push(model)
+        else rows[index] = model
         return Response.json({ data: model })
       }
       return Response.json({ data: null })
     }
     if (url.searchParams.get('operation') === 'models') { reads++; return Response.json({ data: rows }) }
     if (url.searchParams.get('operation') === 'providers') return Response.json({ data: [] })
-    return Response.json({ data: { spaces: [{ id: '10002', name: '私有空间', role: options.role || 'owner' }], currentTenantId: '10002', systemAdmin: false } })
+    return Response.json({ data: { spaces: [{ id: '10002', name: '私有空间', role: options.role || 'owner' },
+      ...(options.multiSpace ? [{ id: '10003', name: '业务空间', role: 'viewer' }] : [])],
+    homeTenantId: '10002', currentTenantId: options.multiSpace ? '10003' : '10002', systemAdmin: false } })
   }
   const controller = new PlatformModelsStore(new PlatformModelsApi(request), {
     ready: async (signal) => { signal.throwIfAborted() },
@@ -47,7 +58,7 @@ async function bench(options: { role?: string; rejectCredential?: boolean; rejec
   onTestFinished(async () => { await controller.dispose() })
   controller.open()
   await vi.waitFor(() => { expect(controller.store.getSnapshot().status).toBe('ready') })
-  return { controller, writes, reads: () => reads, signout: () => { signout?.(false) } }
+  return { controller, rows, writes, reads: () => reads, signout: () => { signout?.(false) } }
 }
 
 function page(controller: PlatformModelsStore) {
@@ -56,6 +67,35 @@ function page(controller: PlatformModelsStore) {
 }
 
 describe('native shared-model settings', () => {
+  it('shows all user-available models without space navigation and creates personal models independently of the active business space', async () => {
+    const { controller, rows, writes } = await bench({ multiSpace: true })
+    page(controller)
+    expect(screen.queryByRole('combobox', { name: '空间' })).toBeNull()
+    expect(screen.getByRole('heading', { name: '对话测试' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: '协作模型' })).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: '编辑' })).toHaveLength(1)
+    act(() => { controller.edit('KnowledgeQA', parsePlatformModel(rows[1]!)) })
+    expect(controller.store.getSnapshot().draft).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '添加模型' }))
+    fireEvent.change(screen.getByLabelText('模型 ID'), { target: { value: 'new-personal-model' } })
+    fireEvent.change(screen.getByLabelText('API 地址'), { target: { value: 'http://model.test/v1' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await vi.waitFor(() => { expect(writes).toHaveLength(1) })
+    expect(writes[0]).toMatchObject({ operation: 'create', tenantId: '10002' })
+  })
+
+  it('clears an unfinished credential draft when model configuration permissions are revoked', async () => {
+    const permissions = { role: 'owner' }
+    const { controller, writes } = await bench(permissions)
+    controller.edit('KnowledgeQA', parsePlatformModel(saved))
+    controller.patchDraft({ apiKey: 'unsaved-secret' })
+    permissions.role = 'viewer'
+    controller.refresh()
+    await vi.waitFor(() => { expect(controller.store.getSnapshot().draft).toBeNull() })
+    expect(controller.store.getSnapshot().error).toBe('accessDenied')
+    expect(writes).toEqual([])
+  })
+
   it('renders native categories and cards without an iframe, retaining drafts and cached rows across settings switches', async () => {
     const { controller, reads } = await bench()
     const first = page(controller)

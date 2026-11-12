@@ -27,8 +27,8 @@ const backend = createServer((request, outgoing) => {
       send(200, { success: true, token, refresh_token: 'refresh-a' }); return
     }
     assert.equal(request.headers.authorization, `Bearer ${token}`)
-    if (path === '/api/v1/auth/me') send(200, { success: true, data: { tenant: { id: 10004, name: 'Test workspace' }, memberships: [{ tenant_id: 10004, tenant_name: 'Test workspace', role: 'owner' }] } })
-    else if (path === '/api/v1/models') send(200, { success: true, data: [row] })
+    if (path === '/api/v1/auth/me') send(200, { success: true, data: { user: { tenant_id: 10004 }, tenant: { id: 10004, name: 'Test workspace' }, memberships: [{ tenant_id: 10004, tenant_name: 'Test workspace', role: 'owner' }] } })
+    else if ((path === '/api/v1/models' || path === '/api/v1/models/available')) send(200, { success: true, data: [row] })
     else if (path === '/api/v1/models/providers') send(200, { success: true, data: [] })
     else if (path === '/api/v1/models/fixture-chat') {
       if (request.method === 'PUT') { assert.equal(request.headers['x-tenant-id'], '10004'); Object.assign(row, body) }
