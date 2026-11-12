@@ -1,4 +1,4 @@
-/** The platform ticket reaches tool authentication before opening the KB workbench. */
+/** Platform tickets reach tool authentication independently of the knowledge panel. */
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
@@ -36,20 +36,20 @@ async function fixture(t, { mode = 'sso', status = 200, deferTicket = false } = 
     if (options.method === 'POST') return Response.json({ authenticated: true })
     return Response.json({ mode, authenticated: false }, { status })
   }
-  runInNewContext(source, { window, document, fetch: request, AbortController,
+  runInNewContext(source, { window, document, fetch: request, AbortController, AbortSignal,
     location: { origin: 'https://harness.test' }, console: { info: (...args) => logs.push(args), warn: (...args) => logs.push(args), error: (...args) => logs.push(args) },
   })
   const ctx = {
     effect(setup) { const cleanup = setup(); if (cleanup) effects.push(cleanup) },
     on() { return () => {} },
-    desktopWorkbenches: { register() { return () => {} } },
+    desktopWorkbenches: { ready: true, state: { added: [], sessionBindings: {} }, report(error) { throw error } },
+    layout: { panelInfo: { getSnapshot() { return { activePanelId: null } }, subscribe() { return () => {} } } },
     sidebarSoftPanels: { registerOpener() { return () => {} } },
     slots: { inject() {} },
     commandUi: { decorate() { return () => {} }, dismiss() {} },
     sessions: { binding() {} },
     locale: { register() { return () => {} }, bind() { return key => key } },
   }
-  plugin.apply(ctx)
   t.after(async () => {
     for (const effect of effects.reverse()) effect()
     await turn()
@@ -57,12 +57,13 @@ async function fixture(t, { mode = 'sso', status = 200, deferTicket = false } = 
     assert.equal(listeners.size, 0)
     assert.equal(intervals.size, 0)
   })
+  plugin.apply(ctx)
   await turn()
   return { calls, logs, window, listeners, respond: () => respond?.(), account: value => account(value),
     dispose() { for (const effect of effects.reverse()) effect(); effects.length = 0 } }
 }
 
-test('a signed-in Web user authenticates tools without mounting the knowledge workbench', async t => {
+test('a signed-in Web user authenticates tools without mounting the knowledge panel', async t => {
   const f = await fixture(t)
   assert.equal(f.calls.length, 2)
   assert.deepEqual(JSON.parse(f.calls[1].options.body), { access_token: 'private-platform-ticket', user_id: '369' })

@@ -22,7 +22,8 @@ async function fixture(t) {
       bind() { return key => this.dictionary[key] } },
     commandUi: { decorate(value) { registrations.push(value); return () => {} }, dismiss() {},
       openPopup(name, sessionID, signal) { calls.push({ popup: name, sessionID, signal }) } },
-    desktopWorkbenches: { register() { return () => {} } }, sidebarSoftPanels: { registerOpener() { return () => {} } },
+    desktopWorkbenches: { ready: true, state: { added: [], sessionBindings: {} }, report(error) { throw error } },
+    layout: { panelInfo: { getSnapshot() { return { activePanelId: null } }, subscribe() { return () => {} } } },
     slots: { inject(name, setup) { setup() }, register(definition, component) { slots.push({ definition, component }); return () => {} } },
     sessions: { binding(id) {
       if (!selected.has(id)) return undefined
@@ -44,7 +45,7 @@ async function fixture(t) {
     throw new Error('Unexpected request '+path)
   }
   runInNewContext(source, { window, document: { getElementById() { return {} } }, fetch: request,
-    AbortController, location: { origin: 'https://harness.test' }, console })
+    AbortController, AbortSignal, location: { origin: 'https://harness.test' }, console })
   plugin.apply(new Proxy(ctx, { get(target, key) {
     if (key === 'remote') assert.ok(plugin.inject.includes('remote'), 'Cordis requires the parent remote service injection')
     return target[key]

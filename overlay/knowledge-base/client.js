@@ -178,15 +178,17 @@
             signal: signals.length === 1 ? signals[0] : AbortSignal.any(signals),
           })
         }
-        const authenticate = async (signal) => {
+        const authenticate = async (signal, current) => {
           const status = await request({}, signal)
           // A profile-owned upstream bundle keeps its own configured authentication.
           if (status.status === 404) return
           if (!status.ok) throw new Error(`knowledge_auth_status_failed (${status.status})`)
           const state = await status.json()
           if (state.mode !== 'sso' || state.authenticated) return
-          const ticket = await fetchSsoTicket(signal)
-          if (lifetime.signal.aborted || signal?.aborted) throw new Error('Knowledge authentication cancelled')
+          const ticket = await fetchSsoTicket(signal ? AbortSignal.any([lifetime.signal, signal]) : lifetime.signal)
+          if (revision !== current || !signedIn || lifetime.signal.aborted || signal?.aborted) {
+            throw new Error('Knowledge authentication cancelled')
+          }
           const response = await request({
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -204,7 +206,7 @@
           if (pending) return pending
           const current = revision
           pending = (async () => {
-            await authenticate(signal)
+            await authenticate(signal, current)
             if (revision !== current) throw new Error('Knowledge authentication superseded')
           })().finally(() => { pending = undefined })
           return pending
@@ -221,8 +223,10 @@
           signedIn = state?.authenticated === true
           revision++
           if (signedIn) { void sync(); return }
-          void Promise.resolve(pending).then(() => request({ method: 'POST', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ action: 'logout' }) })).catch(() => {
+          // Clear Host credentials even when the superseded handoff rejects.
+          const clear = () => request({ method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ action: 'logout' }) })
+          void Promise.resolve(pending).then(clear, clear).catch(() => {
             if (!lifetime.signal.aborted) console.warn('[Knowledge tools] Could not clear authentication; close the runtime before switching accounts.')
           })
         }
@@ -274,6 +278,7 @@
         try {
           await auth.ensureAuthenticated(signal)
         } catch (err) {
+          signal?.throwIfAborted()
           console.warn('[Knowledge picker] ensureAuthenticated failed before catalog', err)
           throw new Error(t('unavailable'))
         }
@@ -292,6 +297,7 @@
               typeof base?.id !== 'string' || typeof base.name !== 'string')) throw new Error(t('unavailable'))
             return result
           } catch (retryErr) {
+            signal?.throwIfAborted()
             console.warn('[Knowledge picker] catalog failed after auth retry', retryErr)
             throw new Error(t('unavailable'))
           }
@@ -786,7 +792,7 @@
           order: 10,
           label: () => ctx.locale.bind('settings.models')('nav'),
         }, () => h(ModelsSettingsPanel, {
-          authenticate: modelsAuth.sync,
+          authenticate: modelsAuth.ensureAuthenticated,
           title: ctx.locale.bind('settings.models')('nav'),
           modelCopy: { refreshFailed: t('refreshFailed'), loginRequired: t('loginRequired') },
         })))
@@ -801,15 +807,18 @@
           try {
             if (!host.ready) await host.load()
             if (cancelled) return
-            if (host.state.added.includes(LEGACY_WORKBENCH_ID)) await host.remove(LEGACY_WORKBENCH_ID)
-          } catch { /* Legacy entry may already be gone. */ }
+            if (host.state.added.includes(LEGACY_WORKBENCH_ID)
+              || Object.values(host.state.sessionBindings).includes(LEGACY_WORKBENCH_ID)) {
+              await host.remove(LEGACY_WORKBENCH_ID, { moveSessionsToMain: true })
+            }
+          } catch (error) { if (!cancelled) host.report(error) }
         })()
         return () => { cancelled = true }
       }, 'knowledge-base: migrate legacy workbench entry')
 
       // Opening knowledge from a business workbench must drop workbench mode,
       // otherwise AI助手 / 新会话 still hit registerSessionStarter → workbench session.
-      const releaseWorkbench = () => host.run(Promise.resolve(host.releaseToMainSession()))
+      const releaseWorkbench = () => host.run(Promise.resolve().then(() => host.releaseToMainSession()))
       ctx.effect(() => {
         const onPanel = () => {
           if (ctx.layout.panelInfo.getSnapshot().activePanelId === PANEL_ID) releaseWorkbench()
@@ -823,9 +832,8 @@
         key: PANEL_ID,
         inject: () => ({
           startAssistant: () => {
-            void Promise.resolve(host.releaseToMainSession()).finally(() => {
-              ctx.uiWorkspace.startSession()
-            })
+            host.run(Promise.resolve().then(() => host.releaseToMainSession())
+              .then(() => ctx.uiWorkspace.startSession()))
           },
         }),
       }, KnowledgePanel))
