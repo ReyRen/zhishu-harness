@@ -45,7 +45,7 @@ function fixture() {
       }).apply
     } },
   }
-  runInNewContext(source, { window: fakeWindow, document, AbortController, console,
+  runInNewContext(source, { window: fakeWindow, document, AbortController, AbortSignal, console,
     location: { origin: 'https://harness.test' },
     fetch: async (path: string) => path.endsWith('/auth')
       ? Response.json({ mode: 'api-key', authenticated: true })
@@ -53,6 +53,9 @@ function fixture() {
   })
   const consume = vi.fn(() => true)
   const popup = new PopupSelectController<Session>({ consume, focusComposer() {} })
+  const bootstrapErrors: unknown[] = []
+  const report = (error: unknown) => { bootstrapErrors.push(error) }
+  disposers.push(() => { expect(bootstrapErrors).toEqual([]) })
   disposers.push(() => { popup.dispose() })
   apply!({
     effect(setup: () => undefined | (() => void)) { const dispose = setup(); if (dispose) disposers.push(dispose) },
@@ -71,7 +74,10 @@ function fixture() {
       return { session: { projections: { faceOf() { return state } } } }
     } },
     remote: { commands: { execute } },
-    desktopWorkbenches: { register() { return () => {} } }, sidebarSoftPanels: { registerOpener() { return () => {} } },
+    desktopWorkbenches: { ready: true, state: { added: [], sessionBindings: {} }, report,
+      run(task: Promise<void>) { void task.catch(report) }, async releaseToMainSession() {} },
+    layout: { panelInfo: createSnapshotStore({ activePanelId: 'conversation' }) },
+    uiWorkspace: { startSession: vi.fn() },
     slots: { inject(_name: string, setup: () => void) { setup() },
       register(definition: { id: string; inject: typeof summaryProps }, component: typeof summary) {
         if (definition.id === 'zhishu-knowledge-selection') { summaryProps = definition.inject; summary = component }
