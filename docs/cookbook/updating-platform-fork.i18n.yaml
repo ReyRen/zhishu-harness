@@ -3,17 +3,17 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/cookbook/updating-platform-fork.md
 /update-upstream-and-publish-the-platform-image:
-  en: a6cc1e2e88760f1d
-  zh: 4aff44d564ccc018
+  en: 23f09ab1f6ee8708
+  zh: e86e33faec00601e
 /update-upstream-and-publish-the-platform-image/branch-and-merge-rules:
-  en: 3390af6bf4f98ca4
-  zh: 90eb773ac3aa0bee
+  en: 0d1d002e89263044
+  zh: 7e2b2fcf52fb281f
 /update-upstream-and-publish-the-platform-image/0-reconcile-pending-work-before-fetching:
-  en: a0488724a30dfd46
-  zh: a79df56b240084ff
+  en: 3ca473b81e2c2431
+  zh: fa877b5239da7193
 /update-upstream-and-publish-the-platform-image/1-fetch-and-fast-forward-fork-master:
-  en: e2aa9af923779960
-  zh: 1a27153009e1c389
+  en: 76b42c7f7b49f268
+  zh: a706bae089be46ef
 /update-upstream-and-publish-the-platform-image/2-integrate-and-validate-outside-mutagen:
   en: 1559982fe288947a
   zh: 1d74dcd85eb96639

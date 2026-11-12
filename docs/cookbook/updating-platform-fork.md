@@ -2,13 +2,13 @@
 
 English | [中文](updating-platform-fork.zh.md)
 
-Use this procedure for `ReyRen/zhishu-harness` and the GCS deployment. Commands run in the repository root unless a host is specified. The independent Web environment on `172.18.36.225` is outside this procedure.
+Use this procedure for manually requested `ReyRen/zhishu-harness` updates and GCS runtime releases, following the [README merge policy](../../README.md#platform-update-policy). No scheduled update task is enabled. Commands run in the repository root unless a host is specified. The independent Web environment on `172.18.36.225` is outside this procedure.
 
 ## Branch and merge rules
 
 - Official `deepseek-ai/deepseek-harness:master` is read-only. Never push or open a PR there.
 - Fork `master` only fast-forwards official commits. Fork `main` contains platform development and is the only production image source.
-- Merge on a temporary branch outside Mutagen's synchronized directory. Review textual and semantic conflicts individually. Official behavior replaces incompatible platform designs; retain compatible per-user workspaces, JFS boundaries, native Web, Desktop and market features.
+- Merge on a temporary branch outside Mutagen's synchronized directory. Review textual and semantic conflicts under the [README merge decisions](../../README.md#platform-update-policy): upstream replaces functionality it fully covers; retain required business differences and stop for a decision on genuinely incompatible requirements.
 - Authenticated non-loopback browsers must be able to persist settings to their own Host. Official remote-access support now implements this; do not fake loopback identity. If future upstream behavior truly conflicts, stop for a user decision.
 - No force pushes, hard resets, whole-file ours/theirs resolutions or ZIP overlays. Unknown changes, failed tests or unavailable hosts block release.
 - If Issues are disabled in `ReyRen/zhishu-harness`, a platform PR records its upstream/main baselines, scope and validation without an Issue reference. Do not enable Issues or open one in the official repository to satisfy a contribution-template requirement.
@@ -21,15 +21,15 @@ Every run reads live official/Fork refs, the canonical checkouts, pending worktr
 |---|---|
 | Official master is ahead of Fork master | Fast-forward Fork master |
 | Fork main does not contain the official target | Resume or create the reviewed upstream merge |
-| Main changed, or a target lacks a validated image for main | Build and smoke-test that target |
+| Main runtime inputs changed, or a target lacks their validated image | Build and smoke-test that authorized target |
 | A configured Worker runs an older image or stale specification | Roll out the validated image |
 | A previous run stopped before completion | Recheck its evidence and resume the pending step |
 
-Only report no change when none of these conditions holds. Equal official/Fork master refs do not establish that main, images or deployment are current. Main-only development updates trigger builds independently. Unknown uncommitted work is reported and preserved, not published automatically.
+Only report no change when none of these conditions holds. Equal official/Fork master refs do not establish that main, images or deployment are current. Main-only runtime changes trigger builds independently. For documentation-only updates with unchanged runtime inputs, run documentation checks and synchronize checkouts; record the running image’s source commit and the unchanged runtime scope without rebuilding or restarting. Unknown uncommitted work is reported and preserved until ownership and publication scope are established.
 
-Keep recovery checkpoints in `$CODEX_HOME/automations/dsh/release-state.json`: target refs, owned review worktree, completed checks, built images and each Worker's deployed result. Save each successful phase with a temporary file and rename; record failures and pending work. Never store credentials. The file is a recovery aid, not authority: verify its claims against live state, and reconstruct it when absent.
+Keep recovery checkpoints in `$CODEX_HOME/release-state/zhishu-harness.json`: target refs, owned review worktree, completed checks, built images and each Worker's deployed result. Save each successful phase with a temporary file and rename; record failures and pending work. Never store credentials. The file is a recovery aid, not authority: verify its claims against live state, and reconstruct it when absent.
 
-The enabled automatic release target is x86 on `172.18.36.230`, controlled by Master `172.18.29.80`. Also report ARM source/image drift on `172.18.127.43` and `172.18.127.44`; publish ARM only when explicitly enabled. Record architecture, commit, image name and local Image ID separately. Do not compare IDs across architectures or Docker image backends, or claim that an x86 release updated ARM.
+The default manually requested release target is x86 on `172.18.36.230`, controlled by Master `172.18.29.80`. Also report ARM source/image drift on `172.18.127.43` and `172.18.127.44`; publish ARM only when explicitly enabled. Record architecture, commit, image name and local Image ID separately. Do not compare IDs across architectures or Docker image backends, or claim that an x86 release updated ARM.
 
 ## 1. Fetch and fast-forward fork master
 
@@ -49,14 +49,14 @@ test "$(git rev-parse HEAD)" = "$(git rev-parse upstream/master)"
 git push origin master
 ```
 
-If official master is unchanged, skip only its fast-forward. Continue the independent checks in step 0, including an unfinished merge or main-only update. Stay silent only when there is no pending work or new result requiring attention.
+If official master is unchanged, skip only its fast-forward. Continue the independent checks in step 0, including an unfinished merge or main-only update. Report the verified versions and any remaining work for the manual request.
 
 ## 2. Integrate and validate outside Mutagen
 
 Keep the synchronized checkout on main. Reuse a known owned pending worktree instead of discarding its resolutions. Before integrating a newer origin/main, preserve a resolved merge checkpoint with the normal commit hooks, then merge the new main and recheck affected behavior. For a new integration, create a branch from current origin/main and merge master without committing first.
 
 ```bash
-git switch -c sync-upstream-YYYY-MM-DD origin/main
+git switch -c codex/sync-upstream-YYYY-MM-DD origin/main
 git merge --no-ff --no-commit origin/master
 git diff --name-only --diff-filter=U
 git diff origin/master -- docker packages/api/workspace-controller packages/host/directory-picker-auto packages/host/directory-picker-browse
@@ -78,7 +78,7 @@ pnpm run doc-sync
 git add -A
 git diff --cached --check
 git commit -m "Merge official DSH into platform main"
-git push -u origin sync-upstream-YYYY-MM-DD
+git push -u origin codex/sync-upstream-YYYY-MM-DD
 ```
 
 When using a production image as a Linux test environment, set `NODE_ENV=test` and unset inherited DSH home/workspace/runtime variables. Use `pnpm run clean` when reusing a worktree that contains outputs from removed packages.
