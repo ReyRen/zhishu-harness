@@ -698,6 +698,8 @@ export interface Config {
   credentialOnboarding: boolean
   /** Use the platform's shared model manager instead of profile-local forms. */
   platformModelManagement: boolean
+  /** Deadline for a platform parent's fresh model-authentication ticket. */
+  platformModelTicketTimeoutMs: number
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-client-ui-settings-models -->

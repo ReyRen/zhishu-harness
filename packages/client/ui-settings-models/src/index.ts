@@ -16,7 +16,8 @@ export function apply(ctx: Context, config: Config): void {
     table.push({
       kind: 'global',
       name: ONBOARDING_CONFIG_GLOBAL,
-      value: { credentialOnboarding: config.credentialOnboarding, platformModelManagement: config.platformModelManagement },
+      value: { credentialOnboarding: config.credentialOnboarding, platformModelManagement: config.platformModelManagement,
+        platformModelTicketTimeoutMs: config.platformModelTicketTimeoutMs },
     })
   })
 }

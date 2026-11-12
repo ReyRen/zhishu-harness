@@ -29,6 +29,11 @@ import { createSettingsSchemaOperations } from './schema-operations.ts'
 import { en, ja, es, fr, de, ru, pt, zh, type ModelsKey } from './locales.ts'
 import { WELCOME_NOTICE_SETTINGS_NAMESPACE } from '../onboarding-copy.ts'
 import { Config, ONBOARDING_CONFIG_GLOBAL } from '../onboarding-config.ts'
+import { PlatformModelsSection, type PlatformModelsInjected } from './PlatformModelsSection.tsx'
+import { PlatformModelsApi } from './platform-models-api.ts'
+import { createPlatformModelBrowser, PlatformModelsAuthentication } from './platform-models-auth.ts'
+import { PlatformModelsStore } from './platform-models-store.ts'
+import { platformModelsEn, platformModelsZh, type PlatformModelsKey } from './platform-models-locales.ts'
 
 export type { ModelsSectionInjected, ModelsSectionProps } from './ModelsSection.tsx'
 export type { ModelsFooterOwnerProps, ProviderCardExtrasOwnerProps } from './slot-contract.ts'
@@ -38,6 +43,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** The Models page + product-onboarding copy. */
     'settings.models': ModelsKey
+    /** Native shared-model administration, independent of knowledge-page embedding. */
+    'settings.models.platform': PlatformModelsKey
   }
 }
 
@@ -144,6 +151,27 @@ export function apply(ctx: ClientContext): void {
       'settings.models.footer': { kind: 'list', scope: 'root' },
     },
   }, ModelsSection))
+  if (configured.platformModelManagement) {
+    const namespace = 'settings.models.platform'
+    ctx.effect(() => ctx.locale.register(namespace, { en: platformModelsEn, zh: platformModelsZh }), 'ui-settings-models: native copy')
+    const auth = new PlatformModelsAuthentication(createPlatformModelBrowser(configured.platformModelTicketTimeoutMs))
+    const native = new PlatformModelsStore(new PlatformModelsApi(), auth)
+    const nativeText = ctx.locale.bind(namespace) as PlatformModelsInjected['t']
+    ctx.effect(() => {
+      const stop = ctx.remote.$on('llm/models-updated', () => {
+        if (native.store.getSnapshot().status !== 'idle') native.refresh()
+      })
+      const reset = ctx.on('connection/reset', () => {
+        if (native.store.getSnapshot().status !== 'idle') native.refresh()
+      })
+      auth.start()
+      return async () => { stop(); reset(); await native.dispose(); await auth.dispose() }
+    }, 'ui-settings-models: native model requests')
+    ctx.slots.inject('settings.section', () => ctx.slots.register({
+      name: 'settings.section', id: 'models', order: 10, label: () => nativeText('title'),
+      inject: (): PlatformModelsInjected => ({ controller: native, hooks: { snapshot: native.store }, t: nativeText }),
+    }, PlatformModelsSection))
+  }
   if (!('dshDesktop' in globalThis)) ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
     name: 'settings.onboarding',
     id: 'welcome-notice',
