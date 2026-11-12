@@ -182,7 +182,10 @@ export function createKnowledgeRuntime({ baseUrl, platformUserID, tenantId, requ
     async fetchModels(path, init = {}, tenant) {
       const method = init.method || 'GET'
       if (!(method === 'GET' && /^\/(?:auth\/me|models(?:\/[A-Za-z0-9._-]{1,64})?)$/u.test(path))
-        && !(method === 'POST' && /^\/models\/[A-Za-z0-9._-]{1,64}\/harness-chat$/u.test(path))) {
+        && !(method === 'POST' && (/^\/models(?:\/[A-Za-z0-9._-]{1,64}\/(?:harness-chat|copy))?$/u.test(path)
+          || /^\/initialization\/(?:remote\/check|embedding\/test|rerank\/check|asr\/check|ollama\/models\/check)$/u.test(path)))
+        && !(method === 'PUT' && /^\/models\/[A-Za-z0-9._-]{1,64}(?:\/credentials)?$/u.test(path))
+        && !(method === 'DELETE' && /^\/models\/[A-Za-z0-9._-]{1,64}(?:\/credentials\/(?:api_key|app_secret))?$/u.test(path))) {
         throw new KnowledgeAuthError('unsupported_model_operation', 404)
       }
       if (tenant !== undefined && !/^[1-9]\d*$/u.test(String(tenant))) throw new KnowledgeAuthError('invalid_model_workspace', 400)
@@ -195,7 +198,7 @@ export function createKnowledgeRuntime({ baseUrl, platformUserID, tenantId, requ
       try {
         response = await request(`${backend}${path}`, {
           method, body: init.body, redirect: 'manual', signal,
-          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', accept: method === 'POST' ? 'text/event-stream' : 'application/json',
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', accept: path.endsWith('/harness-chat') ? 'text/event-stream' : 'application/json',
             ...(tenant === undefined ? {} : { 'X-Tenant-ID': String(tenant) }) },
         })
       } catch (error) {

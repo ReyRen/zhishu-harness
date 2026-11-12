@@ -1,4 +1,4 @@
-﻿window.__ModuleLoader__.load({
+window.__ModuleLoader__.load({
   id: '@zhishu/dsh-overlay-knowledge-base',
   factory: (require) => {
     const module = { exports: {} }
@@ -178,15 +178,17 @@
             signal: signals.length === 1 ? signals[0] : AbortSignal.any(signals),
           })
         }
-        const authenticate = async (signal) => {
+        const authenticate = async (signal, current) => {
           const status = await request({}, signal)
           // A profile-owned upstream bundle keeps its own configured authentication.
           if (status.status === 404) return
           if (!status.ok) throw new Error(`knowledge_auth_status_failed (${status.status})`)
           const state = await status.json()
           if (state.mode !== 'sso' || state.authenticated) return
-          const ticket = await fetchSsoTicket(signal)
-          if (lifetime.signal.aborted || signal?.aborted) throw new Error('Knowledge authentication cancelled')
+          const ticket = await fetchSsoTicket(signal ? AbortSignal.any([lifetime.signal, signal]) : lifetime.signal)
+          if (revision !== current || !signedIn || lifetime.signal.aborted || signal?.aborted) {
+            throw new Error('Knowledge authentication cancelled')
+          }
           const response = await request({
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -204,7 +206,7 @@
           if (pending) return pending
           const current = revision
           pending = (async () => {
-            await authenticate(signal)
+            await authenticate(signal, current)
             if (revision !== current) throw new Error('Knowledge authentication superseded')
           })().finally(() => { pending = undefined })
           return pending
@@ -221,8 +223,10 @@
           signedIn = state?.authenticated === true
           revision++
           if (signedIn) { void sync(); return }
-          void Promise.resolve(pending).then(() => request({ method: 'POST', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ action: 'logout' }) })).catch(() => {
+          // Clear Host credentials even when the superseded handoff rejects.
+          const clear = () => request({ method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ action: 'logout' }) })
+          void Promise.resolve(pending).then(clear, clear).catch(() => {
             if (!lifetime.signal.aborted) console.warn('[Knowledge tools] Could not clear authentication; close the runtime before switching accounts.')
           })
         }
@@ -274,6 +278,7 @@
         try {
           await auth.ensureAuthenticated(signal)
         } catch (err) {
+          signal?.throwIfAborted()
           console.warn('[Knowledge picker] ensureAuthenticated failed before catalog', err)
           throw new Error(t('unavailable'))
         }
@@ -292,6 +297,7 @@
               typeof base?.id !== 'string' || typeof base.name !== 'string')) throw new Error(t('unavailable'))
             return result
           } catch (retryErr) {
+            signal?.throwIfAborted()
             console.warn('[Knowledge picker] catalog failed after auth retry', retryErr)
             throw new Error(t('unavailable'))
           }
@@ -413,9 +419,6 @@
         .zhishuKbAiFab:focus-visible{outline:2px solid var(--dsw-alias-interactive-bg-primary,#2f6bff);outline-offset:2px}
         .zhishuKbBody{display:flex;flex:1;min-width:0;min-height:0;position:relative}
         .zhishuKbFrame{flex:1;min-width:0;min-height:0;border:0;background:#fff}
-        .zhishuModelsSettings{display:flex;flex-direction:column;gap:8px;min-width:0}
-        .zhishuModelsSettings .zhishuKbStatus{padding:6px 0;font-size:12px;color:var(--dsw-alias-label-secondary)}
-        .zhishuModelsSettings .zhishuKbStatus[data-error=true]{color:#b42318}
       `
     }
 
@@ -435,137 +438,6 @@
         strokeWidth: 1.6,
         strokeLinejoin: 'round',
       }))
-    }
-
-    /**
-     * Settings → Models iframe (main's unified platform model management).
-     * Kept separate from the knowledge main panel so workbench registration is not required.
-     */
-    function ModelsSettingsPanel(props) {
-      const authenticate = props.authenticate
-      const title = props.title
-      const modelCopy = props.modelCopy || {}
-      const frameRef = React.useRef(null)
-      const nonceRef = React.useRef('')
-      const [signedIn, setSignedIn] = React.useState(false)
-      const [status, setStatus] = React.useState('')
-      const [error, setError] = React.useState('')
-      const [modelsURL, setModelsURL] = React.useState('')
-
-      React.useLayoutEffect(installStyles, [])
-
-      React.useEffect(() => {
-        const controller = new AbortController()
-        void fetch('/api/zhishu-models/config', { credentials: 'same-origin', cache: 'no-store', signal: controller.signal })
-          .then(async (response) => {
-            if (!response.ok) throw new Error('model_settings_unavailable')
-            const value = await response.json()
-            const url = new URL(value.settingsURL)
-            if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
-              throw new Error('invalid_model_settings_url')
-            }
-            url.searchParams.set('theme', document.documentElement.style.colorScheme === 'dark' ? 'dark' : 'light')
-            if (!controller.signal.aborted) setModelsURL(url.href)
-          }).catch(() => {
-            if (!controller.signal.aborted) setError(modelCopy.refreshFailed || 'Model settings unavailable')
-          })
-        return () => controller.abort()
-      }, [modelCopy.refreshFailed])
-
-      React.useEffect(() => {
-        const space = window.dshModelSpace
-        if (!space || typeof space.state !== 'function') {
-          setSignedIn(true)
-          return undefined
-        }
-        let alive = true
-        const apply = (state) => {
-          if (alive) setSignedIn(state?.authenticated === true)
-        }
-        space.state().then(apply).catch(() => { if (alive) setSignedIn(false) })
-        const unsubscribe = typeof space.onStateChanged === 'function'
-          ? space.onStateChanged(apply)
-          : undefined
-        return () => {
-          alive = false
-          unsubscribe?.()
-        }
-      }, [])
-
-      React.useEffect(() => {
-        if (!signedIn || !modelsURL) return undefined
-        let allowed = ''
-        try { allowed = new URL(modelsURL).origin } catch { allowed = '' }
-        const onMessage = (event) => {
-          const frame = frameRef.current
-          const fromFrame = !!(frame && event.source === frame.contentWindow)
-          const data = event.data
-          const dataType = data && typeof data === 'object' && !Array.isArray(data) ? data.type : undefined
-          if (!fromFrame) {
-            if (dataType === HOST_SSO_RESPONSE || dataType === HOST_SSO_REQUEST) return
-            return
-          }
-          if (allowed && event.origin !== allowed) return
-          if (!data || typeof data !== 'object' || Array.isArray(data)) return
-          if (data.type === 'weknora:models-updated') {
-            const tenantId = String(data.tenant_id || '')
-            if (!/^[1-9]\d*$/.test(tenantId)) return
-            void Promise.resolve(authenticate?.()).then(() => fetch('/api/zhishu-models/refresh', {
-              method: 'POST',
-              credentials: 'same-origin',
-              cache: 'no-store',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ tenantId }),
-            }).then((response) => {
-              if (!response.ok) throw new Error('model_catalog_refresh_failed')
-              setError('')
-            })).catch(() => setError(modelCopy.refreshFailed || 'Model settings unavailable'))
-            return
-          }
-          if (data.type !== READY_TYPE) return
-          if (typeof data.nonce !== 'string' || data.nonce === '') return
-          if (typeof data.client_id === 'string' && data.client_id !== '' && data.client_id !== SSO_CLIENT_ID) return
-          nonceRef.current = data.nonce
-          setStatus('正在领取登录票据…')
-          setError('')
-          void fetchSsoTicket().then((ticket) => {
-            if (nonceRef.current !== data.nonce || !frameRef.current) return
-            const message = {
-              type: TOKEN_TYPE,
-              nonce: data.nonce,
-              access_token: ticket.access_token,
-            }
-            if (ticket.refresh_token) message.refresh_token = ticket.refresh_token
-            if (ticket.user_id) message.user_id = ticket.user_id
-            frameRef.current.contentWindow?.postMessage(message, allowed || '*')
-            setStatus('')
-          }).catch((err) => {
-            if (nonceRef.current !== data.nonce) return
-            setStatus('')
-            setError(err instanceof Error ? err.message : String(err))
-          })
-        }
-        window.addEventListener('message', onMessage)
-        return () => {
-          window.removeEventListener('message', onMessage)
-          nonceRef.current = ''
-        }
-      }, [signedIn, modelsURL, authenticate, modelCopy.refreshFailed])
-
-      const gateHint = !signedIn ? (modelCopy.loginRequired || '请先登录平台后再配置模型') : ''
-      const frameReady = signedIn && !!modelsURL
-      return h('div', { className: 'zhishuModelsSettings' },
-        (status || error || gateHint)
-          ? h('div', { className: 'zhishuKbStatus', 'data-error': error ? 'true' : 'false' }, error || status || gateHint)
-          : null,
-        h('iframe', {
-          ref: frameRef,
-          title: title || 'Models',
-          src: frameReady ? modelsURL : 'about:blank',
-          allow: 'clipboard-read; clipboard-write',
-          style: { width: '100%', height: 'min(68vh, 760px)', minHeight: '420px', border: 0, display: 'block' },
-        }),
-      )
     }
 
     /** Compact sparkle/chat mark for the floating AI assistant control. */
@@ -771,27 +643,6 @@
       const auth = installToolAuthentication(ctx)
       installKnowledgePicker(ctx, auth)
 
-      // main: unified platform model settings (WeKnora models iframe in Settings).
-      if (window.__DSH_MODELS_ONBOARDING__?.platformModelManagement === true) {
-        const modelsAuth = installToolAuthentication(ctx, '/api/zhishu-models/auth')
-        const namespace = 'zhishu.models'
-        ctx.effect(() => ctx.locale.register(namespace, {
-          zh: { refreshFailed: '模型配置暂不可用，请重新打开设置', loginRequired: '请先登录平台后再配置模型' },
-          en: { refreshFailed: 'Model settings are unavailable. Reopen Settings to retry.', loginRequired: 'Sign in to the platform to configure models.' },
-        }), 'knowledge-base: models locale')
-        const t = ctx.locale.bind(namespace)
-        ctx.slots.inject('settings.section', () => ctx.slots.register({
-          name: 'settings.section',
-          id: 'models',
-          order: 10,
-          label: () => ctx.locale.bind('settings.models')('nav'),
-        }, () => h(ModelsSettingsPanel, {
-          authenticate: modelsAuth.sync,
-          title: ctx.locale.bind('settings.models')('nav'),
-          modelCopy: { refreshFailed: t('refreshFailed'), loginRequired: t('loginRequired') },
-        })))
-      }
-
       // Drop leftover workbench / companion registration from earlier builds.
       const host = ctx.desktopWorkbenches
       host.closeCompanion?.()
@@ -801,15 +652,18 @@
           try {
             if (!host.ready) await host.load()
             if (cancelled) return
-            if (host.state.added.includes(LEGACY_WORKBENCH_ID)) await host.remove(LEGACY_WORKBENCH_ID)
-          } catch { /* Legacy entry may already be gone. */ }
+            if (host.state.added.includes(LEGACY_WORKBENCH_ID)
+              || Object.values(host.state.sessionBindings).includes(LEGACY_WORKBENCH_ID)) {
+              await host.remove(LEGACY_WORKBENCH_ID, { moveSessionsToMain: true })
+            }
+          } catch (error) { if (!cancelled) host.report(error) }
         })()
         return () => { cancelled = true }
       }, 'knowledge-base: migrate legacy workbench entry')
 
       // Opening knowledge from a business workbench must drop workbench mode,
       // otherwise AI助手 / 新会话 still hit registerSessionStarter → workbench session.
-      const releaseWorkbench = () => host.run(Promise.resolve(host.releaseToMainSession()))
+      const releaseWorkbench = () => host.run(Promise.resolve().then(() => host.releaseToMainSession()))
       ctx.effect(() => {
         const onPanel = () => {
           if (ctx.layout.panelInfo.getSnapshot().activePanelId === PANEL_ID) releaseWorkbench()
@@ -823,9 +677,8 @@
         key: PANEL_ID,
         inject: () => ({
           startAssistant: () => {
-            void Promise.resolve(host.releaseToMainSession()).finally(() => {
-              ctx.uiWorkspace.startSession()
-            })
+            host.run(Promise.resolve().then(() => host.releaseToMainSession())
+              .then(() => ctx.uiWorkspace.startSession()))
           },
         }),
       }, KnowledgePanel))

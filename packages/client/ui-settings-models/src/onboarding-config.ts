@@ -8,12 +8,15 @@ export interface Config {
   credentialOnboarding: boolean
   /** Use the platform's shared model manager instead of profile-local forms. */
   platformModelManagement: boolean
+  /** Deadline for a platform parent's fresh model-authentication ticket. */
+  platformModelTicketTimeoutMs: number
 }
 
 /** Validate Host configuration and its public page-bootstrap payload. */
 export const Config: z<Partial<Config>, Config> = z.object({
   credentialOnboarding: z.boolean().default(true),
   platformModelManagement: z.boolean().default(false),
+  platformModelTicketTimeoutMs: z.number().step(1).min(1000).max(120000).default(30000),
 })
 
 /** Page-global key carrying only the public onboarding options. */

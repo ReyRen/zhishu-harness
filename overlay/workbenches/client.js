@@ -1296,13 +1296,20 @@ window.__ModuleLoader__.load({
         await this.commit((state) => { state.active = null })
         if (!this.disposed && !signal.aborted && ticket === this.navigation) this.ctx.layout.selectPanel(null)
       }
-      remove(id) {
+      /** Remove a launcher; moveSessionsToMain also releases its existing chats without deleting them. */
+      remove(id, { moveSessionsToMain = false } = {}) {
         this.ctx.layout.beginNavigation()
         ++this.navigation
         return this.commit((state) => {
           state.added = state.added.filter((item) => item !== id)
           state.pinned = state.pinned.filter((item) => item !== id)
           if (state.active === id) state.active = null
+          if (moveSessionsToMain) {
+            for (const [sessionId, owner] of Object.entries(state.sessionBindings)) {
+              if (owner === id) delete state.sessionBindings[sessionId]
+            }
+            delete state.recentSessions[id]
+          }
         })
       }
       toggleFavorite(id) {

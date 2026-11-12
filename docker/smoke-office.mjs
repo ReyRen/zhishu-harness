@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -37,7 +37,7 @@ try {
   })
   const probe = new Promise((accept, reject) => {
     let output = '', sent = false
-    const deadline = setTimeout(() => { reject(new Error('Built Web Office probe did not become ready')) }, 60_000)
+    const deadline = setTimeout(() => { reject(new Error('Built Web Office conversions did not complete')) }, 180_000)
     const clear = () => { clearTimeout(deadline) }
     child.once('error', (error) => { clear(); reject(error) })
     child.once('close', () => { clear(); reject(new Error('Built Web exited before the Office probe')) })
@@ -45,7 +45,7 @@ try {
       output += chunk
       if (!sent && /dsh web: http:\/\//u.test(output)) {
         sent = true
-        child.send('office-probe', (error) => { if (error) { clear(); reject(error) } })
+        child.send({ command: 'office-probe', directory: root }, (error) => { if (error) { clear(); reject(error) } })
       }
     })
     child.on('message', (message) => {
@@ -65,46 +65,25 @@ try {
   assert.ok(runtime.pnpm.startsWith(source + '/'))
   for (const skill of skills) {
     assert.equal(skill.provider, 'dsh-office')
-    if (['office-render', 'office-recalculate', 'office-export-pdf'].includes(skill.name)) {
-      assert.ok(skill.content.includes('Installed LibreOffice Kit'), `${skill.name} must expose its installed CLI`)
-    }
-    assert.ok(skill.resourceBase.path.startsWith(resolve(source, '..', 'office-skills') + '/'))
+    assert.ok(skill.resourceBase.path.startsWith(join(repository, 'packages/skill/skill-office/assets') + '/'))
   }
-  const renderSkill = skills.find(skill => skill.name === 'office-render')
-  assert.ok(renderSkill, 'The Web profile must load the Office render skill')
-  const kit = /\{\s*"libreofficeKit"[\s\S]*?\n\}/u.exec(renderSkill.content)
-  assert.ok(kit, 'Loaded skill must provide the installed CLI paths')
-  const { libreofficeKit } = JSON.parse(kit[0])
-  assert.equal(libreofficeKit.node, runtime.node)
+  assert.deepEqual(office.tools, ['office_render', 'office_convert', 'office_recalculate'])
   const execute = (command, args) => execFileSync(command, args, {
     cwd: root, env: environment, encoding: 'utf8', timeout: 180_000, maxBuffer: 8 * 1024 * 1024,
   })
-  const capabilities = JSON.parse(execute(runtime.node, [libreofficeKit.cli, 'capabilities', '--json']))
-  assert.ok(capabilities.conversions.length > 0)
-  execute(runtime.python, ['-I', '-B', join(directory, 'tests/create-office.py'), root])
-  for (const extension of ['docx', 'pptx', 'xlsx']) {
-    const input = join(root, `sample.${extension}`)
-    const output = join(root, `${extension}.pdf`)
-    execute(runtime.node, [libreofficeKit.cli, 'convert', '--input', input, '--output', output])
+  for (const output of office.converted) {
     assert.equal((await readFile(output)).subarray(0, 5).toString(), '%PDF-')
   }
-  execute(runtime.node, [libreofficeKit.cli, 'recalculate', '--input', join(root, 'sample.xlsx'),
-    '--output', join(root, 'recalculated.xlsx')])
   execute(runtime.python, ['-I', '-B', '-c',
     'from openpyxl import load_workbook; import sys; assert load_workbook(sys.argv[1], data_only=True).active["C2"].value == 5',
-    join(root, 'recalculated.xlsx')])
-  const preview = join(root, 'preview')
-  execute(runtime.node, [libreofficeKit.cli, 'render', '--input', join(root, 'sample.docx'),
-    '--output-dir', preview, '--pages', '1', '--dpi', '96'])
-  const images = (await readdir(preview)).filter(name => name.endsWith('.png'))
-  assert.ok(images.length > 0, 'LibreOffice render must produce a PNG')
-  assert.deepEqual((await readFile(join(preview, images[0]))).subarray(0, 8),
+    office.recalculated])
+  assert.deepEqual((await readFile(office.preview)).subarray(0, 8),
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
   assert.equal(await readFile(join(environment.DSH_HOME, 'dsh-runtimes/dsh-primary-runtime/runtime.json')).then(() => true,
     (error) => { if (error.code === 'ENOENT') return false; throw error }), false)
   console.log(JSON.stringify({ webOfficeSkills: skills.map(skill => skill.name),
     python: runtime.python, pythonDistributions: runtime.pythonDistributions,
-    libreofficeBackend: capabilities.runtime.backend, documents: ['docx', 'pptx', 'xlsx'],
+    officeTools: office.tools, documents: ['docx', 'pptx', 'xlsx'],
     pdfConversion: 'passed', formulaRecalculation: 'passed', imageRendering: 'passed', copiedToUserHome: false }))
 } finally {
   if (child && completion) {

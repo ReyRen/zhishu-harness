@@ -15,6 +15,7 @@ import {
   WELCOME_NOTICE_ACK_FIELD, WELCOME_NOTICE_SETTINGS_NAMESPACE, WELCOME_NOTICE_VERSION,
 } from '../src/onboarding-copy.ts'
 import { ModelsSection } from '../src/client/ModelsSection.tsx'
+import { PlatformModelsSection } from '../src/client/PlatformModelsSection.tsx'
 import { DeepSeekOnboardingDialog } from '../src/client/DeepSeekOnboardingDialog.tsx'
 import { WelcomeNotice } from '../src/client/WelcomeNotice.tsx'
 import type { IndexInjection, WebServer } from '@deepseek-ai/dsh-host-webserver'
@@ -70,12 +71,17 @@ function declare(slots: SlotRegistry): () => void {
 }
 
 describe('ui-settings-models apply', () => {
-  it('leaves the models section to the platform manager when configured', async () => {
+  it('registers the native model settings section when the shared platform manager is configured', async () => {
     vi.stubGlobal(ONBOARDING_CONFIG_GLOBAL, { credentialOnboarding: false, platformModelManagement: true })
+    const carrier = { location: {}, parent: {} }
+    vi.stubGlobal('window', carrier)
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ authenticated: true })))
     const { ctx, slots } = await bench()
+    onTestFinished(async () => { await ctx.fiber.dispose() })
     declare(slots)
     await ctx.plugin({ inject: [...inject], apply }).await()
-    expect(slots.entries('settings.section')).toEqual([])
+    expect(slots.entries('settings.section').map(entry => entry.options.id)).toEqual(['models'])
+    expect(slots.entries('settings.section')[0]?.component).toBe(PlatformModelsSection)
     expect(slots.entries('settings.onboarding').some(entry => entry.options.id === 'deepseek-official')).toBe(true)
   })
 
@@ -87,7 +93,7 @@ describe('ui-settings-models apply', () => {
       await host.await()
       const rows: IndexInjection[] = []
       ctx.emit('webserver/index-inject', rows, PAGE_PEER)
-      expect(rows).toEqual([{ kind: 'global', name: ONBOARDING_CONFIG_GLOBAL, value: { credentialOnboarding: false, platformModelManagement: false } }])
+      expect(rows).toEqual([{ kind: 'global', name: ONBOARDING_CONFIG_GLOBAL, value: { credentialOnboarding: false, platformModelManagement: false, platformModelTicketTimeoutMs: 30000 } }])
       for (const row of rows) if (row.kind === 'global') vi.stubGlobal(row.name, row.value)
       const plugin = ctx.plugin({ inject: [...inject], apply })
       await plugin.await()
@@ -107,7 +113,9 @@ describe('ui-settings-models apply', () => {
   })
 
   it('defaults to browser onboarding and rejects malformed bootstrap options', async () => {
-    expect(hostPlugin.Config({})).toEqual({ credentialOnboarding: true, platformModelManagement: false })
+    expect(hostPlugin.Config({})).toEqual({
+      credentialOnboarding: true, platformModelManagement: false, platformModelTicketTimeoutMs: 30000,
+    })
     expect(hostPlugin.Config['~standard'].validate({ credentialOnboarding: 'false' })).toHaveProperty('issues')
     const { ctx } = await bench()
     try {

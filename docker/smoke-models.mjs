@@ -11,7 +11,7 @@ import { serviceOwner } from './services.mjs'
 const repository = dirname(dirname(fileURLToPath(import.meta.url)))
 const root = await mkdtemp(join(tmpdir(), 'dsh-unified-models-'))
 const calls = []
-const row = { id: 'fixture-chat', name: 'fixture-chat', type: 'KnowledgeQA', status: 'active', is_default: true,
+const row = { id: 'fixture-chat', name: 'fixture-chat', type: 'KnowledgeQA', source: 'remote', status: 'active', is_default: true,
   tenant_id: 10004, updated_at: '2026-11-11T09:00:00Z', parameters: { context_window: 200000, max_output_tokens: 4096 },
   capabilities: { api: 'openai-completions', input: ['text'] } }
 const token = `fixture.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url')}.signature`
@@ -27,9 +27,13 @@ const backend = createServer((request, outgoing) => {
       send(200, { success: true, token, refresh_token: 'refresh-a' }); return
     }
     assert.equal(request.headers.authorization, `Bearer ${token}`)
-    if (path === '/api/v1/auth/me') send(200, { success: true, data: { tenant: { id: 10004, name: 'Test workspace' }, memberships: [{ tenant_id: 10004 }] } })
+    if (path === '/api/v1/auth/me') send(200, { success: true, data: { tenant: { id: 10004, name: 'Test workspace' }, memberships: [{ tenant_id: 10004, tenant_name: 'Test workspace', role: 'owner' }] } })
     else if (path === '/api/v1/models') send(200, { success: true, data: [row] })
-    else if (path === '/api/v1/models/fixture-chat') send(200, { success: true, data: row })
+    else if (path === '/api/v1/models/providers') send(200, { success: true, data: [] })
+    else if (path === '/api/v1/models/fixture-chat') {
+      if (request.method === 'PUT') { assert.equal(request.headers['x-tenant-id'], '10004'); Object.assign(row, body) }
+      send(200, { success: true, data: row })
+    }
     else if (path === '/api/v1/models/fixture-chat/harness-chat') {
       assert.equal(request.headers['x-tenant-id'], '10004')
       assert.equal(body.model_revision, row.updated_at)
@@ -87,9 +91,18 @@ try {
             headers: { cookie, origin, 'content-type': 'application/json' }, body: JSON.stringify({ access_token: 'platform-a', user_id: 'user-a' }) })
           assert.equal(authenticated.status, 200); await authenticated.body?.cancel()
         }
-        const configured = await fetch(`${origin}/api/zhishu-models/config`, { headers: { cookie } })
-        assert.equal(configured.status, 200)
-        assert.equal(new URL((await configured.json()).settingsURL).searchParams.get('target'), 'models')
+        const management = `${origin}/api/zhishu-models/manage`
+        const memberships = await fetch(management, { headers: { cookie } })
+        assert.equal(memberships.status, 200)
+        assert.equal((await memberships.json()).data.spaces[0].id, '10004')
+        const models = await fetch(`${management}?operation=models&tenantId=10004`, { headers: { cookie } })
+        assert.equal(models.status, 200)
+        assert.equal((await models.json()).data[0].id, row.id)
+        const saved = await fetch(management, { method: 'POST', headers: { cookie, origin, 'content-type': 'application/json' },
+          body: JSON.stringify({ operation: 'update', tenantId: '10004', id: row.id, model: { name: row.name,
+            type: row.type, source: row.source, parameters: row.parameters, display_name: 'Native settings model' } }) })
+        assert.equal(saved.status, 200)
+        assert.equal((await saved.json()).data.display_name, 'Native settings model')
         child.send({ command: 'models-probe', workspace })
       })().catch(reject)
     }

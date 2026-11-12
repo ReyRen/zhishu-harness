@@ -22,7 +22,7 @@
 
 ## 统一模型
 
-平台[统一模型设置](../overlay/models/README.zh.md)在原生“模型”分区中复用 gcs-webnora 模型编辑器。先部署配套后端，再部署此镜像；[升级指南](../docs/upgrade-guide/v0.2.2-rc.1/platform-unified-models/guide.zh.md)说明已有 profile 的模型选择与凭据处理方式。
+平台[统一模型设置](../overlay/models/README.zh.md)使用 Harness 原生“模型设置”分区和共享的 gcs-webnora 模型目录。先部署配套后端，再部署此镜像；[升级指南](../docs/upgrade-guide/v0.2.2-rc.2/native-model-settings/guide.zh.md)说明原生编辑器与已有 profile 的模型选择。
 
 ## 用户工作区
 
@@ -34,7 +34,7 @@
 
 构建过程根据上游下载锁准备官方 [primary runtime](../packages/skill/tool-workspace-dependencies/README.zh.md) 和 Office 资源。[cache-primary-runtime.mjs](cache-primary-runtime.mjs) 用 curl 缓存完全相同的官方归档，检查 SHA256，并由上游构建器完成组装和验证；它不使用镜像源或中间服务器。构建参数 `DSH_RESOURCE_DOWNLOAD_TIMEOUT_MS` 的单次下载默认期限为 600000 毫秒，供大体积发布资源使用。`DSH_PRIMARY_RUNTIME=/opt/dsh-runtime/primary-runtime` 指向随包的 Python、Node.js 和 pnpm；Python 包含 numpy、pandas 以及 Word、Excel、PowerPoint 创作库。随包 Python 也位于 `PATH` 最前。
 
-容器加载 [office.cordis.patch.yml](office.cordis.patch.yml)，提供 `load_workspace_dependencies` 和七项 skills：`office`、`office-docx`、`office-pptx`、`office-xlsx`、`office-render`、`office-recalculate`、`office-export-pdf`。skills 使用随包 LibreOffice Kit CLI，不使用系统 LibreOffice。资源留在镜像中；生成文件存入用户工作区。[Office 参考](../packages/skill/skill-office/README.zh.md)说明其限制。
+容器加载 [office.cordis.patch.yml](office.cordis.patch.yml)，启用 `load_workspace_dependencies` 原地查询镜像内运行时，不将其复制到用户存储。它使用随包的 `office`、`office-docx`、`office-pptx` 和 `office-xlsx` skills。加载 Office skill 后，标准预设开放原生 `office_render`、`office_convert` 和 `office_recalculate` 工具，由共享 Office Kit 服务执行。技能资源留在镜像中，转换文件先进入用户私有输出存储，再复制到工作区。[Office 参考](../packages/skill/skill-office/README.zh.md)说明其限制。
 
 镜像构建在无网络环境执行 [smoke-office.mjs](smoke-office.mjs)，在私有临时目录检查实际 Web 技能注册、文档创作、PDF 转换、图像渲染和公式重算。不挂载用户数据时，可重复检查：
 
@@ -58,7 +58,7 @@ docker run --rm --init --network none --entrypoint node "$IMAGE" /opt/dsh/docker
 
 ## 离线插件市场
 
-镜像还为所有 Web 用户携带[内置 WeKnora 工具](../overlay/weknora/README.zh.md)。打开内置知识库入口时，如有需要会先将工作台加入当前用户的已保存列表，再打开它；保存失败则不跳转。平台客户端使用当前用户的 SSO 为工具认证；Worker 传入 `DSH_PLATFORM_USER_ID` 和 `WEKNORA_BASE_URL`。容器示例透传 `WEKNORA_*` 变量。构建中的 [WeKnora 冒烟验证](smoke-weknora.mjs) 使用模拟后端和确定性模型，不访问外部网络。
+镜像还为所有 Web 用户携带[内置 WeKnora 工具](../overlay/weknora/README.zh.md)。知识库入口打开全局面板，不安装工作台；旧知识库工作台的会话移入主会话列表，内容保留。平台客户端使用当前用户的 SSO 为工具认证；Worker 传入 `DSH_PLATFORM_USER_ID` 和 `WEKNORA_BASE_URL`。容器示例透传 `WEKNORA_*` 变量。构建中的 [WeKnora 冒烟验证](smoke-weknora.mjs) 使用模拟后端和确定性模型，不访问外部网络。
 
 镜像包含与桌面端相同的[私有目录和社区安装包](../market-registry/README.zh.md)，以及 Verdaccio 和锁定的 Linux 依赖。启动时导入全部随包 tarball，先在 `127.0.0.1:4873` 启动包仓库、在 `127.0.0.1:4874` 启动目录，再启动 Web。两个地址都留在各自容器内部，不需要宿主机端口或额外代理规则。禁止发布包；缺包不会回退到公网 npm。任一服务失败会停止容器，不让 Web 继续连接失效的市场。
 

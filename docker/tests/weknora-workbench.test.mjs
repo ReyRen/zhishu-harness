@@ -1,123 +1,120 @@
-/** Exercise Ask AI through the registered component with caller-scoped actions. */
+/** Knowledge navigation uses main sessions and preserves retired workbench chats. */
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 import { runInNewContext } from 'node:vm'
 
 const source = await readFile(new URL('../../overlay/knowledge-base/client.js', import.meta.url), 'utf8')
+const workbenchSource = await readFile(new URL('../../overlay/workbenches/client.js', import.meta.url), 'utf8')
+const legacy = 'local:@zhishu/dsh-overlay-knowledge-base'
 const turn = () => new Promise(resolve => setImmediate(resolve))
 
-function fixture({ owned = false, failure, ownershipFailure, added = true, ready = true, addFailure, addGate } = {}) {
-  let plugin, Component, opener, dispose, cursor = 0, created = 0
-  const workbenchId = 'local:@zhishu/dsh-overlay-knowledge-base'
-  const calls = [], reported = [], tasks = []
-  // The platform has already authenticated. Effects unrelated to this click are not mounted.
-  const state = [true, false, false, '', '']
-  const React = {
-    createSnapshotStore(value) { return { getSnapshot: () => value, set(next) { value = next } } },
-    createElement(type, props, ...children) { return { type, props: props || {}, children } },
-    useState(initial) { const id = cursor++; if (!(id in state)) state[id] = initial; return [state[id], value => { state[id] = value }] },
-    useRef(value) { return { current: value } }, useEffect() {}, useLayoutEffect() {},
-  }
-  const parent = { postMessage() {} }
-  const window = { parent, top: parent,
-    __ModuleLoader__: { load(definition) { plugin = definition.factory(() => React) } } }
-  const scoped = {
-    ready, state: { added: added ? [workbenchId] : [] },
-    async load() { calls.push('load'); this.ready = true },
-    async add(id) {
-      assert.equal(id, workbenchId)
-      calls.push('add')
-      await addGate
-      if (addFailure) throw new Error(addFailure)
-      this.state.added.push(id)
-    },
-    async open(id) {
-      calls.push('open')
-      assert.ok(this.state.added.includes(id), 'workbench must be added before opening')
-    },
-    run(task) { tasks.push(task.catch(error => { reported.push(error.message) })) },
-    register(_descriptor, component) { Component = component; return () => {} },
-    currentSession() { assert.equal(this, scoped); return 'current-session' },
-    ownsSession(id) { assert.equal(this, scoped); assert.equal(id, 'current-session'); if (ownershipFailure) throw new Error(ownershipFailure); return owned },
-    async newSession() { assert.equal(this, scoped); created++; if (failure) throw new Error(failure); return 'new-session' },
+function fixture(t, { ready = true, added = false, bound = false, loadGate, releaseGate, failure } = {}) {
+  let plugin, panel = null
+  const calls = [], errors = [], tasks = [], cleanups = [], slots = [], listeners = new Set()
+  const React = { createElement(type, props, ...children) { return { type, props, children } } }
+  const host = {
+    ready, state: { added: added ? [legacy] : [], sessionBindings: bound ? { historical: legacy } : {} },
+    async load() { calls.push('load'); await loadGate; this.ready = true },
+    async remove(id, options) { calls.push({ remove: id, options: JSON.parse(JSON.stringify(options)) }) },
+    async releaseToMainSession() { calls.push('release'); await releaseGate; if (failure) throw new Error(failure) },
+    report(error) { errors.push(error.message) },
+    run(task) { tasks.push(task.catch(error => this.report(error))) },
   }
   const ctx = {
-    desktopWorkbenches: scoped, sidebarSoftPanels: { registerOpener(_id, action) { opener = action; return () => {} } },
-    effect(effect, label) { if (label === 'knowledge-base: unregister workbench') dispose = effect() },
-    slots: { inject() {} }, locale: { bind() { return key => key } },
+    desktopWorkbenches: host,
+    locale: { bind() { return key => key } },
+    uiWorkspace: { startSession() { calls.push('start-session') } },
+    layout: { panelInfo: { getSnapshot: () => ({ activePanelId: panel }),
+      subscribe(callback) { listeners.add(callback); return () => listeners.delete(callback) } } },
+    slots: { inject(_name, setup) { setup() }, register(definition, Component) { slots.push({ definition, Component }); return () => {} } },
+    effect(setup, label) {
+      if (!['knowledge-base: migrate legacy workbench entry', 'knowledge-base: release workbench when panel opens'].includes(label)) return
+      const cleanup = setup()
+      if (cleanup) cleanups.push(cleanup)
+    },
   }
-  runInNewContext(source, { window, document: { getElementById() { return {} } }, AbortController, console })
+  const window = { __ModuleLoader__: { load(definition) { plugin = definition.factory(() => React) } } }
+  runInNewContext(source, { window, document: { getElementById() { return {} } }, AbortController })
+  const dispose = () => { for (const cleanup of cleanups.splice(0).reverse()) cleanup() }
+  t.after(dispose)
   plugin.apply(ctx)
-  const raw = { currentSession() { return 'current-session' }, ownsSession() { throw new Error('Workbench registration requires a client package entry name.') } }
-  const render = () => {
-    cursor = 0
-    let node = Component({ service: raw, active: true, conversation: 'conversation' })
-    while (typeof node.type === 'function') node = node.type(node.props)
-    return node
+  const main = slots.find(slot => slot.definition.name === 'main')
+  return { calls, errors, slots, dispose,
+    open() { panel = 'zhishu-knowledge'; for (const listener of listeners) listener() },
+    start() { main.definition.inject().startAssistant() },
+    async settle() { await Promise.all(tasks); await turn() },
   }
-  const nodes = node => [node, ...(node?.children || []).flatMap(child => child && typeof child === 'object' ? nodes(child) : [])]
-  const button = () => nodes(render()).find(node => node.type === 'button')
-  const text = () => nodes(render()).flatMap(node => node.children.filter(child => typeof child === 'string')).join(' ')
-  return { click: () => button().props.onClick(), button, text, created: () => created,
-    async openWorkbench() { opener(); await tasks.at(-1) }, calls, reported, dispose: () => dispose() }
 }
 
-test('the built-in knowledge entry initializes the current user before opening and reuses existing membership', async () => {
-  const fresh = fixture({ added: false, ready: false })
-  await fresh.openWorkbench()
-  assert.deepEqual(fresh.calls, ['load', 'add', 'open'])
-  assert.deepEqual(fresh.reported, [])
-  await fresh.openWorkbench()
-  assert.deepEqual(fresh.calls, ['load', 'add', 'open', 'open'])
-  const existing = fixture()
-  await existing.openWorkbench()
-  assert.deepEqual(existing.calls, ['open'])
+test('knowledge is a global panel without installing a workbench for a new user', async t => {
+  const f = fixture(t)
+  assert.equal(f.slots.find(slot => slot.definition.name === 'main').definition.key, 'zhishu-knowledge')
+  assert.equal(f.slots.find(slot => slot.definition.name === 'sidebar.panellist').definition.label, '知识库')
+  f.open()
+  await f.settle()
+  assert.deepEqual(f.calls, ['release'])
+  assert.deepEqual(f.errors, [])
 })
 
-test('failed initialization is reported and does not open a partially initialized knowledge workbench', async () => {
-  const f = fixture({ added: false, addFailure: 'storage write unavailable' })
-  await f.openWorkbench()
-  assert.deepEqual(f.calls, ['add'])
-  assert.deepEqual(f.reported, ['storage write unavailable'])
-})
-
-test('concurrent clicks share initialization and disposal prevents a late navigation', async () => {
-  let release
-  const addGate = new Promise(resolve => { release = resolve })
-  const f = fixture({ added: false, addGate })
-  const first = f.openWorkbench()
-  const second = f.openWorkbench()
-  let closing
-  try {
-    await turn()
-    assert.deepEqual(f.calls, ['add'])
-    closing = f.dispose()
-  } finally {
-    release()
-    await Promise.all([first, second])
-    await closing
-  }
-  assert.deepEqual(f.calls, ['add'])
-})
-
-test('Ask AI uses caller-scoped ownership and creates a conversation only when it is not owned', async () => {
-  for (const owned of [false, true]) {
-    const f = fixture({ owned })
-    assert.doesNotThrow(() => f.click())
-    await turn()
-    assert.equal(f.created(), owned ? 0 : 1)
-    assert.equal(f.button().children[0], '收起会话')
+test('legacy launchers and chats migrate even when the launcher was already removed', t => {
+  for (const options of [{ added: true }, { bound: true }]) {
+    const f = fixture(t, options)
+    assert.deepEqual(f.calls, [{ remove: legacy, options: { moveSessionsToMain: true } }])
   }
 })
 
-test('Ask AI reports synchronous ownership and asynchronous creation failures without leaving the action busy', async () => {
-  for (const options of [{ failure: 'creation unavailable' }, { ownershipFailure: 'ownership unavailable' }]) {
-    const f = fixture(options)
-    assert.doesNotThrow(() => f.click())
-    await turn()
-    assert.ok(f.text().includes(options.failure || options.ownershipFailure))
-    f.button().props.onClick() // close, then reopen
-    assert.equal(f.button().props.disabled, false)
-  }
+test('unloading while stored workbenches load prevents a late migration', async t => {
+  const gate = Promise.withResolvers()
+  const f = fixture(t, { ready: false, added: true, loadGate: gate.promise })
+  f.dispose()
+  gate.resolve()
+  await f.settle()
+  assert.deepEqual(f.calls, ['load'])
+})
+
+test('AI assistant waits for the saved transition to main sessions before creating a chat', async t => {
+  const gate = Promise.withResolvers()
+  const f = fixture(t, { releaseGate: gate.promise })
+  f.start()
+  await turn()
+  assert.deepEqual(f.calls, ['release'])
+  gate.resolve()
+  await f.settle()
+  assert.deepEqual(f.calls, ['release', 'start-session'])
+})
+
+test('a failed transition reports the failure and cannot create a chat in the wrong workbench', async t => {
+  const f = fixture(t, { failure: 'state write unavailable' })
+  f.start()
+  await f.settle()
+  assert.deepEqual(f.calls, ['release'])
+  assert.deepEqual(f.errors, ['state write unavailable'])
+})
+
+test('moving retired chats to main persists only their ownership change and retains unrelated data', async () => {
+  let exports
+  const window = { __ModuleLoader__: { load(definition) {
+    exports = definition.factory(() => ({ Component: class {}, Service: { tracker: Symbol('tracker') } }))
+  } } }
+  runInNewContext(workbenchSource, { window, document: { documentElement: { lang: 'zh' } }, console })
+  const writes = []
+  const service = new exports.Workbenches({ layout: { beginNavigation() {} } }, async (_url, init) => {
+    writes.push(JSON.parse(init.body))
+    return Response.json({ revision: 1 })
+  })
+  service.ready = true
+  service.state.added = [legacy, 'other']
+  service.state.pinned = [legacy, 'other']
+  service.state.active = legacy
+  service.state.sessionBindings = { history: legacy, separate: 'other' }
+  service.state.recentSessions = { [legacy]: 'history', other: 'separate' }
+  service.state.notes = { [legacy]: 'preserved note', other: 'other note' }
+  await service.remove(legacy, { moveSessionsToMain: true })
+  assert.deepEqual(writes[0].state.sessionBindings, { separate: 'other' })
+  assert.deepEqual(writes[0].state.recentSessions, { other: 'separate' })
+  assert.deepEqual(writes[0].state.notes, { [legacy]: 'preserved note', other: 'other note' })
+  assert.deepEqual(writes[0].state.added, ['other'])
+  assert.equal(writes[0].state.active, null)
+  service.dispose()
 })

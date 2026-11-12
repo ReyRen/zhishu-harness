@@ -2,11 +2,13 @@
 
 English | [中文](README.zh.md)
 
-Platform Web profiles manage models in **Settings → Models**, using gcs-webnora's existing type tabs, cards, search, editor and connection tests. Other Harness settings pages retain their native layout. The authenticated `/harness/models` page offers chat, embedding, rerank, vision and speech models; ordinary workspace roles still govern who can edit them. Users choose among configured models in chat or in each knowledge base. Existing document indexes retain their embedding-model binding.
+Platform Web profiles manage models in **Settings → Model settings**, using native Harness components for type filters, cards, search, editing and connection tests. The design follows gcs-webnora's model settings; the page mounts directly in the existing settings shell. Chat, embedding, rerank, vision and speech recognition models use the shared registry and its workspace roles. Users choose among configured models in chat or in each knowledge base. Existing document indexes retain their embedding-model binding.
 
 ## Configuration and execution
 
-`WEKNORA_BASE_URL` selects the existing authenticated gcs-webnora API, including `/api/v1`. `WEKNORA_WEB_URL` optionally selects its browser-facing base URL, including any proxy subpath; without it, the browser base is the API base with `/api/v1` removed. Worker supplies `DSH_PLATFORM_USER_ID`; authentication uses the current user's platform SSO and retains tokens only in Host memory. No shared model key or user-controlled identity replaces that authorization.
+`WEKNORA_BASE_URL` selects the existing authenticated gcs-webnora API, including `/api/v1`. Worker supplies `DSH_PLATFORM_USER_ID`; authentication uses the current user's platform SSO and retains tokens only in Host memory. No shared model key or user-controlled identity replaces that authorization. The native page calls owner-authenticated `/api/zhishu-models/manage` operations and needs no separate model-page URL. The knowledge page has its own browser URL configuration.
+
+The settings plugin retains loaded rows and unfinished drafts while switching sections. Signing out clears those rows and typed secrets. Saved credentials remain write-only: empty fields preserve them, explicit removal clears them, and connection tests refer to the saved model id. A failed credential update retains the committed definition id for retry. An unconfirmed save requires closing the editor and refreshing the list before another create. Existing embedding identities and dimensions stay fixed in the editor; changing them requires a new model and explicit reindexing.
 
 The registry and credentials remain in gcs-webnora's database. Harness uses the registered `zhishu-models` adapter and the workspace-authorized streaming endpoint; gcs-webnora resolves credentials and contacts the configured inference provider. This additional backend hop keeps stored keys out of browser responses and user containers, and lets knowledge-base background jobs continue when a Harness container stops. The service must be reachable on the site's network. Bundled dependencies do not supply model inference when that service or the model endpoint is unavailable.
 
@@ -20,4 +22,4 @@ Idle conversations with retired routes move through the native logged model-sele
 
 ## Verification
 
-The build runs [adapter tests](../../docker/tests/unified-models.test.mjs) and [a real Web composition smoke](../../docker/smoke-models.mjs). The smoke authenticates an isolated user against a mock backend, migrates a retired selection, executes a knowledge tool and completes the next model round without external networking or real user storage. It validates composition and protocol behavior; a site-specific real-model check is separate.
+The build runs [adapter tests](../../docker/tests/unified-models.test.mjs), [native management tests](../../docker/tests/native-model-settings.test.mjs) and [a real Web composition smoke](../../docker/smoke-models.mjs). The smoke authenticates an isolated user against a mock backend, saves through native management, migrates a retired selection, executes a knowledge tool and completes the next model round without external networking or real user storage. It validates composition and protocol behavior; a site-specific real-model check is separate.

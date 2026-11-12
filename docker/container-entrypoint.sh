@@ -11,7 +11,7 @@ export DSH_PAPER_READER_DATA="${DSH_PAPER_READER_DATA:-${DSH_HOME}/storages/dsh-
 test -f "${primary_runtime}/runtime.json"
 test -x "${primary_runtime}/dependencies/python/bin/python3"
 test -x "${primary_runtime}/dependencies/node/bin/node"
-test -f "${primary_runtime}/../office-skills/office/SKILL.md"
+test -f /opt/dsh/packages/skill/skill-office/assets/office/SKILL.md
 
 install -d -m 0700 "${DSH_HOME}" "${default_workspace}"
 cd "${default_workspace}"
