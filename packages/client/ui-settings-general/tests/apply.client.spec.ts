@@ -14,6 +14,7 @@ import { graphFromRoster } from '@deepseek-ai/dsh-client-test-runtime/src/assemb
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import { LOCALE_SETTINGS_NAMESPACE, LocaleSettingsSchema } from '@deepseek-ai/dsh-client-locale/src/locale-settings.ts'
 import { inject } from '../src/client/index.ts'
+import { createSettingsShellStore } from '../src/client/shell-store.ts'
 import type { DeveloperToolsRowInjected } from '../src/client/DeveloperToolsRow.tsx'
 import { HostReleasePrompt, type HostReleasePromptInjected } from '../src/client/HostReleasePrompt.tsx'
 import { CloseLabel, HeaderContent, TriggerContent } from '../src/client/chrome.tsx'
@@ -127,6 +128,37 @@ describe('ui-settings-general apply', () => {
       expect(c.ctx.slots.entries(name).find(row => row.component === component)!.locale).toBe(NS)
     }
   }, COLD_BOOT_TIMEOUT_MS)
+
+  it('opens a requested section without a launcher and releases navigation with the settings shell', async ({ mock, start }) => {
+    const { c } = await client(mock, start)
+    const shellOf = () => {
+      const entry = c.ctx.slots.entries('sidebar.settings')[0]!
+      return (entry.store as ReturnType<typeof createSettingsShellStore>).create()
+    }
+    await c.unload('@deepseek-ai/dsh-client-ui-settings-account')
+    await c.flush()
+    expect(c.ctx.slots.entries('settings.launcher')).toEqual([])
+    const shell = shellOf()
+    expect(shell.getSnapshot()).toEqual({ open: false, activeId: undefined })
+    c.ctx.emit('settings/open', 'models')
+    expect(shell.getSnapshot()).toEqual({ open: true, activeId: 'models' })
+    shell.actions.select('general')
+    c.ctx.emit('settings/open')
+    expect(shell.getSnapshot()).toEqual({ open: true, activeId: 'general' })
+    shell.actions.close()
+    await c.reload(SIDEBAR)
+    await c.flush()
+    c.ctx.emit('settings/open', 'models')
+    expect(shell.getSnapshot()).toEqual({ open: false, activeId: undefined })
+    const current = shellOf()
+    expect(current.getSnapshot()).toEqual({ open: true, activeId: 'models' })
+    current.actions.close()
+    await c.unload(SELF)
+    await c.flush()
+    c.ctx.emit('settings/open', 'models')
+    expect(current.getSnapshot()).toEqual({ open: false, activeId: undefined })
+    expect(c.ctx.slots.entries('sidebar.settings')).toEqual([])
+  })
 
   it('reports a Coding Tools toggle only when a known value changes to the requested one', async ({ mock, start }) => {
     const { c } = await client(mock, start)
