@@ -41,7 +41,7 @@ Host 配置 `credentialOnboarding` 默认为 `true`。Electron preload 标记会
 
 ### API 密钥
 
-`platformModelManagement` 默认为 `false`。设为 `true` 时，在现有设置外壳中注册原生**模型设置**，调用[统一模型 Host API](../../../overlay/models/README.zh.md)。页面负责筛选、卡片、编辑器、连接测试和内存草稿；gcs-webnora 负责统一目录并执行空间权限校验。切换设置页保留已加载的数据与草稿，退出登录时清除。已存凭据保持只写，输入框留空保留原值。`platformModelTicketTimeoutMs` 限定父窗口 SSO 回复期限，默认 30000 ms，整数范围为 1000–120000。以下提供商 profile 说明适用于标记为 `false` 的情况。
+`platformModelManagement` 默认为 `false`。设为 `true` 时，在现有设置外壳中注册原生**模型设置**，调用[统一模型 Host API](../../../overlay/models/README.zh.md)。分类卡片显示服务商及上下文窗口或向量维度，编辑器在底部操作旁显示连接测试结果。页面负责筛选、卡片、编辑器、连接测试和内存草稿；gcs-webnora 负责统一目录并执行空间权限校验。切换设置页保留已加载的数据与草稿，退出登录时清除。已存凭据保持只写，输入框留空保留原值。`platformModelTicketTimeoutMs` 限定父窗口 SSO 回复期限，默认 30000 ms，整数范围为 1000–120000。以下提供商 profile 说明适用于标记为 `false` 的情况。
 
 API 密钥输入框通过 `autocomplete="new-password"` 请求浏览器不要自动填入已保存的登录密码。可编辑的草稿非空时，显示与会话密钥遮罩一致的眼睛按钮：**显示密钥**展示当前输入，**隐藏密钥**重新遮住输入。修改或清空输入后会重新遮住密钥。已保存密钥以 Host 生成的脱敏预览作为占位文字；实际输入值保持为空，完整密钥不进入 Client。提供方未提供预览时，仅显示使用已保存密钥的提示。本地提供方的[预览规则](../../credentials/credentials-local/README.zh.md)保留部分识别字符和 Unicode 码点数。已保存密钥隐藏显示按钮，并阻止复制和剪切。键入或粘贴会整项替换，Backspace 或 Delete 会暂存整项删除。已保存凭据从不读入输入框。原生密码框不提供剪切；可选中后按 Backspace 清空草稿，或显示明文后再剪切。
 

@@ -169,7 +169,8 @@ window.__ModuleLoader__.load({
       let syncNow = () => Promise.resolve()
       ctx.effect(() => {
         const lifetime = new AbortController()
-        let pending, signedIn = true, revision = 0
+        let pending, pendingForced = false, signedIn = true, revision = 0
+        let session = new AbortController(), clearing = Promise.resolve()
         const request = (init = {}, signal) => {
           const signals = [lifetime.signal]
           if (signal && signal !== lifetime.signal) signals.push(signal)
@@ -178,13 +179,13 @@ window.__ModuleLoader__.load({
             signal: signals.length === 1 ? signals[0] : AbortSignal.any(signals),
           })
         }
-        const authenticate = async (signal, current) => {
+        const authenticate = async (signal, current, force) => {
           const status = await request({}, signal)
           // A profile-owned upstream bundle keeps its own configured authentication.
           if (status.status === 404) return
           if (!status.ok) throw new Error(`knowledge_auth_status_failed (${status.status})`)
           const state = await status.json()
-          if (state.mode !== 'sso' || state.authenticated) return
+          if (state.mode !== 'sso' || state.authenticated && !force) return
           const ticket = await fetchSsoTicket(signal ? AbortSignal.any([lifetime.signal, signal]) : lifetime.signal)
           if (revision !== current || !signedIn || lifetime.signal.aborted || signal?.aborted) {
             throw new Error('Knowledge authentication cancelled')
@@ -194,22 +195,38 @@ window.__ModuleLoader__.load({
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(ticket),
           }, signal)
-          if (!response.ok) {
-            let detail = ''
-            try { detail = await response.text() } catch { /* ignore */ }
-            throw new Error(`knowledge_auth_handoff_failed (${response.status})${detail ? `: ${detail.slice(0, 200)}` : ''}`)
-          }
+          if (!response.ok) throw new Error(`knowledge_auth_handoff_failed (${response.status})`)
         }
-        ensureAuthenticated = async (signal) => {
+        const waitFor = (task, signal) => new Promise((resolve, reject) => {
+          const abort = () => { signal.removeEventListener('abort', abort); reject(signal.reason) }
+          signal.addEventListener('abort', abort, { once: true })
+          void task.then(() => { signal.removeEventListener('abort', abort); resolve() }, error => {
+            signal.removeEventListener('abort', abort); reject(error)
+          })
+          if (signal.aborted) abort()
+        })
+        ensureAuthenticated = async (signal = lifetime.signal, force = false) => {
+          signal.throwIfAborted()
           if (!signedIn) throw new Error('Platform session is not signed in')
-          if (lifetime.signal.aborted) throw new Error('Knowledge authentication cancelled')
-          if (pending) return pending
-          const current = revision
-          pending = (async () => {
-            await authenticate(signal, current)
-            if (revision !== current) throw new Error('Knowledge authentication superseded')
-          })().finally(() => { pending = undefined })
-          return pending
+          lifetime.signal.throwIfAborted()
+          if (force && pending && !pendingForced) await waitFor(pending, signal)
+          if (!signedIn) throw new Error('Platform session is not signed in')
+          if (!pending) {
+            const current = revision
+            const active = AbortSignal.any([lifetime.signal, session.signal])
+            const task = (async () => {
+              await clearing
+              active.throwIfAborted()
+              await authenticate(active, current, force)
+              if (revision !== current) throw new Error('Knowledge authentication superseded')
+            })()
+            pending = task
+            pendingForced = force
+            void task.finally(() => { if (pending === task) pending = undefined }).catch(() => {
+              /* Each caller receives the failure through waitFor. */
+            })
+          }
+          return waitFor(pending, signal)
         }
         const sync = () => {
           if (!signedIn || lifetime.signal.aborted) return pending
@@ -221,12 +238,20 @@ window.__ModuleLoader__.load({
         }
         const accountChanged = state => {
           signedIn = state?.authenticated === true
-          revision++
           if (signedIn) { void sync(); return }
+          revision++
+          session.abort()
+          session = new AbortController()
+          const previous = pending
+          pending = undefined
           // Clear Host credentials even when the superseded handoff rejects.
-          const clear = () => request({ method: 'POST', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ action: 'logout' }) })
-          void Promise.resolve(pending).then(clear, clear).catch(() => {
+          const clear = async () => {
+            const response = await request({ method: 'POST', headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ action: 'logout' }) })
+            if (!response.ok) throw new Error(`knowledge_auth_clear_failed (${response.status})`)
+          }
+          clearing = Promise.allSettled([previous, clearing]).then(clear)
+          void clearing.catch(() => {
             if (!lifetime.signal.aborted) console.warn('[Knowledge tools] Could not clear authentication; close the runtime before switching accounts.')
           })
         }
@@ -243,7 +268,7 @@ window.__ModuleLoader__.load({
         ? 'knowledge-base: models authentication'
         : 'knowledge-base: tool authentication')
       return {
-        ensureAuthenticated: (signal) => ensureAuthenticated(signal),
+        ensureAuthenticated: (signal, force) => ensureAuthenticated(signal, force),
         sync: () => syncNow(),
       }
     }
@@ -291,7 +316,7 @@ window.__ModuleLoader__.load({
           // One retry after a forced re-auth if Host still had no credentials.
           if (err?.status !== 401) throw err
           try {
-            await auth.ensureAuthenticated(signal)
+            await auth.ensureAuthenticated(signal, true)
             const result = await request('/api/zhishu-knowledge/catalog', signal)
             if (!Array.isArray(result?.knowledgeBases) || result.knowledgeBases.some(base =>
               typeof base?.id !== 'string' || typeof base.name !== 'string')) throw new Error(t('unavailable'))
@@ -524,7 +549,7 @@ window.__ModuleLoader__.load({
             type: dataType,
             data,
           })
-          if (allowed && event.origin !== allowed) {
+          if (!allowed || event.origin !== allowed) {
             console.warn(`${LOG_HOP2} harness ← weknora ignored (origin mismatch)`, {
               direction: 'weknora → harness',
               origin: event.origin,
@@ -533,6 +558,10 @@ window.__ModuleLoader__.load({
             return
           }
           if (!data || typeof data !== 'object' || Array.isArray(data)) return
+          if (data.type === 'weknora:open-model-settings') {
+            window.dispatchEvent(new Event('zhishu:open-model-settings'))
+            return
+          }
           if (data.type !== READY_TYPE) {
             console.info(`${LOG_HOP2} harness ← weknora ignored (not ${READY_TYPE})`, {
               direction: 'weknora → harness',
@@ -588,6 +617,9 @@ window.__ModuleLoader__.load({
           })
         }
         window.addEventListener('message', onMessage)
+        const stopModels = props.onModelsChanged(() => {
+          if (allowed) frameRef.current?.contentWindow?.postMessage({ type: 'weknora:models-updated' }, allowed)
+        })
         console.info(`${LOG_HOP2} harness listening for weknora`, {
           direction: 'weknora → harness (listener on)',
           allowedIframeOrigin: allowed,
@@ -596,6 +628,7 @@ window.__ModuleLoader__.load({
         })
         return () => {
           window.removeEventListener('message', onMessage)
+          stopModels()
           nonceRef.current = ''
         }
       }, [signedIn])
@@ -676,6 +709,7 @@ window.__ModuleLoader__.load({
         name: 'main',
         key: PANEL_ID,
         inject: () => ({
+          onModelsChanged: listener => ctx.remote.$on('llm/models-updated', listener),
           startAssistant: () => {
             host.run(Promise.resolve().then(() => host.releaseToMainSession())
               .then(() => ctx.uiWorkspace.startSession()))

@@ -4,6 +4,8 @@ English | [中文](README.zh.md)
 
 Platform Web profiles manage models in **Settings → Model settings**, using native Harness components for type filters, cards, search, editing and connection tests. The design follows gcs-webnora's model settings; the page mounts directly in the existing settings shell. Chat, embedding, rerank, vision and speech recognition models use the shared registry and its workspace roles. Users choose among configured models in chat or in each knowledge base. Existing document indexes retain their embedding-model binding.
 
+The embedded knowledge workspace has no separate model-administration page. Its model selectors open Harness settings through the current iframe's origin-checked `weknora:open-model-settings` message; model changes invalidate its catalog through `weknora:models-updated`. Application-specific model choices remain unchanged. The knowledge picker shares one authentication handoff across callers, isolates caller cancellation, and requests a fresh SSO ticket once after a catalog 401.
+
 ## Configuration and execution
 
 `WEKNORA_BASE_URL` selects the existing authenticated gcs-webnora API, including `/api/v1`. Worker supplies `DSH_PLATFORM_USER_ID`; authentication uses the current user's platform SSO and retains tokens only in Host memory. No shared model key or user-controlled identity replaces that authorization. The native page calls owner-authenticated `/api/zhishu-models/manage` operations and needs no separate model-page URL. The knowledge page has its own browser URL configuration.

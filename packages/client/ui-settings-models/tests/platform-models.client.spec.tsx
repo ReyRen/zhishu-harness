@@ -61,6 +61,8 @@ describe('native shared-model settings', () => {
     const first = page(controller)
     expect(first.container.querySelector('iframe')).toBeNull()
     expect(screen.getByRole('heading', { name: '模型设置' })).toBeTruthy()
+    expect(screen.getByText('openai')).toBeTruthy()
+    expect(screen.getByText((10000).toLocaleString())).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '编辑' }))
     fireEvent.change(screen.getByLabelText('显示名称'), { target: { value: '保留我的草稿' } })
     first.unmount()
