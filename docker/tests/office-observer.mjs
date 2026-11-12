@@ -5,7 +5,7 @@ import { copyFile, readFile, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 /** Live services inspected by this test-only probe. */
-export const inject = ['loader', 'tools', 'skills', 'agents', 'officeKit']
+export const inject = ['loader', 'tools', 'skills', 'agents', 'agentPresets', 'officeKit']
 
 /**
  * Register an owned listener whose reply reports live tool and skill state.
@@ -30,8 +30,9 @@ export function apply(ctx) {
       const handle = await ctx.agents.create({ sessionId: 'office-image-smoke',
         meta: { cwd: message.directory, agentPreset: 'standard' } })
       try {
+        await ctx.agentPresets.mount(handle.agent.ctx)
         const tools = ['office_render', 'office_convert', 'office_recalculate']
-        for (const name of tools) assert.ok(handle.agent.ctx.tools.get(name), `Standard preset must register ${name}`)
+        for (const name of tools) assert.ok(ctx.tools.get(name, handle.agent), `Standard preset must register ${name}`)
         const source = async (extension) => {
           const path = join(message.directory, `sample.${extension}`)
           const info = await stat(path)
