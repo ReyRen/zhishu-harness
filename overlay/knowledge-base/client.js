@@ -559,7 +559,7 @@ window.__ModuleLoader__.load({
           }
           if (!data || typeof data !== 'object' || Array.isArray(data)) return
           if (data.type === 'weknora:open-model-settings') {
-            window.dispatchEvent(new Event('zhishu:open-model-settings'))
+            props.openModelSettings()
             return
           }
           if (data.type !== READY_TYPE) {
@@ -710,6 +710,7 @@ window.__ModuleLoader__.load({
         key: PANEL_ID,
         inject: () => ({
           onModelsChanged: listener => ctx.remote.$on('llm/models-updated', listener),
+          openModelSettings: () => ctx.emit('settings/open', 'models'),
           startAssistant: () => {
             host.run(Promise.resolve().then(() => host.releaseToMainSession())
               .then(() => ctx.uiWorkspace.startSession()))

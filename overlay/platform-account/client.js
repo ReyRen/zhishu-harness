@@ -63,13 +63,8 @@ window.__ModuleLoader__.load({
         : ''
 
       React.useEffect(function () {
-        const openModels = function () {
-          setOpen(false)
-          props.openSettings('models')
-        }
-        window.addEventListener('zhishu:open-model-settings', openModels)
-        return function () { window.removeEventListener('zhishu:open-model-settings', openModels) }
-      }, [props.openSettings])
+        if (props.settingsOpen) setOpen(false)
+      }, [props.settingsOpen])
 
       React.useEffect(function () {
         const api = window.zhishuPlatform

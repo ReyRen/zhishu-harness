@@ -4,16 +4,16 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import * as React from 'react'
-import { act, cleanup, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { expect, it, vi } from 'vitest'
 import * as primitives from '@deepseek-ai/dsh-client-ui-primitives'
 
-it('accepts settings requests only from the knowledge frame and releases model-update listeners on unmount', async () => {
+it('opens settings without a Desktop launcher only for the trusted knowledge frame and releases its listeners on unmount', async () => {
   const disposers: Array<() => void> = []
+  const navigate = vi.fn()
   let apply: (ctx: object) => void = () => { throw new Error('Plugin not loaded') }
   let modelsChanged: (() => void) | undefined
   let KnowledgePanel: React.ComponentType<Record<string, unknown>> = () => null
-  let AccountLauncher: React.ComponentType<{ openSettings(section: string): void }> = () => null
   let panelProps: Record<string, unknown> = {}
   const carrier = {
     parent: {}, top: {}, setTimeout, clearTimeout,
@@ -33,7 +33,7 @@ it('accepts settings requests only from the knowledge frame and releases model-u
     await load('knowledge-base/client.js')
     apply({
       effect(setup: () => (() => void) | undefined) { const stop = setup(); if (stop) disposers.push(stop) },
-      on() { return () => {} },
+      on() { return () => {} }, emit: navigate,
       locale: { register() { return () => {} }, bind() { return (key: string) => key } },
       commandUi: { decorate() { return () => {} }, dismiss() {} }, sessions: { binding() {} },
       remote: { $on(_event: string, listener: () => void) { modelsChanged = listener; return () => { modelsChanged = undefined } } },
@@ -48,31 +48,55 @@ it('accepts settings requests only from the knowledge frame and releases model-u
         },
       },
     })
-    await load('platform-account/client.js')
-    apply({ slots: {
-      inject(_name: string, setup: () => Generator) { return Array.from(setup()) },
-      register(_definition: object, component: typeof AccountLauncher) { AccountLauncher = component; return () => {} },
-    } })
-    const openSettings = vi.fn()
-    const page = render(<><AccountLauncher openSettings={openSettings} /><KnowledgePanel {...panelProps} /></>)
+    const page = render(<KnowledgePanel {...panelProps} />)
     await waitFor(() => { expect(page.container.querySelector('iframe')).not.toBeNull() })
     const frame = page.container.querySelector('iframe')!
     const request = (origin: string, source: Window | null) => {
       window.dispatchEvent(new MessageEvent('message', { origin, source, data: { type: 'weknora:open-model-settings' } }))
     }
     act(() => { request('http://172.18.36.230:5175', window); request('https://evil.test', frame.contentWindow) })
-    expect(openSettings).not.toHaveBeenCalled()
+    expect(navigate).not.toHaveBeenCalled()
     act(() => { request('http://172.18.36.230:5175', frame.contentWindow) })
-    expect(openSettings).toHaveBeenCalledExactlyOnceWith('models')
+    expect(navigate).toHaveBeenCalledExactlyOnceWith('settings/open', 'models')
     const post = vi.spyOn(frame.contentWindow!, 'postMessage')
     act(() => { modelsChanged?.() })
     expect(post).toHaveBeenCalledWith({ type: 'weknora:models-updated' }, 'http://172.18.36.230:5175')
     page.unmount()
     expect(modelsChanged).toBeUndefined()
-    act(() => { carrier.dispatchEvent(new Event('zhishu:open-model-settings')) })
-    expect(openSettings).toHaveBeenCalledTimes(1)
+    act(() => { request('http://172.18.36.230:5175', frame.contentWindow) })
+    expect(navigate).toHaveBeenCalledTimes(1)
   } finally {
     cleanup()
     disposers.reverse().forEach((stop) => { stop() })
+  }
+})
+
+it('closes the Desktop account menu when the common settings shell opens', async () => {
+  let AccountLauncher: React.ComponentType<{ settingsOpen: boolean; openSettings(): void }> = () => null
+  runInNewContext(await readFile(resolve(import.meta.dirname, '../../../overlay/platform-account/client.js'), 'utf8'), {
+    window: { innerHeight: 900, __ModuleLoader__: {
+      load(entry: { factory(require: () => typeof React): { apply(ctx: object): void } }) {
+        entry.factory(() => React).apply({ slots: {
+          inject(_name: string, setup: () => Generator) { return Array.from(setup()) },
+          register(_definition: object, component: typeof AccountLauncher) { AccountLauncher = component; return () => {} },
+        } })
+      },
+    } }, document,
+  })
+  try {
+    const openSettings = vi.fn()
+    const page = render(<AccountLauncher settingsOpen={false} openSettings={openSettings} />)
+    fireEvent.click(page.getByRole('button', { name: '账号', exact: true }))
+    expect(page.getByRole('menu')).toBeTruthy()
+    page.rerender(<AccountLauncher settingsOpen={true} openSettings={openSettings} />)
+    expect(page.queryByRole('menu')).toBeNull()
+    expect(openSettings).not.toHaveBeenCalled()
+    page.rerender(<AccountLauncher settingsOpen={false} openSettings={openSettings} />)
+    fireEvent.click(page.getByRole('button', { name: '账号', exact: true }))
+    fireEvent.click(page.getByRole('menuitem', { name: '设置', exact: true }))
+    expect(openSettings).toHaveBeenCalledOnce()
+    expect(page.queryByRole('menu')).toBeNull()
+  } finally {
+    cleanup()
   }
 })
