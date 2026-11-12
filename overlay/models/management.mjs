@@ -106,12 +106,12 @@ export function createModelManagement(runtime, changed) {
             }
             return { id: tenantID(member.tenant_id), name: member.tenant_name, role: member.role }
           })
-          return Response.json({ data: { spaces, currentTenantId: me.tenant?.id ? tenantID(me.tenant.id) : undefined,
+          return Response.json({ data: { spaces, homeTenantId: tenantID(me.user?.tenant_id),
             systemAdmin: me.user?.is_system_admin === true } }, { headers: HEADERS })
         }
-        const tenant = tenantID(url.searchParams.get('tenantId'))
         if (!['models', 'providers'].includes(operation)) invalid()
-        const data = await backend(runtime, operation === 'models' ? '/models' : '/models/providers', 'GET', undefined, tenant, request.signal)
+        const tenant = operation === 'providers' ? tenantID(url.searchParams.get('tenantId')) : undefined
+        const data = await backend(runtime, operation === 'models' ? '/models/available' : '/models/providers', 'GET', undefined, tenant, request.signal)
         if (!Array.isArray(data)) throw new KnowledgeAuthError('invalid_model_settings_response', 502)
         return Response.json({ data: operation === 'models' ? data.map(publicModel) : data }, { headers: HEADERS })
       }

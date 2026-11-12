@@ -10,7 +10,7 @@ import { createKnowledgeRuntime } from '../../overlay/weknora/runtime.mjs'
 
 const row = {
   id: 'qwen-chat', name: 'Qwen3.5-122B-A10B-GPTQ-Int4', display_name: '内网对话模型', type: 'KnowledgeQA', status: 'active',
-  tenant_id: 10000, updated_at: '2026-11-11T09:00:00Z',
+  tenant_id: 10000, is_builtin: true, updated_at: '2026-11-11T09:00:00Z',
   parameters: { context_window: 200000, max_output_tokens: 8192 },
   capabilities: { api: 'openai-completions', input: ['text'], reasoning: true, thinking_levels: ['off', 'auto'] },
 }
@@ -147,17 +147,18 @@ test('an owner-verified import map keeps the exact legacy route when model names
   assert.deepEqual(await adapter.selectionFor(before), { provider: UNIFIED_PROVIDER, model: '10004:imported-qwen' })
 })
 
-test('switching the settings workspace does not hide models pinned by conversations in another authorized workspace', async () => {
+test('the model picker uses the user directory independently of the active business space', async () => {
   const runtime = { state: () => ({ authenticated: true }), async fetchModels(path, _init, tenant) {
     return Response.json({ success: true, data: path === '/auth/me'
-      ? { tenant: { id: 10004, name: 'Private' }, memberships: [{ tenant_id: 10004, tenant_name: 'Private' }, { tenant_id: 10002, tenant_name: 'Team' }] }
-      : [{ ...row, tenant_id: Number(tenant) }] })
+      ? { user: { tenant_id: 10004 }, tenant: { id: 10002, name: 'Team' } }
+      : path === '/models/available' ? [{ ...row, tenant_id: 10004, is_builtin: false }, { ...row, id: 'team-qwen', tenant_id: 10002, is_builtin: false }, { ...row, id: 'builtin-qwen', is_builtin: true }]
+        : [{ ...row, tenant_id: Number(tenant) }] })
   } }
   const adapter = new UnifiedModelsAdapter(ctx, runtime)
   adapter.tenant = '10002'
   const catalog = await adapter.listModels()
-  assert.deepEqual(catalog.map(model => model.id), ['10004:qwen-chat', '10002:qwen-chat'])
-  assert.equal(catalog[0].badge.text, 'Private')
+  assert.deepEqual(catalog.map(model => model.id), ['10004:qwen-chat', '10002:team-qwen', '10004:builtin-qwen'])
+  assert.ok(catalog.every(model => !Object.hasOwn(model, 'badge')))
 })
 
 test('model calls carry the user SSO and workspace override; logout cancels a live model stream', async t => {
@@ -191,4 +192,9 @@ test('model calls carry the user SSO and workspace override; logout cancels a li
   await assert.rejects(stream.text(), /abort/iu)
   await assert.rejects(runtime.fetchModels('/models'), { code: 'knowledge_login_required' })
   await assert.rejects(runtime.fetchModels('//untrusted-host/models'), { code: 'unsupported_model_operation' })
+})
+
+test('retired routes select the configured model owner independently of the business context', () => {
+  const selected = migrateSelection({ provider: 'retired', model: 'missing' }, [{ ...row, tenant_id: 10004, is_builtin: false }], '10002')
+  assert.deepEqual(selected, { provider: UNIFIED_PROVIDER, model: '10004:qwen-chat' })
 })

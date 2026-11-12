@@ -3,11 +3,11 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write overlay/models/README.md
 /unified-model-settings:
-  en: 61ea7bbc74116c98
-  zh: da4576533ef80c65
+  en: 803f0baa8bfa2b27
+  zh: 94554cd3e00d880b
 /unified-model-settings/configuration-and-execution:
-  en: 040a27831f071ef0
-  zh: a6b3c723df46e3e8
+  en: 5a111bdb9e2037a4
+  zh: 2463e8efcca493e0
 /unified-model-settings/existing-profiles:
   en: 6bc60b0f614dd94e
   zh: 997221bca07b50d6

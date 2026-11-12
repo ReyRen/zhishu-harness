@@ -12,7 +12,7 @@ export interface PlatformModelsState {
   status: 'idle' | 'loading' | 'ready' | 'error'
   refreshing: boolean
   context: PlatformModelsContext | null
-  tenantId: PlatformModelTenantId | null
+  homeTenantId: PlatformModelTenantId | null
   rows: PlatformModel[]
   providers: PlatformModelProvider[]
   filter: PlatformModelType | 'all'
@@ -26,21 +26,22 @@ export interface PlatformModelsState {
   deleting: PlatformModel | null
 }
 
-const initial = (): PlatformModelsState => ({ status: 'idle', refreshing: false, context: null, tenantId: null,
+const initial = (): PlatformModelsState => ({ status: 'idle', refreshing: false, context: null, homeTenantId: null,
   rows: [], providers: [], filter: 'all', query: '', error: null, draft: null, editorError: null,
   uncertain: false, busy: null, tested: null, deleting: null })
 const failureCode = (error: unknown): PlatformModelFailureCode => error instanceof PlatformModelFailure ? error.code : 'unavailable'
 
 /**
  * Whether membership and builtin policy permit changing a row.
- * @param state - current authoritative workspace context.
+ * @param state - current authoritative model permissions.
  * @param model - optional row whose builtin policy must also be checked.
  * @returns whether the native editor may offer mutation actions; the backend enforces authorization again.
  */
 export function canManagePlatformModels(state: PlatformModelsState, model?: PlatformModel): boolean {
-  const role = state.context?.spaces.find(space => space.id === state.tenantId)?.role
-  return (role === 'admin' || role === 'owner' || state.context?.systemAdmin === true)
-    && (!model?.builtin || state.context?.systemAdmin === true)
+  if (model?.builtin) return state.context?.systemAdmin === true
+  const owner = model?.ownerTenantId || state.homeTenantId
+  const role = state.context?.spaces.find(space => space.id === owner)?.role
+  return role === 'admin' || role === 'owner'
 }
 
 /** Owns authenticated requests, cached rows and drafts until plugin disposal. */
@@ -87,19 +88,26 @@ export class PlatformModelsStore {
     this.reads = reads
     const signal = AbortSignal.any([reads.signal, this.lifetime.signal])
     const generation = ++this.generation
-    const selected = this.store.getSnapshot().tenantId
     this.store.update((state) => { state.refreshing = true; state.error = null; if (!state.rows.length) state.status = 'loading' })
     try {
       await this.auth.ready(signal)
       const context = await this.api.context(signal)
-      const tenant = context.spaces.some(space => space.id === selected) ? selected
-        : context.spaces.find(space => space.id === context.currentTenantId)?.id || context.spaces[0]?.id
+      const tenant = context.homeTenantId
       if (!tenant) throw new PlatformModelFailure('accessDenied')
-      const [rows, providers] = await Promise.all([this.api.models(tenant, signal), this.api.providers(tenant, signal)])
+      const [rows, providers] = await Promise.all([this.api.models(signal), this.api.providers(tenant, signal)])
       if (signal.aborted || generation !== this.generation) return
-      this.store.update((state) => { state.context = context; state.tenantId = tenant; state.rows = rows
+      this.store.update((state) => { state.context = context; state.homeTenantId = tenant; state.rows = rows
         state.providers = providers; state.status = 'ready'; state.refreshing = false })
-      if (!canManagePlatformModels(this.store.getSnapshot())) this.store.update((state) => { state.draft = null; state.deleting = null })
+      this.store.update((state) => {
+        const edited = state.draft?.id ? state.rows.find(model => model.id === state.draft?.id) : undefined
+        if (state.draft && (state.draft.id && !edited || !canManagePlatformModels(state, edited))) {
+          state.draft = null; state.editorError = null; state.error = 'accessDenied'
+        }
+        const deleting = state.deleting
+        if (deleting && (!state.rows.some(model => model.id === deleting.id) || !canManagePlatformModels(state, deleting))) {
+          state.deleting = null
+        }
+      })
     } catch (error) {
       if (!signal.aborted && generation === this.generation) this.store.update((state) => {
         state.status = state.rows.length ? 'ready' : 'error'; state.refreshing = false; state.error = failureCode(error)
@@ -108,17 +116,6 @@ export class PlatformModelsStore {
         }
       })
     }
-  }
-
-  /**
-   * Select another authorized workspace while no editor or operation is open.
-   * @param tenantId - explicit membership selected by the user.
-   */
-  selectSpace(tenantId: PlatformModelTenantId): void {
-    const state = this.store.getSnapshot()
-    if (state.busy || state.draft || state.deleting || !state.context?.spaces.some(space => space.id === tenantId)) return
-    this.store.update((value) => { value.tenantId = tenantId; value.rows = []; value.providers = [] })
-    this.refresh()
   }
 
   /**
@@ -150,7 +147,7 @@ export class PlatformModelsStore {
    * Replace draft values and invalidate results belonging to older values.
    * @param patch - explicit field edits; identity and preserved parameters are not editable.
    */
-  patchDraft(patch: Partial<Omit<PlatformModelDraft, 'id' | 'original' | 'savedApiKey' | 'savedAppSecret'>>): void {
+  patchDraft(patch: Partial<Omit<PlatformModelDraft, 'id' | 'ownerTenantId' | 'original' | 'savedApiKey' | 'savedAppSecret'>>): void {
     if (this.store.getSnapshot().busy || this.store.getSnapshot().uncertain) return
     this.store.update((state) => { if (state.draft) { Object.assign(state.draft, patch); state.tested = null; state.editorError = null } })
   }
@@ -164,8 +161,11 @@ export class PlatformModelsStore {
   private async withDraft(kind: 'save' | 'test'): Promise<void> {
     const state = this.store.getSnapshot()
     const draft = state.draft
-    const tenant = state.tenantId
-    if (!draft || !tenant || state.busy || state.uncertain || !canManagePlatformModels(state)) return
+    const model = draft?.id ? state.rows.find(row => row.id === draft.id) : undefined
+    const tenant = model?.builtin ? state.homeTenantId : draft?.ownerTenantId || state.homeTenantId
+    const role = state.context?.spaces.find(space => space.id === tenant)?.role
+    if (!draft || !tenant || state.busy || state.uncertain
+      || !(model?.builtin ? state.context?.systemAdmin : role === 'owner' || role === 'admin')) return
     const operation = new AbortController()
     this.operation = operation
     const signal = AbortSignal.any([this.lifetime.signal, operation.signal])
@@ -185,7 +185,7 @@ export class PlatformModelsStore {
       const model = await this.api.save(tenant, definition, draft.id, signal)
       definitionSaved = true
       if (signal.aborted) return
-      this.store.update((value) => { if (value.draft) value.draft.id = model.id })
+      this.store.update((value) => { if (value.draft) { value.draft.id = model.id; value.draft.ownerTenantId = tenant } })
       const values = { ...(draft.apiKey ? { api_key: draft.apiKey } : {}), ...(draft.appSecret ? { app_secret: draft.appSecret } : {}) }
       if (Object.keys(values).length) await this.api.credentials(tenant, model.id, values, signal)
       if (draft.clearApiKey) await this.api.clearCredential(tenant, model.id, 'api_key', signal)
@@ -207,7 +207,7 @@ export class PlatformModelsStore {
 
   /**
    * Copy a model using backend-owned credentials without exposing their values.
-   * @param model - row to copy into the currently selected workspace.
+   * @param model - authorized source row; stored credentials stay on the backend.
    * @param displayName - localized initial name for the copy.
    */
   copy(model: PlatformModel, displayName: string): void { this.own(this.mutateRow('copy', model, displayName)) }
@@ -225,9 +225,9 @@ export class PlatformModelsStore {
 
   private async mutateRow(kind: 'copy' | 'delete', model: PlatformModel, displayName = ''): Promise<void> {
     const state = this.store.getSnapshot()
-    const tenant = state.tenantId
+    const tenant = model.builtin ? state.homeTenantId : model.ownerTenantId
     if (!tenant || state.busy || state.error === 'saveUnconfirmed'
-      || !canManagePlatformModels(state, kind === 'copy' ? undefined : model)) return
+      || !canManagePlatformModels(state, model)) return
     const operation = new AbortController()
     this.operation = operation
     const signal = AbortSignal.any([operation.signal, this.lifetime.signal])

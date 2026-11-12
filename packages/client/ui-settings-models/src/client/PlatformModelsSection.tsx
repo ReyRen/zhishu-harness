@@ -5,7 +5,7 @@ import { Button, Input, Modal, IconPlusOutlineRegular, IconChevronDownOutlineReg
   IconSearchOutlineRegular, IconRefreshOutlineRegular, IconSparkleRegular, IconDatabaseOutlineRegular,
   IconLayersOutlineRegular, IconEyeOutlineRegular, IconMicrophoneOutlineRegular,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import { platformModelRecord, platformModelTenantId, platformModelType, platformModelTypes } from './platform-models-api.ts'
+import { platformModelRecord, platformModelType, platformModelTypes } from './platform-models-api.ts'
 import type { PlatformModelDraft } from './platform-models-draft.ts'
 import { platformModelExtra, platformModelExtraValues } from './platform-models-draft.ts'
 import { canManagePlatformModels, type PlatformModelsStore, type PlatformModelsState } from './platform-models-store.ts'
@@ -154,9 +154,6 @@ export function PlatformModelsSection({ controller, useSnapshot, t }: PlatformMo
       </Button>
     </div>
     <div className={css.toolbar}>
-      <Field label={t('workspace')}><SelectControl value={state.tenantId || ''} disabled={state.busy !== null || !!state.draft || !!state.deleting} onChange={(event) => { controller.selectSpace(platformModelTenantId(event.target.value)) }}>
-        {state.context?.spaces.map(space => <option key={space.id} value={space.id}>{space.name}</option>)}
-      </SelectControl></Field>
       <Input className={css.search ?? ''} icon={<IconSearchOutlineRegular size={16} />} aria-label={t('search')} placeholder={t('search')} value={state.query} onChange={(event) => { controller.filter({ query: event.target.value }) }} />
       <Button size="sm" variant="ghost" icon={<IconRefreshOutlineRegular size={16} />} disabled={state.refreshing || state.busy !== null} onClick={() => { controller.refresh() }}>{t('refresh')}</Button>
     </div>
@@ -198,7 +195,7 @@ export function PlatformModelsSection({ controller, useSnapshot, t }: PlatformMo
             <div className={css.cardFoot}><span className={css.status} data-state={model.status}>{t(model.status === 'downloading' || model.status === 'download_failed' ? model.status : 'active')}</span>
               <div className={css.actions}>
                 {canManagePlatformModels(state, model) && <Button size="sm" variant="ghost" disabled={state.busy !== null} onClick={() => { controller.edit(model.type, model) }}>{t('edit')}</Button>}
-                {writable && <Button size="sm" variant="ghost" disabled={state.busy !== null} onClick={() => { controller.copy(model, `${model.displayName || model.name} · ${t('copySuffix')}`) }}>{t('copy')}</Button>}
+                {canManagePlatformModels(state, model) && <Button size="sm" variant="ghost" disabled={state.busy !== null} onClick={() => { controller.copy(model, `${model.displayName || model.name} · ${t('copySuffix')}`) }}>{t('copy')}</Button>}
                 {canManagePlatformModels(state, model) && <Button size="sm" variant="ghost" disabled={state.busy !== null} onClick={() => { controller.confirmDelete(model) }}>{t('remove')}</Button>}
               </div>
             </div>

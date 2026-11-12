@@ -6,9 +6,9 @@ export const UNIFIED_PROVIDER = 'zhishu-models'
 function failure(code, status) {
   const messages = {
     MODEL_LOGIN_REQUIRED: 'Sign in to the platform again, then retry the model request.',
-    MODEL_ACCESS_DENIED: 'This workspace no longer allows the selected model. Select an available model.',
+    MODEL_ACCESS_DENIED: 'You no longer have access to the selected model. Select an available model.',
     MODEL_NOT_FOUND: 'The selected model was removed. Select an available model in Settings.',
-    MODEL_WORKSPACE_REQUIRED: 'Open model settings and select a workspace before choosing a model.',
+    MODEL_WORKSPACE_REQUIRED: 'Your model configuration is unavailable. Sign in to the platform and retry.',
     MODEL_CONFIGURATION_CHANGED: 'The model configuration changed. Select the model again and retry.',
     MODEL_STREAM_INTERRUPTED: 'The model response was interrupted. Check the conversation before retrying.',
     MODEL_STOP_SEQUENCES_UNSUPPORTED: 'The unified model service does not support explicit stop sequences. Remove this request option.',
@@ -226,28 +226,26 @@ export class UnifiedModelsAdapter extends LlmAdapter {
   async scope() {
     if (this.tenant) return this.tenant
     const me = await jsonResponse(await this.request('/auth/me'))
-    return scopeID(me.tenant?.id)
+    return scopeID(me.user?.tenant_id)
   }
   async listModels() {
     if (!this.runtime.state().authenticated) return []
-    const me = await jsonResponse(await this.request('/auth/me'))
-    const spaces = new Map((me.memberships || []).map(member => [scopeID(member.tenant_id), member.tenant_name || '']))
-    if (me.tenant?.id) spaces.set(scopeID(me.tenant.id), me.tenant.name || '')
-    if (this.tenant && !spaces.has(this.tenant)) throw failure('MODEL_ACCESS_DENIED')
-    const catalogs = await Promise.all([...spaces].map(async ([tenant, name]) => {
-      const rows = await jsonResponse(await this.request('/models', {}, tenant))
-      if (!Array.isArray(rows)) throw failure('INVALID_MODEL_CATALOG')
-      return rows.filter(row => row.type === 'KnowledgeQA' && row.status === 'active').map(row => {
-        const { provider, id, name: label, inputModalities } = describeModel(row, tenant)
-        return { provider, id, name: label, inputModalities, ...(spaces.size > 1 && name ? { badge: { text: name, tone: 'neutral' } } : {}) }
-      })
-    }))
-    return catalogs.flat()
+    const [me, rows] = await Promise.all([
+      jsonResponse(await this.request('/auth/me')),
+      jsonResponse(await this.request('/models/available')),
+    ])
+    if (!Array.isArray(rows)) throw failure('INVALID_MODEL_CATALOG')
+    const home = scopeID(me.user?.tenant_id)
+    return rows.filter(row => row.type === 'KnowledgeQA' && row.status === 'active').map(row => {
+      const tenant = row.is_builtin ? home : scopeID(row.tenant_id)
+      const { provider, id, name, inputModalities } = describeModel(row, tenant)
+      return { provider, id, name, inputModalities }
+    })
   }
   async refresh(tenant, signal) {
     const generation = ++this.refreshGeneration
     const next = tenant === undefined ? await this.scope() : scopeID(tenant)
-    const rows = await jsonResponse(await this.request('/models', { signal }, next))
+    const rows = await jsonResponse(await this.request('/models/available', { signal }))
     if (!Array.isArray(rows)) throw failure('INVALID_MODEL_CATALOG')
     if (generation !== this.refreshGeneration) return
     this.tenant = next
@@ -280,7 +278,7 @@ export class UnifiedModelsAdapter extends LlmAdapter {
   async selectionFor(before, rows, tenant) {
     const mapped = this.legacySelections.find(item => item.provider === before?.provider && item.model === before?.model)
     const target = mapped ? scopeID(mapped.tenantID) : tenant || await this.scope()
-    if (!rows || target !== tenant) rows = await jsonResponse(await this.request('/models', {}, target))
+    if (!rows || mapped && target !== tenant) rows = await jsonResponse(await this.request(mapped ? '/models' : '/models/available', {}, mapped ? target : undefined))
     if (!Array.isArray(rows)) throw failure('INVALID_MODEL_CATALOG')
     return migrateSelection(before, rows, target, this.legacySelections)
   }
@@ -321,7 +319,7 @@ export function migrateSelection(before, rows, tenant, legacySelections = []) {
   const defaults = chat.filter(row => row.is_default || row.default_for?.includes('chat'))
   const selected = matches.length === 1 ? matches[0] : matches.length > 1 ? undefined
     : defaults.length === 1 ? defaults[0] : defaults.length === 0 && chat.length === 1 ? chat[0] : undefined
-  return selected ? { provider: UNIFIED_PROVIDER, model: describeModel(selected, tenant).id } : undefined
+  return selected ? { provider: UNIFIED_PROVIDER, model: describeModel(selected, selected.is_builtin ? tenant : scopeID(selected.tenant_id)).id } : undefined
 }
 
 export function installUnifiedModels(ctx, runtime, legacySelections = []) {

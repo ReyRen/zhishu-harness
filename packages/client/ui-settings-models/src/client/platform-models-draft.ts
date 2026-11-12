@@ -8,6 +8,7 @@ import {
 /** An in-memory draft; secret inputs are never initialized from saved credentials. */
 export interface PlatformModelDraft {
   id?: PlatformModel['id']
+  ownerTenantId?: PlatformModel['ownerTenantId']
   type: PlatformModelType
   name: string
   displayName: string
@@ -47,7 +48,7 @@ export function createPlatformModelDraft(type: PlatformModelType, model?: Platfo
   const p = model?.parameters || {}
   const embedding = platformModelRecord(p.embedding_parameters) ? p.embedding_parameters : {}
   return {
-    ...(model ? { id: model.id } : {}), type: model?.type || type, name: model?.name || '',
+    ...(model ? { id: model.id, ownerTenantId: model.ownerTenantId } : {}), type: model?.type || type, name: model?.name || '',
     displayName: model?.displayName || '', source: model?.source === 'local' ? 'local' : 'remote',
     description: model?.description || '', provider: text(p.provider), baseUrl: text(p.base_url),
     interfaceType: text(p.interface_type), contextWindow: text(p.context_window), maxOutputTokens: text(p.max_output_tokens),
