@@ -7,7 +7,7 @@ import { pipeline } from 'node:stream/promises'
 const BODY_LIMIT = 70_000
 const TOOL_BODY_LIMIT = 1024 * 1024
 const routes = new Map([
-  ['GET', /^\/(?:knowledge-bases|shared-knowledge-bases|knowledge\/search|knowledge\/[^/]+|chunks\/[^/]+)$/u],
+  ['GET', /^\/(?:knowledge-bases|knowledge-bases\/[^/]+\/knowledge|shared-knowledge-bases|knowledge\/search|knowledge\/[^/]+|chunks\/[^/]+)$/u],
   ['POST', /^\/(?:knowledge-search|sessions|knowledge-chat\/[^/]+|agent-chat\/[^/]+)$/u],
 ])
 

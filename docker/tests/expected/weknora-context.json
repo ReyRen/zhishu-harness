@@ -1,0 +1,14 @@
+{
+  "selected_knowledge_base_ids": ["<selected-base>"],
+  "status": "retrieved",
+  "query": "Consult the knowledge base and explain the backup policy.",
+  "query_truncated": false,
+  "overview": {
+    "knowledge_bases": [{ "id": "<selected-base>", "total_documents": 1, "page": 1, "page_size": 8, "has_more": false }],
+    "documents": [{ "knowledge_id": "doc-backups", "knowledge_base_id": "<selected-base>", "title": "Backup policy", "parse_status": "completed", "summary": "Backups are retained for 30 days.", "summary_truncated": false }],
+    "total_documents": 1,
+    "complete": true
+  },
+  "retrieval": { "status": "matches" },
+  "passages": [{ "knowledge_id": "doc-backups", "document": "Backup policy", "content": "Backups are retained for 30 days.", "chunk_index": 0 }]
+}

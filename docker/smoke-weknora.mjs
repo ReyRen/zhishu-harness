@@ -45,6 +45,9 @@ const backend = createServer((request, response) => {
       send(200, { data: [{ id: `kb-${user}`, name: `Policies ${user}`, description: 'Backup policies' }] })
     } else if (url.pathname === '/api/v1/shared-knowledge-bases') {
       send(200, { data: [{ knowledge_base: { id: `kb-${user}-shared`, name: `Shared policies ${user}` }, permission: 'viewer' }] })
+    } else if (url.pathname === `/api/v1/knowledge-bases/${selectedKB}/knowledge`) {
+      send(200, { data: [{ id: 'doc-backups', knowledge_base_id: selectedKB, title: 'Backup policy',
+        parse_status: 'completed', description: text }], total: 1, page: 1, page_size: 8 })
     } else if (url.pathname === '/api/v1/knowledge-search') {
       assert.deepEqual(body.knowledge_base_ids, [selectedKB])
       send(200, { data: [chunk] })
@@ -80,7 +83,7 @@ async function probe(user, installed = false, sso = false) {
   await writeFile(patch, JSON.stringify([{ insert: [{ id: 'weknora-observer',
     name: pathToFileURL(join(directory, 'tests/weknora-observer.mjs')).href }] }]))
   const owner = serviceOwner()
-  let logs = '', timer
+  let logs = '', timer, firstPrompt
   const environment = {
     ...Object.fromEntries(Object.entries(process.env).filter(([name]) => !/(?:KEY|SECRET|TOKEN|PASSWORD|^WEKNORA_)/iu.test(name))),
     HOME: join(root, user), DSH_HOME: home, DSH_DEFAULT_WORKSPACE: workspace, DSH_WORKSPACE_ROOT: join(root, user),
@@ -133,6 +136,7 @@ async function probe(user, installed = false, sso = false) {
       child.stdout.on('data', remember)
       child.stderr.on('data', remember)
       child.on('message', message => {
+        if (message.knowledgePrompt && firstPrompt === undefined) firstPrompt = message.knowledgePrompt
         if (message.error) reject(new Error(message.error))
         else if (message.weknora) resolve(message.weknora)
       })
@@ -140,6 +144,11 @@ async function probe(user, installed = false, sso = false) {
     assert.equal(result.unloaded, true)
     assert.equal(result.selectionRequired, !installed)
     assert.equal(JSON.stringify(result).includes(`smoke-user-${user}`), false, 'Credentials never reach the transcript')
+    if (process.env.DSH_KNOWLEDGE_PROMPT_CAPTURE_DIRECTORY) {
+      const destination = process.env.DSH_KNOWLEDGE_PROMPT_CAPTURE_DIRECTORY
+      await mkdir(destination, { recursive: true })
+      await writeFile(join(destination, `${user}-${installed ? 'owned' : sso ? 'sso' : 'managed'}.json`), JSON.stringify(firstPrompt))
+    }
     const manifest = JSON.parse(await readFile(join(home, 'profiles/web/package.json'), 'utf8'))
     if (!installed) {
       assert.equal(manifest.dependencies?.['@wxg-prc-cpg/dsh-weknora'], undefined)

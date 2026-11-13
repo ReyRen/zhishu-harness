@@ -38,6 +38,8 @@ async function fixture(t) {
   await apply({
     effect(setup) { const cleanup = setup(); if (typeof cleanup === 'function') cleanups.push(cleanup) },
     tools: { register(tool) { tools.set(tool.name, tool) } },
+    systemPrompt: { context() { return () => {} } },
+    on() { return () => {} },
     commands: { register() { return () => {} } },
     sessionProjections: { async register() { return { stateOf: s => ({ selection: { knowledgeBaseIds: s.choice } }) } }, onChanged() { return () => {} } },
     connection: { fetch: { register(route) { routes.set(route.path, route); return () => {} } } },
