@@ -1,5 +1,6 @@
 /** Deterministic model for keyless WeKnora conversation checks. */
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { LlmAdapter } from '../../packages/llm/llm/lib/index.js'
 
 export const calls = [
@@ -9,25 +10,37 @@ export const calls = [
   ['weknora_ask', { query: 'Summarize the backup policy.' }],
 ]
 
-const selectedDescriptions = [
-  'Show the knowledge bases explicitly selected by the user for this conversation.',
-  'Search only the user-selected knowledge bases and return passages with document references. Do not widen the scope. Empty results mean no evidence was found.',
-  'Read a document belonging to the user-selected knowledge bases, using its knowledge_id from retrieval.',
-  'Ask WeKnora to compose a cited answer using only the user-selected knowledge bases. Uses a fresh scoped RAG session; custom agents, prior session IDs and web search are not allowed.',
-]
+export const selectedCalls = [calls[0], ['weknora_overview', {}], ...calls.slice(1)]
 
 export class KnowledgeModel extends LlmAdapter {
   async * stream(options) {
-    for (const [index, [name]] of calls.entries()) {
+    const managed = options.tools.some(tool => tool.name === 'weknora_overview')
+    const planned = managed ? selectedCalls : calls
+    for (const [name] of planned) {
       const tool = options.tools.find(tool => tool.name === name)
       assert.ok(tool, `${name} is model-visible`)
-      // Independently installed upstream bundles retain their own descriptions.
-      if (tool.description.startsWith('Show the knowledge bases explicitly') || options.tools.some(row => row.description === selectedDescriptions[0])) {
-        assert.equal(tool.description, selectedDescriptions[index])
-      }
     }
     const results = options.messages.filter(message => message.role === 'tool')
-    const next = calls[results.length]
+    if (results.length === 0) process.send?.({ knowledgePrompt: {
+      system: options.system, messages: options.messages, tools: options.tools,
+    } })
+    if (managed && results.length === 0) {
+      const section = options.messages.flatMap(message => message.source?.kind === 'runtime-context'
+        ? message.source.sections ?? [] : []).find(section => section.name === 'knowledge:selected')
+      assert.ok(section, 'selected retrieval is present in the first actual model request')
+      const evidence = JSON.parse(section.text.split('\n').at(-1))
+      assert.equal(typeof this.selectedBase, 'string')
+      const expected = JSON.parse(readFileSync(new URL('./expected/weknora-context.json', import.meta.url), 'utf8')
+        .replaceAll('<selected-base>', this.selectedBase))
+      assert.deepEqual(evidence, expected, 'model-visible evidence matches the keyless context snapshot')
+      assert.equal(evidence.status, 'retrieved')
+      assert.equal(evidence.overview.total_documents, 1)
+      assert.equal(evidence.passages[0].content, 'Backups are retained for 30 days.')
+      assert.equal(evidence.overview.documents[0].parse_status, 'completed')
+      const ask = options.tools.find(tool => tool.name === 'weknora_ask')
+      for (const field of ['agent_id', 'session_id', 'web_search']) assert.equal(ask.parameters.properties[field], undefined)
+    }
+    const next = planned[results.length]
     if (next) {
       const [name, args] = next
       const id = `weknora-call-${results.length}`
@@ -38,7 +51,7 @@ export class KnowledgeModel extends LlmAdapter {
       yield { type: 'finish', reason: { kind: 'tool-calls' } }
       return
     }
-    assert.equal(results.length, calls.length)
+    assert.equal(results.length, planned.length)
     for (const result of results) assert.equal(result.isError, false, JSON.stringify(result.content))
     const evidence = results.flatMap(result => result.content).filter(block => block.type === 'text').map(block => block.text).join('\n')
     assert.match(evidence, /Backups are retained for 30 days/u)

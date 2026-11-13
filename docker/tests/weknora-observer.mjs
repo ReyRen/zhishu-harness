@@ -1,13 +1,14 @@
 /** Drive the built Web agent through the installation's unmodified WeKnora tools. */
 import assert from 'node:assert/strict'
 import { createUserMessage } from '../../packages/llm/llm/lib/index.js'
-import { calls, KnowledgeModel } from './weknora-model.mjs'
+import { calls, selectedCalls, KnowledgeModel } from './weknora-model.mjs'
 
 export const inject = ['loader', 'llm', 'tools', 'agents', 'profileContext', 'commands']
 
 /** Register a deterministic model and observe one real conversation after Web readiness. */
 export function apply(ctx) {
-  ctx.llm.registerAdapter(['weknora-smoke'], new KnowledgeModel())
+  const model = new KnowledgeModel()
+  ctx.llm.registerAdapter(['weknora-smoke'], model)
   const events = []
   ctx.on('session/event', (session, event) => {
     if (session.id.startsWith('weknora-smoke')) events.push(event)
@@ -16,6 +17,7 @@ export function apply(ctx) {
     if (message?.command !== 'weknora-probe') return
     void (async () => {
       await ctx.loader.await()
+      model.selectedBase = message.knowledgeBaseId
       const instances = [...ctx.loader.entries()].filter(entry => entry.options.name === '@wxg-prc-cpg/dsh-weknora'
         || entry.options.name.replaceAll('\\', '/').endsWith('/weknora/index.mjs'))
       assert.equal(instances.length, 1)
@@ -25,11 +27,13 @@ export function apply(ctx) {
       })
       try {
         const managed = ctx.commands.find(handle.agent, 'knowledge') !== undefined
+        const enhanced = managed && ctx.tools.get('weknora_overview') !== undefined
+        const planned = enhanced ? selectedCalls : calls
         const resolveTools = () => ctx.tools.resolve({ agent: handle.agent,
           modelSelection: { provider: 'weknora-smoke', model: 'weknora-smoke' }, signal: AbortSignal.timeout(5_000) })
         if (managed) {
           const before = await resolveTools()
-          try { for (const [name] of calls) assert.equal(before.view(handle.agent).has(name), false, 'Unselected KB tools are absent') }
+          try { for (const [name] of planned) assert.equal(before.view(handle.agent).has(name), false, 'Unselected KB tools are absent') }
           finally { before.dispose() }
           const selected = await ctx.commands.execute(handle.agent, `/knowledge ${message.knowledgeBaseId}`, [], AbortSignal.timeout(5_000))
           assert.equal(selected.result.kind, 'success')
@@ -40,8 +44,15 @@ export function apply(ctx) {
         const toolCalls = events.filter(event => event.type === 'tool/call').map(event => event.data)
         const results = events.filter(event => event.type === 'tool/result').map(event => event.data)
         const answers = events.filter(event => event.type === 'assistant/message').map(event => event.data)
-        assert.equal(toolCalls.length, 4)
-        assert.equal(results.length, 4)
+        assert.equal(toolCalls.length, planned.length)
+        assert.equal(results.length, planned.length)
+        if (enhanced) {
+          const firstAssistant = events.findIndex(event => event.type === 'assistant/message')
+          const evidence = events.findIndex(event => event.type === 'user/message'
+            && event.data.source.kind === 'runtime-context'
+            && event.data.source.sections.some(section => section.name === 'knowledge:selected'))
+          assert.ok(evidence >= 0 && evidence < firstAssistant, 'the native Session logs retrieval before the first model answer')
+        }
         assert.match(JSON.stringify(answers), /Backups are retained for 30 days/u)
         let denied
         try {
@@ -53,15 +64,15 @@ export function apply(ctx) {
           const disabled = await ctx.commands.execute(handle.agent, '/knowledge off', [], AbortSignal.timeout(5_000))
           assert.equal(disabled.result.kind, 'success')
           const after = await resolveTools()
-          try { for (const [name] of calls) assert.equal(after.view(handle.agent).has(name), false, 'Clearing hides KB tools again') }
+          try { for (const [name] of planned) assert.equal(after.view(handle.agent).has(name), false, 'Clearing hides KB tools again') }
           finally { after.dispose() }
           await assert.rejects(ctx.tools.get('weknora_search').execute({ query: 'not selected' },
             { agent: handle.agent, callId: 'unselected-probe', signal: AbortSignal.timeout(5_000) }), { code: 'knowledge_selection_required' })
         }
         const fiber = instances[0].fiber
         await fiber.dispose()
-        for (const [name] of calls) assert.equal(ctx.tools.get(name), undefined, 'Unloading removes every tool')
-        process.send({ weknora: { names: calls.map(([name]) => name), toolCalls, results, answers,
+        for (const [name] of planned) assert.equal(ctx.tools.get(name), undefined, 'Unloading removes every tool')
+        process.send({ weknora: { names: planned.map(([name]) => name), toolCalls, results, answers,
           denied, selectionRequired: managed, unloaded: true, startedBundles: ctx.profileContext.startedBundles } })
       } finally { await handle.dispose() }
     })().catch(error => { process.send({ error: error.stack ?? error.message }) })

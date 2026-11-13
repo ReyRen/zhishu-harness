@@ -2,8 +2,9 @@
 import { createTools, resolveConfig, WeknoraClient } from '@wxg-prc-cpg/dsh-weknora'
 import { createKnowledgeRuntime } from './runtime.mjs'
 import { AccessibleKnowledgeClient, installSelection, knowledgeRequestID, SelectedKnowledgeClient, selectedArguments } from './selection.mjs'
+import { executeKnowledgeTool, installKnowledgeContext, knowledgeTool, overviewTool } from './retrieval.mjs'
 
-export const inject = ['tools', 'connection', 'commands', 'sessionProjections']
+export const inject = ['tools', 'connection', 'commands', 'sessionProjections', 'agents', 'systemPrompt']
 
 /** Register an owner-authenticated handoff and keep the upstream tool implementations. */
 export async function apply(ctx, config) {
@@ -34,6 +35,11 @@ export async function apply(ctx, config) {
   }
   const proxied = { ...resolved, ...transport, tenantId: resolved.apiKey ? resolved.tenantId : undefined }
   const selection = await installSelection(ctx, new AccessibleKnowledgeClient(proxied), resolved.knowledgeBaseIds)
+  const run = (context, callback) => selection.run(context, (ids, signal) => {
+    const requestID = knowledgeRequestID(platformUserID, context.agent.id, context.callId)
+    return callback(new SelectedKnowledgeClient({ ...proxied, knowledgeBaseIds: ids, agentId: undefined }, ids, requestID), signal)
+  })
+  installKnowledgeContext(ctx, selection, resolved, run)
   const descriptions = {
     list_knowledge_bases: 'Show the knowledge bases explicitly selected by the user for this conversation.',
     search: 'Search only the user-selected knowledge bases and return passages with document references. Do not widen the scope. Empty results mean no evidence was found.',
@@ -41,17 +47,19 @@ export async function apply(ctx, config) {
     ask: 'Ask WeKnora to compose a cited answer using only the user-selected knowledge bases. Uses a fresh scoped RAG session; custom agents, prior session IDs and web search are not allowed.',
   }
   for (const definition of createTools(new WeknoraClient(proxied), proxied)) {
-    ctx.tools.register({ ...definition,
-      description: descriptions[definition.name.slice(resolved.toolPrefix.length + 1)],
+    const selected = knowledgeTool({ ...definition,
+      description: descriptions[definition.name.slice(resolved.toolPrefix.length + 1)] }, resolved)
+    ctx.tools.register({ ...selected,
       execute(args, context) {
         return selection.run(context, async (ids, signal) => {
           const config = { ...proxied, knowledgeBaseIds: ids, agentId: undefined }
           const requestID = knowledgeRequestID(platformUserID, context.agent.id, context.callId)
           const client = new SelectedKnowledgeClient(config, ids, requestID)
           const current = createTools(client, config).find(tool => tool.name === definition.name)
-          return current.execute(selectedArguments(args, ids), { ...context, signal })
+          return executeKnowledgeTool(current, client, selectedArguments(args, ids), { ...context, signal })
         })
       },
     }, { when: ({ agent }) => selection.selectionOf(agent).length > 0 })
   }
+  ctx.tools.register(overviewTool(resolved, run), { when: ({ agent }) => selection.selectionOf(agent).length > 0 })
 }

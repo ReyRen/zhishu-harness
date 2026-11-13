@@ -106,6 +106,9 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: workspace:*
         version: link:packages/llm/llm
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:packages/core/tools
       '@deepseek-ai/dsh-home-paths':
         specifier: workspace:*
         version: link:packages/util/home-paths

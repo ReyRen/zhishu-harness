@@ -98,9 +98,40 @@ export class SelectedKnowledgeClient extends AccessibleKnowledgeClient {
     return super.listChunks(input, signal)
   }
   async search(input, signal) {
+    const result = await this.searchResult(input, signal)
+    this.searchDiagnostics = result.diagnostics
+    return result.hits
+  }
+  /** Preserve retrieval diagnostics independently of matching passages. */
+  async searchResult(input, signal) {
     this.checkScope(input.knowledgeBaseIds)
     for (const id of input.knowledgeIds) await this.getDocument(id, signal)
-    return super.search({ ...input, knowledgeBaseIds: this.knowledgeBaseIds }, signal)
+    const envelope = await this.fetchJson('/knowledge-search', { method: 'POST', body: {
+      query: input.query, knowledge_base_ids: this.knowledgeBaseIds,
+      ...(input.knowledgeIds.length ? { knowledge_ids: input.knowledgeIds } : {}),
+    } }, signal)
+    if (envelope?.success === false || !Array.isArray(envelope?.data)) throw new WeknoraApiError('Invalid knowledge search response', 502)
+    const rerank = envelope.meta?.rerank
+    const diagnostics = { status: envelope.data.length ? 'matches'
+      : rerank?.outcome === 'all_below_threshold' ? 'filtered' : 'no_matches' }
+    if (typeof rerank?.outcome === 'string') diagnostics.rerank_outcome = rerank.outcome
+    for (const key of ['candidate_count', 'result_count', 'threshold', 'effective_threshold', 'top_score']) {
+      if (typeof rerank?.[key] === 'number' && Number.isFinite(rerank[key])) diagnostics[key] = rerank[key]
+    }
+    return { hits: envelope.data, diagnostics }
+  }
+  /** List one page of metadata from a selected base; the backend checks shared access. */
+  async listDocuments(knowledgeBaseId, page, pageSize, signal) {
+    this.checkScope([knowledgeBaseId])
+    const envelope = await this.fetchJson(`/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}/knowledge`, {
+      method: 'GET', query: { page, page_size: pageSize },
+    }, signal)
+    if (envelope?.success === false || !Array.isArray(envelope?.data) || !Number.isSafeInteger(envelope.total)
+      || envelope.total < envelope.data.length
+      || envelope.data.some(row => typeof row?.id !== 'string' || row.knowledge_base_id !== knowledgeBaseId)) {
+      throw new WeknoraApiError('Invalid knowledge document catalog response', 502)
+    }
+    return { documents: envelope.data, total: envelope.total, page, page_size: pageSize }
   }
   // The upstream title endpoint searches every visible KB; do not issue that unscoped request.
   async findDocuments() { return [] }
@@ -185,7 +216,12 @@ export async function installSelection(ctx, client, allowedIds) {
         }
         signal.throwIfAborted()
         if (selectionOf(exec.agent) !== ids) throw new KnowledgeScopeError('knowledge_scope_changed', 'Knowledge selection changed; retry the question.')
-        return await callback(ids, signal)
+        const result = await callback(ids, signal)
+        signal.throwIfAborted()
+        return result
+      } catch (error) {
+        signal.throwIfAborted()
+        throw error
       } finally { group.delete(controller); if (!group.size) active.delete(exec.agent.id) }
     },
   }
