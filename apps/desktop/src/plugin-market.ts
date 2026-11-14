@@ -2,7 +2,7 @@
 
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
@@ -21,6 +21,8 @@ const READY_TIMEOUT_MS = 30_000
 export interface PluginMarketPackage {
   readonly name: string
   readonly version: string
+  /** Original npm metadata, integrity-checked against the packed bytes before seeding. */
+  readonly registryMetadata?: { readonly manifest: Record<string, unknown>; readonly publishedAt: string }
 }
 
 /**
@@ -96,21 +98,29 @@ export function workbenchMarketPackages(catalogPath: string): PluginMarketPackag
 
 /**
  * Read every packed package in a tarball directory, including runtime dependencies that are not catalog entries.
+ * The registry sidecar supplies manifests for large locked archives; seeding verifies their integrity before writing.
  * @param tarballsDir - Directory of npm-pack tarballs.
  * @returns Package name and version pairs in filename order.
  */
 export function tarballMarketPackages(tarballsDir: string): PluginMarketPackage[] {
+  const metadataPath = join(tarballsDir, 'registry-metadata.json')
+  const metadata = existsSync(metadataPath) ? record(JSON.parse(readFileSync(metadataPath, 'utf8'))) : {}
   return readdirSync(tarballsDir).filter(filename => filename.endsWith('.tgz')).sort().map((filename) => {
-    const manifest = readPackedManifest(readFileSync(join(tarballsDir, filename)))
+    const source = record(metadata[filename])
+    const manifest = source.manifest === undefined ? readPackedManifest(readFileSync(join(tarballsDir, filename))) : record(source.manifest)
     if (typeof manifest.name !== 'string' || manifest.name === '' || typeof manifest.version !== 'string' || manifest.version === '') {
       throw new Error(`desktop plugin market: ${filename} has no package name or version`)
     }
-    return { name: manifest.name, version: manifest.version }
+    if (source.manifest !== undefined && (typeof source.publishedAt !== 'string' || !Number.isFinite(Date.parse(source.publishedAt)))) {
+      throw new Error(`desktop plugin market: ${filename} has no original publication time`)
+    }
+    return { name: manifest.name, version: manifest.version,
+      ...typeof source.publishedAt === 'string' ? { registryMetadata: { manifest, publishedAt: source.publishedAt } } : {} }
   })
 }
 
 /**
- * Copy any catalog tarball that is not already in Verdaccio's storage and write its metadata.
+ * Seed packed bytes and metadata, repairing differing cached bytes. Registry sidecars retain original publication times.
  * @param storageDir - Writable Verdaccio storage directory.
  * @param tarballsDir - Directory of npm-pack tarballs, with scoped names flattened to `scope-name-version.tgz`.
  * @param packages - Packages that must be installable after this call.
@@ -124,15 +134,19 @@ export function seedPluginMarketStorage(
     const packed = join(tarballsDir, filename)
     if (!existsSync(packed)) throw new Error(`desktop plugin market: missing ${packed}`)
     const bytes = readFileSync(packed)
-    const manifest = readPackedManifest(bytes)
+    const manifest = item.registryMetadata?.manifest ?? readPackedManifest(bytes)
     if (manifest.name !== item.name || manifest.version !== item.version) {
       throw new Error(`desktop plugin market: ${packed} is ${String(manifest.name)}@${String(manifest.version)}`)
+    }
+    const integrity = `sha512-${createHash('sha512').update(bytes).digest('base64')}`
+    if (item.registryMetadata !== undefined && record(manifest.dist).integrity !== integrity) {
+      throw new Error(`desktop plugin market: integrity mismatch for ${item.name}@${item.version}`)
     }
     const directory = join(storageDir, item.name)
     mkdirSync(directory, { recursive: true })
     const stored = join(directory, filename)
-    if (!existsSync(stored)) copyFileSync(packed, stored)
-    writePackageDocument(join(directory, 'package.json'), item, bytes, manifest, filename)
+    if (!existsSync(stored) || !readFileSync(stored).equals(bytes)) writeFileSync(stored, bytes)
+    writePackageDocument(join(directory, 'package.json'), item, bytes, manifest, filename, integrity)
   }
   writePackageIndex(storageDir, packages.map(item => item.name))
 }
@@ -271,10 +285,11 @@ function yamlString(value: string): string {
 }
 
 function writePackageDocument(
-  path: string, item: PluginMarketPackage, bytes: Buffer, manifest: Record<string, unknown>, filename: string,
+  path: string, item: PluginMarketPackage, bytes: Buffer, manifest: Record<string, unknown>, filename: string, integrity: string,
 ): void {
   const shasum = createHash('sha1').update(bytes).digest('hex')
   const now = new Date().toISOString()
+  const originalDist = item.registryMetadata === undefined ? {} : record(manifest.dist)
   const existing: Record<string, unknown> = existsSync(path)
     ? JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
     : {}
@@ -283,8 +298,9 @@ function writePackageDocument(
     ...manifest,
     _id: `${item.name}@${item.version}`,
     dist: {
+      ...originalDist,
       shasum,
-      integrity: `sha512-${createHash('sha512').update(bytes).digest('base64')}`,
+      integrity,
       tarball: `${PLUGIN_MARKET_REGISTRY}/${item.name}/-/${filename}`,
     },
   }
@@ -292,7 +308,8 @@ function writePackageDocument(
   const document = {
     name: item.name,
     versions,
-    time: { ...time, modified: now, created: typeof time.created === 'string' ? time.created : now, [item.version]: now },
+    time: { ...time, modified: now, created: typeof time.created === 'string' ? time.created : item.registryMetadata?.publishedAt ?? now,
+      [item.version]: item.registryMetadata?.publishedAt ?? now },
     users: record(existing.users),
     'dist-tags': { ...record(existing['dist-tags']), latest: item.version },
     _uplinks: record(existing._uplinks),

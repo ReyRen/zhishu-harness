@@ -63,7 +63,8 @@ RUN test -n "${DSH_CLIENT_COMMIT_HASH}" \
 # Model-adapter tests exercise the built LLM contract used by the Web image.
 RUN node --test docker/tests/*.test.mjs
 
-RUN node --import tsx/esm docker/prepare-market.mjs /opt/dsh-market
+RUN --mount=type=cache,id=zhishu-harness-offline-market,target=/var/cache/dsh-market,sharing=locked \
+  DSH_MARKET_CACHE=/var/cache/dsh-market node --import tsx/esm docker/prepare-market.mjs /opt/dsh-market
 
 RUN --mount=type=cache,id=zhishu-harness-primary-runtime,target=/var/cache/dsh-primary-runtime,sharing=locked \
   case "${TARGETARCH}" in \

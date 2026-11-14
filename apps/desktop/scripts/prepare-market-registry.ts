@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { desktopTargetBuildPaths, resolveDesktopBuildTarget } from './desktop-build-paths.mjs'
+import { prepareOfflineDependencies } from '../../../market-registry/prepare-offline-dependencies.mjs'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
 const SOURCE = resolve(APP_ROOT, '..', '..', 'market-registry')
@@ -14,7 +15,7 @@ const MODULE_CACHE = join(APP_ROOT, '.desktop-build', 'downloads', 'market-regis
  * Install a real (non-linked) Verdaccio tree once, then copy the catalog payload
  * into the current target's resource directory.
  */
-function main(): void {
+async function main(): Promise<void> {
   const manifest = join(SOURCE, 'package.json')
   const catalog = join(SOURCE, 'plugins.json')
   const workbenches = join(SOURCE, 'workbenches.json')
@@ -31,6 +32,8 @@ function main(): void {
   cpSync(catalog, join(output, 'plugins.json'))
   cpSync(workbenches, join(output, 'workbenches.json'))
   cpSync(tarballs, join(output, 'tarballs'), { recursive: true })
+  await prepareOfflineDependencies({ lockPath: join(SOURCE, 'offline-dependencies.lock.json'),
+    tarballsDir: join(output, 'tarballs'), cacheDir: join(APP_ROOT, '.desktop-build', 'downloads', 'market-dependencies') })
   const bin = join(output, 'node_modules', 'verdaccio', 'bin', 'verdaccio')
   if (!existsSync(bin)) throw new Error(`desktop plugin market: verdaccio was not installed at ${bin}`)
   assertRealTree(join(output, 'node_modules'))
@@ -109,4 +112,4 @@ function assertRealTree(directory: string): void {
   }
 }
 
-main()
+await main()

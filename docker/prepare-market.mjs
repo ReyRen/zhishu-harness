@@ -3,13 +3,13 @@ import { spawnSync } from 'node:child_process'
 import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { pluginMarketPackages, seedPluginMarketStorage, workbenchMarketPackages } from '../apps/desktop/src/plugin-market.ts'
+import { pluginMarketPackages, seedPluginMarketStorage, tarballMarketPackages, workbenchMarketPackages } from '../apps/desktop/src/plugin-market.ts'
+import { prepareOfflineDependencies } from '../market-registry/prepare-offline-dependencies.mjs'
 
 const source = resolve(import.meta.dirname, '../market-registry')
 const output = resolve(process.argv[2])
 const staging = mkdtempSync(join(tmpdir(), 'dsh-market-prepare-'))
 try {
-  const packages = []
   const versions = new Set()
   for (const filename of readdirSync(join(source, 'tarballs')).sort()) {
     if (!filename.endsWith('.tgz')) continue
@@ -29,8 +29,10 @@ try {
     const alias = join(staging, `${name.replace(/^@/u, '').replaceAll('/', '-')}-${version}.tgz`)
     mkdirSync(dirname(alias), { recursive: true })
     copyFileSync(packed, alias)
-    packages.push({ name, version })
   }
+  await prepareOfflineDependencies({ lockPath: join(source, 'offline-dependencies.lock.json'), tarballsDir: staging,
+    cacheDir: process.env.DSH_MARKET_CACHE })
+  const packages = tarballMarketPackages(staging)
   for (const item of [...pluginMarketPackages(join(source, 'plugins.json')), ...workbenchMarketPackages(join(source, 'workbenches.json'))]) {
     if (!versions.has(`${item.name}@${item.version}`)) throw new Error(`Missing catalog tarball: ${item.name}@${item.version}`)
   }

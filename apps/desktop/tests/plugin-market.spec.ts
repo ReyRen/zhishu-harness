@@ -1,5 +1,6 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { gzipSync } from 'node:zlib'
+import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -8,6 +9,7 @@ import {
   pluginMarketHostEnvironment,
   pluginMarketPackages,
   seedPluginMarketStorage,
+  tarballMarketPackages,
   workbenchMarketPackages,
 } from '../src/plugin-market.ts'
 
@@ -92,5 +94,32 @@ describe('desktop plugin market', () => {
       versions: Record<string, { dist: { tarball: string } }>
     }
     expect(metadata.versions['1.0.0']?.dist.tarball).toBe('http://127.0.0.1:4873/@example/skin/-/example-skin-1.0.0.tgz')
+  })
+
+  it('preserves registry publication times and signatures for locked dependency metadata', () => {
+    const root = mkdtempSync(join(tmpdir(), 'policy-market-'))
+    directories.push(root)
+    const bytes = Buffer.from('integrity-locked registry archive')
+    const filename = 'example-runtime-1.0.0.tgz'
+    const integrity = `sha512-${createHash('sha512').update(bytes).digest('base64')}`
+    const signatures = [{ keyid: 'registry-key', sig: 'registry-signature' }]
+    const manifest = { name: '@example/runtime', version: '1.0.0', dist: { integrity, signatures } }
+    writeFileSync(join(root, filename), bytes)
+    writeFileSync(join(root, 'registry-metadata.json'), JSON.stringify({ [filename]: {
+      manifest, publishedAt: '2026-01-01T00:00:00.000Z',
+    } }))
+    const packages = tarballMarketPackages(root)
+    seedPluginMarketStorage(join(root, 'storage'), root, packages)
+    const result = JSON.parse(readFileSync(join(root, 'storage', '@example/runtime/package.json'), 'utf8')) as {
+      time: Record<string, string>
+      versions: Record<string, { dist: { integrity: string; signatures: typeof signatures; tarball: string } }>
+    }
+    expect(result.time['1.0.0']).toBe('2026-01-01T00:00:00.000Z')
+    expect(result.versions['1.0.0']?.dist).toEqual({ integrity, signatures,
+      shasum: createHash('sha1').update(bytes).digest('hex'),
+      tarball: 'http://127.0.0.1:4873/@example/runtime/-/example-runtime-1.0.0.tgz',
+    })
+    writeFileSync(join(root, filename), 'modified bytes')
+    expect(() => { seedPluginMarketStorage(join(root, 'other-storage'), root, packages) }).toThrow(/integrity mismatch/u)
   })
 })

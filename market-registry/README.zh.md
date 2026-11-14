@@ -25,6 +25,8 @@
 
 `plugins.json` 是插件市场列表。`workbenches.json` 是工作台市场列表。`tarballs/` 里还有未单独上架的依赖包。启动时如果私有源里还没有这个版本，会把 tarball 发布进 Verdaccio。
 
+桌面安装包和 Web 镜像还包含 [`offline-dependencies.lock.json`](offline-dependencies.lock.json) 锁定的依赖，其中包括受支持的可视化工作流依赖集合。pnpm 添加其他工作台时会检查现有 profile 的完整锁文件，因此已安装依赖也必须能从仓库读取元数据。打包阶段下载锁定的 npm 安装包，验证 SHA-512，并保留原始发布时间和签名字段。生成的安装包只放在打包缓存与产物中；运行时安装仅访问随包仓库。
+
 工作台目录条目仍要给出 `npm` 和 `version`，`url` 保持 `https://github.com/owner/repo`。不要把宿主指到 `https://market.dshdesktop.com/index.json`：那份目录的安装包在 GitHub Release，不会从这份私有源下载。
 
 `deepseek-harness-daily` 声明的宿主版本是 `0.2.0-rc.2` 或 `0.2.1-rc.2`。当前仓库是 `0.2.2-alpha.2`，安装会被宿主拒绝，直到上游放宽版本或单独授权。`dsh-mind-workbench` 的版本范围可以装到当前宿主。安装前要关掉 peer 自动安装，否则私有源里没有的 `cordis` 等 peer 会导致安装失败。`pnpm dsh:private` 已经带上这个设置。`pnpm dev:desktop` 要在同一个终端里先设置 `npm_config_auto_install_peers=false` 和 `pnpm_config_auto_install_peers=false`。
@@ -85,6 +87,8 @@ npm pack <包名>@<版本> --registry https://registry.npmjs.org/ --pack-destina
 4. 重启 `pnpm market:registry`，再重启 `pnpm dsh:private`。市场每次打开都会重新读取目录。打过的安装包要重新打包才会带上新插件。
 
 装进用户 profile 的是 `npm` 字段指向的包。这个包如果还有自己的运行时依赖，那些依赖的 tarball 也要按同样步骤放进来。peer 不需要拷，宿主已经提供。
+
+支持含额外 npm 依赖的插件时，将经审查的 profile 锁文件中每个注册表版本加入离线依赖锁，包括其他平台的可选包。保留精确版本和校验值；不要关闭 pnpm 供应链检查，也不要修改用户锁文件来掩盖缺包。镜像烟测会检查锁定依赖的元数据，并在禁止外网的环境中，向已包含可视化工作流依赖的 profile 添加思维导图工作台。
 
 ## 放到另一台机器
 
