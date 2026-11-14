@@ -1,7 +1,7 @@
 /** Verify cold-cache installation, native Web assets and persisted plugins with networking disabled. */
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -94,6 +94,29 @@ try {
   assert.ok(catalog.plugins.length > 0)
   const workbenches = await (await fetch('http://127.0.0.1:4874/workbenches.json')).json()
   assert.ok(workbenches.workbenches.length > 0)
+  const dependencyLock = JSON.parse(await readFile('/opt/dsh/market-registry/offline-dependencies.lock.json', 'utf8'))
+  for (const item of dependencyLock.packages) {
+    const metadata = await fetch(`${registry}/${encodeURIComponent(item.name)}`)
+    assert.equal(metadata.status, 200, `Existing profile dependency must be available offline: ${item.name}`)
+    const document = await metadata.json()
+    assert.equal(document.versions[item.version]?.dist.integrity, item.integrity)
+    assert.ok(Number.isFinite(Date.parse(document.time[item.version])))
+  }
+  // pnpm verifies the whole existing lockfile even when adding an unrelated workbench.
+  // This representative workflow dependency set must survive that verification offline.
+  const existing = join(root, 'existing-profile')
+  await mkdir(existing)
+  await writeFile(join(existing, 'package.json'), JSON.stringify({ private: true, dependencies: {
+    '@huggingface/transformers': '4.3.0', '@types/node': '26.6.3', mysql2: '3.24.4', pg: '8.23.0',
+  } }))
+  const runPnpm = args => promisify(execFile)('pnpm', [...args, '--registry', registry, '--ignore-scripts'], {
+    cwd: existing, env: { ...env, npm_config_store_dir: join(root, 'workflow-store'), PNPM_CONFIG_STORE_DIR: join(root, 'workflow-store') },
+    timeout: 180_000, maxBuffer: 2 * 1024 * 1024,
+  })
+  await runPnpm(['install'])
+  await runPnpm(['add', '--save-exact', 'dsh-mind-workbench@1.0.15'])
+  const mind = JSON.parse(await readFile(join(existing, 'node_modules/dsh-mind-workbench/package.json'), 'utf8'))
+  assert.equal(mind.version, '1.0.15')
   const offered = await webRequest('/api/desktop-workbenches/catalog')
   assert.equal(offered.status, 200)
   assert.deepEqual(JSON.parse(offered.body).workbenches.map(item => item.npm), workbenches.workbenches.map(item => item.npm))

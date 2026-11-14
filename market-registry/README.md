@@ -25,6 +25,8 @@ There is no public-registry proxy. A package absent from Verdaccio fails to inst
 
 `plugins.json` is the plugin catalog. `workbenches.json` is the workbench catalog. `tarballs/` also holds dependencies that are not listed on their own. Startup publishes a tarball to Verdaccio if that version is not already in the private registry.
 
+Packaged Desktop and Web also include the exact dependencies in [`offline-dependencies.lock.json`](offline-dependencies.lock.json), including the supported visual-workflow dependency set. pnpm checks an existing profile's entire lockfile when adding another workbench, so those dependencies need registry metadata even when their files are already installed. Packaging downloads the locked npm archives, verifies SHA-512, and preserves their original publication times and signature fields. Generated archives stay in the packaging cache and payload; runtime installation uses only the bundled registry.
+
 Workbench catalog entries still need `npm` and `version`, and `url` stays `https://github.com/owner/repo`. Do not point the host at `https://market.dshdesktop.com/index.json`: those packages are GitHub Releases and are not downloaded from this registry.
 
 `deepseek-harness-daily` requires host `0.2.0-rc.2` or `0.2.1-rc.2`. This repository is `0.2.2-alpha.2`, so installation is refused until upstream widens that range or an exact-version exemption is granted. `dsh-mind-workbench` accepts the current host. Disable automatic peer installation before installing, or peers such as `cordis` that are absent from the private registry fail the install. `pnpm dsh:private` already sets this. For `pnpm dev:desktop`, set `npm_config_auto_install_peers=false` and `pnpm_config_auto_install_peers=false` in the same terminal first.
@@ -85,6 +87,8 @@ npm pack <包名>@<版本> --registry https://registry.npmjs.org/ --pack-destina
 4. Restart `pnpm market:registry`, then `pnpm dsh:private`. The market reloads the catalog whenever it opens. Rebuild existing installation packages to include the new plugin.
 
 The user's profile installs the package named by `npm`. Mirror its runtime dependencies as tarballs too; host-supplied peers do not need mirroring.
+
+When supporting a plugin with additional npm dependencies, add every registry version from its reviewed profile lockfile to the offline dependency lock, including optional packages for other platforms. Keep exact versions and integrity values; do not disable pnpm's supply-chain checks or change the profile's lockfile to hide missing packages. The image smoke test verifies the locked metadata and adds the mind-map workbench to a profile with the visual-workflow dependencies while external networking is disabled.
 
 ## Move to another machine
 
