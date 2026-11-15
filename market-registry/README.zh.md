@@ -8,6 +8,8 @@
 
 ## 现在有什么
 
+思维导图适配版由 `prepare-mind-workbench.mjs` 根据哈希锁定的上游归档和 `patches/` 中的已审查补丁构建。仓库启动、容器准备和 Desktop 打包生成同一个独立版本，生成的归档不提交。画布保存会保留待保存的编辑、跳过内容未变的文档，并排除过期轮询造成的外部更新误报；真正的新写入仍须由用户明确重新载入画布。
+
 | 包 | 版本 | 来源 |
 | --- | --- | --- |
 | `open-sea-skin` | 1.2.6 | 社区 npm，tarball 在 `tarballs/` |
@@ -16,7 +18,7 @@
 | `@typesafe-ai/sdk` | 0.6.0 | `dsh-paper-reader` 的运行时依赖 |
 | `undici` | 8.10.2 | `dsh-paper-reader` 的运行时依赖 |
 | `deepseek-harness-daily` | 0.4.10 | 工作台「产品更新追踪」，GitHub Release |
-| `dsh-mind-workbench` | 1.0.15 | 工作台「DSH 思维导图工作台」，GitHub Release |
+| `dsh-mind-workbench` | 1.0.16-zhishu.1 | 工作台「DSH 思维导图工作台」，基于上游 1.0.15 的智枢适配版 |
 | `dsh-xiaohongshu-note-workbench` | 0.1.1 | 工作台「小红书笔记创作」，按公网目录指定的 GitHub commit 打包 |
 | `dsh-bianqu-workbench` | 0.1.1 | 工作台「编曲工作台」，按公网目录指定的 GitHub commit 打包 |
 | `@deepseek-ai/schemastery` | 3.18.2 | 多个工作台的运行时依赖 |

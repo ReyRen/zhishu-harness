@@ -47,3 +47,5 @@ overlay/
 新增能力时可沿用此目录结构，不要把补丁写进官方的 `cordis.patch.yml`。官方界面如何区分插件，以及无外网部署时应把插件放在哪里，见 [plugin-secondary-development.md](./plugin-secondary-development.md)。桌面壳登录、工作空间、Windows 打包，以及网页和桌面的会话落在哪，见 [desktop-secondary-development.md](./desktop-secondary-development.md)。在官方 Harness 内增加工作台时的概念和边界，见 [workbench-concept.md](./workbench-concept.md)。
 
 自定义工作台框架在首次打开时才挂载业务面板，使画布编辑器能在可见尺寸下初始化。已经打开过的面板会在切换时保持挂载，保留其本地状态。
+
+工作台创建工作区时使用组合的 `workspace.directoryFlow` 工厂：远程 Web 打开目录浏览器，Desktop 使用原生选择器。取消对话框或切换导航会结束请求，不创建 Workspace 或 Session；选择器迟到的结果会被忽略。

@@ -44,7 +44,7 @@
         "en": "Create, edit and export mind maps inside the workbench. Documents are stored in the DSH data directory."
       },
       "npm": "dsh-mind-workbench",
-      "version": "1.0.15",
+      "version": "1.0.16-zhishu.1",
       "stars": 0,
       "downloads": 311,
       "updatedAt": "2026-10-21T06:20:44.000Z",

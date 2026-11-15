@@ -61,9 +61,11 @@ describe('directory-picker-browse client half', () => {
     before.declare()
     const fiber = before.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
+    expect(before.slots.snapshot('factory:workspace.directoryFlow')).toHaveLength(1)
     for (const hole of HOLES) expect(before.slots.entries(hole)).toHaveLength(1)
     // Registry-contribution disposal proof: the fiber going down empties the holes.
     await fiber.dispose()
+    expect(before.slots.snapshot('factory:workspace.directoryFlow')).toHaveLength(0)
     for (const hole of HOLES) expect(before.slots.entries(hole)).toHaveLength(0)
 
     const after = await bench()

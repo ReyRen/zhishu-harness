@@ -72,7 +72,7 @@ describe('desktop plugin market', () => {
   it('names the workbench packages published from the private catalog', () => {
     expect(workbenchMarketPackages(join(SOURCE, 'workbenches.json')).map(item => `${item.name}@${item.version}`)).toEqual([
       'deepseek-harness-daily@0.4.10',
-      'dsh-mind-workbench@1.0.15',
+      'dsh-mind-workbench@1.0.16-zhishu.1',
       'dsh-xiaohongshu-note-workbench@0.1.1',
       'dsh-bianqu-workbench@0.1.1',
     ])

@@ -219,6 +219,7 @@ window.__ModuleLoader__.load({
         this.marketOpen = this.restoreMarketOnLoad
         this.pending = 0
         this.disposed = false
+        this.directoryRequest = null
         this.listeners = new Set()
         this.catalog = new Map()
         this.providers = new Map()
@@ -1518,7 +1519,7 @@ window.__ModuleLoader__.load({
         const signal = this.ctx.layout.beginNavigation()
         const current = () => !this.disposed && !signal.aborted && ticket === this.navigation && this.state.active === id && this.state.added.includes(id) && this.catalog.has(id)
         this.workspaceCreation = (async () => {
-          const path = await this.ctx.uiWorkspace.pickDirectory()
+          const path = await this.chooseDirectory(signal)
           if (!path || !current()) return
           const workspace = await this.ctx.workspaces.create({ path })
           if (!current()) return
@@ -1527,6 +1528,35 @@ window.__ModuleLoader__.load({
           return this.newSession(workspace.workspaceId)
         })().finally(() => { this.workspaceCreation = null })
         return this.workspaceCreation
+      }
+      chooseDirectory(signal) {
+        if (signal.aborted || this.disposed) return Promise.resolve(null)
+        return new Promise((resolve, reject) => {
+          const finish = (path, error) => {
+            if (this.directoryRequest !== request) return
+            signal.removeEventListener('abort', cancel)
+            this.directoryRequest = null
+            this.publish()
+            if (error) reject(error)
+            else resolve(path)
+          }
+          const cancel = () => finish(null)
+          const request = {
+            open: true, busy: false,
+            onPicked: (path) => finish(path),
+            onCancel: cancel,
+            onError: (message) => finish(null, new Error(message)),
+            pick: () => window.__DSH_DIRECTORY_PICKER__
+              ? window.__DSH_DIRECTORY_PICKER__.pick()
+              : this.ctx.uiWorkspace.pickDirectory(),
+            listDirectory: (path, abort) => this.ctx.uiWorkspace.listDirectory(path, abort),
+            createDirectory: (path, name) => this.ctx.uiWorkspace.createDirectory(path, name),
+            t: this.ctx.locale.bind('directory-browser'),
+          }
+          this.directoryRequest = request
+          signal.addEventListener('abort', cancel, { once: true })
+          this.publish()
+        })
       }
       async newSession(workspaceId) {
         if (!workbenchPreference.getSnapshot()) throw new Error('工作台功能已关闭。')
@@ -1567,6 +1597,7 @@ window.__ModuleLoader__.load({
         }))
       }
       dispose() {
+        this.directoryRequest?.onCancel()
         for (const timer of this.noteTimers.values()) clearTimeout(timer)
         for (const id of this.draftNotes.keys()) this.run(this.saveNote(id))
         this.registrationFailures.clear()
@@ -1775,6 +1806,11 @@ window.__ModuleLoader__.load({
       // Restore the stylesheet immediately when a workbench view mounts or updates.
       React.useLayoutEffect(ensureStyles)
       return React.useSyncExternalStore(service.subscribe, service.getSnapshot)
+    }
+    function WorkspaceDirectoryPicker({ service, renderFactorySlot }) {
+      useWorkbench(service)
+      const request = service.directoryRequest
+      return request ? renderFactorySlot('workspace.directoryFlow', request) : null
     }
     function Button({ children, primary, ...props }) { return h('button', { type: 'button', className: `dshWbBtn${primary ? ' dshWbPrimary' : ''}`, ...props }, children) }
     function Notice({ service, showCatalogStatus = false }) {
@@ -2781,6 +2817,9 @@ ${ACCEPTANCE_READING}先确认要公开的仓库和内容，不得公开密钥�
       ctx.effect(() => ctx.locale.register(DOWNLOAD_NS, downloadCopy), 'workbenches: download dictionaries')
       ctx.effect(() => ctx.locale.register(REGISTRATION_NS, registrationCopy), 'workbenches: registration dictionaries')
       const service = new Workbenches(ctx)
+      ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+        name: 'shell.overlay', id: 'workbench-directory-picker', inject: () => ({ service }),
+      }, WorkspaceDirectoryPicker))
       const softPanels = createSidebarSoftPanels()
       ctx.effect(() => ctx.reflect.provide('desktopWorkbenches', service), 'workbenches: service')
       ctx.effect(() => ctx.reflect.provide('sidebarSoftPanels', softPanels), 'workbenches: soft sidebar panels')

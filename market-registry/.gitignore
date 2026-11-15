@@ -3,3 +3,4 @@ storage/
 htpasswd
 .npmrc
 /*.tgz
+/tarballs/dsh-mind-workbench-*-zhishu.*.tgz

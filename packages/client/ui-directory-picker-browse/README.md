@@ -13,6 +13,8 @@ This package provides the in-app directory-browsing surface for the Web GUI: a S
 
 ## Table of Contents
 
+The same dialog is available to workbenches through the `workspace.directoryFlow` factory. Callers supply directory actions, the `directory-browser` translation function, and the pick/cancel/error callbacks; removing this plugin unregisters the factory.
+
 - [Use this package](#use-this-package)
 - [Understand the implementation](#understand-the-implementation)
 - [Further Exploration](#further-exploration)

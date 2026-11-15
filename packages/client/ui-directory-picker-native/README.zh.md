@@ -13,6 +13,8 @@ kind: "package-reference"
 
 ## 目录
 
+当 Peer 获准调用 `directoryPicker/pick` 时，工作台可通过 `workspace.directoryFlow` 工厂使用同一个无渲染交互。调用方提供原生拾取操作和结果回调；此后端不调用目录浏览 Remote。撤销权限或卸载本插件时工厂也会注销。
+
 - [使用本包](#use-this-package)
 - [理解实现](#understand-the-implementation)
 - [进一步探索](#further-exploration)

@@ -8,6 +8,8 @@ There is no public-registry proxy. A package absent from Verdaccio fails to inst
 
 ## Available packages
 
+The mind-map adaptation is built from the hash-pinned upstream archive and the reviewed patch in `patches/` by `prepare-mind-workbench.mjs`. Registry startup, container preparation, and Desktop packaging generate the same distinct package version; generated archives are not committed. Canvas saves keep unsaved edits pending, skip unchanged documents, and exclude stale polls from external-update notices. Genuine newer writes still require an explicit canvas reload.
+
 | Package | Version | Source |
 | --- | --- | --- |
 | `open-sea-skin` | 1.2.6 | Community npm; tarball in `tarballs/` |
@@ -16,7 +18,7 @@ There is no public-registry proxy. A package absent from Verdaccio fails to inst
 | `@typesafe-ai/sdk` | 0.6.0 | Runtime dependency of `dsh-paper-reader` |
 | `undici` | 8.10.2 | Runtime dependency of `dsh-paper-reader` |
 | `deepseek-harness-daily` | 0.4.10 | Workbench “产品更新追踪”, GitHub Release |
-| `dsh-mind-workbench` | 1.0.15 | Workbench “DSH 思维导图工作台”, GitHub Release |
+| `dsh-mind-workbench` | 1.0.16-zhishu.1 | Workbench “DSH 思维导图工作台”, Zhishu adaptation of upstream 1.0.15 |
 | `dsh-xiaohongshu-note-workbench` | 0.1.1 | Workbench “小红书笔记创作”, packed from GitHub source commit |
 | `dsh-bianqu-workbench` | 0.1.1 | Workbench “编曲工作台”, packed from GitHub source commit |
 | `@deepseek-ai/schemastery` | 3.18.2 | Runtime dependency of several workbenches |

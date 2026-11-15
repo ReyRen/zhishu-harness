@@ -132,6 +132,18 @@ export interface SessionRowTrailingOwnerProps {
 }
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface SlotFactoryMap {
+    /** Composed chooser for callers outside the workspace menus; only the selected backend uses its actions. */
+    'workspace.directoryFlow': {
+      scope: 'root'
+      props: DirectoryFlowOwnerProps & {
+        pick: () => Promise<string | null>
+        listDirectory: (path?: string, signal?: AbortSignal) => Promise<import('@deepseek-ai/dsh-api-remotes/client').DirectoryListing>
+        createDirectory: (path: string, name: string) => Promise<string>
+        t: import('@deepseek-ai/dsh-client-locale/client').Translate
+      }
+    }
+  }
   interface SlotMap {
     /** Directory-flow hole under the conversation empty-state picker (declared by the WorkspacePicker entry). */
     'conversation.hero.workspace.directoryFlow': { kind: 'single'; scope: 'root'; owner: DirectoryFlowOwnerProps }

@@ -13,6 +13,8 @@ kind: "package-reference"
 
 ## 目录
 
+工作台可通过 `workspace.directoryFlow` 工厂使用同一个对话框。调用方提供目录操作、`directory-browser` 翻译函数和选择、取消、错误回调；卸载本插件时工厂也会注销。
+
 - [使用本包](#use-this-package)
 - [理解实现](#understand-the-implementation)
 - [进一步探索](#further-exploration)

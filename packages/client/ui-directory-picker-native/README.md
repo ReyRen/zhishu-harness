@@ -13,6 +13,8 @@ This package provides the native directory-picking surface for the Web GUI: when
 
 ## Table of Contents
 
+The `workspace.directoryFlow` factory exposes the same renderless interaction to workbenches while the Peer may call `directoryPicker/pick`. Its caller supplies the native picker action and outcome callbacks; no directory-browse Remote is called by this backend. Revoking access or unloading this plugin unregisters the factory.
+
 - [Use this package](#use-this-package)
 - [Understand the implementation](#understand-the-implementation)
 - [Further Exploration](#further-exploration)

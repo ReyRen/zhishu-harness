@@ -47,3 +47,5 @@ The [WeKnora overlay](weknora/README.md) provides knowledge tools to every Web a
 Copy this directory structure for another capability. Keep its patch outside the official `cordis.patch.yml`. For how the official UI distinguishes plugins and where to put them in offline deployments, see [plugin-secondary-development.md](./plugin-secondary-development.md) (Chinese). Desktop login, workspaces, and Windows packaging are in [desktop-secondary-development.md](./desktop-secondary-development.md) (Chinese). The workbench concept and its boundaries are in [workbench-concept.md](./workbench-concept.md) (Chinese).
 
 Custom workbench frames mount their business panel when first opened, so canvas editors initialize with visible dimensions. Once opened, the panel stays mounted across switches to preserve its local state.
+
+Workbench workspace creation uses the composed `workspace.directoryFlow` factory: remote Web opens the directory browser, and Desktop uses its native chooser. Cancelling the dialog or navigating away settles the request without creating a Workspace or Session; late picker results are ignored.
