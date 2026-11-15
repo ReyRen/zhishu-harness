@@ -2818,7 +2818,7 @@ ${ACCEPTANCE_READING}先确认要公开的仓库和内容，不得公开密钥�
       ctx.effect(() => ctx.locale.register(REGISTRATION_NS, registrationCopy), 'workbenches: registration dictionaries')
       const service = new Workbenches(ctx)
       ctx.slots.inject('shell.overlay', () => ctx.slots.register({
-        name: 'shell.overlay', inject: () => ({ service }),
+        name: 'shell.overlay', id: 'workbench-directory-picker', inject: () => ({ service }),
       }, WorkspaceDirectoryPicker))
       const softPanels = createSidebarSoftPanels()
       ctx.effect(() => ctx.reflect.provide('desktopWorkbenches', service), 'workbenches: service')
