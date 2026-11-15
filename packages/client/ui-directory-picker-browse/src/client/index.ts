@@ -170,6 +170,9 @@ export function apply(ctx: ClientContext): void {
     createDirectory: (path, name) => ctx.uiWorkspace.createDirectory(path, name),
     t: ctx.locale.bind(LOCALE_NS),
   })
+  ctx.slots.registerFactory({
+    name: 'workspace.directoryFlow', scope: 'root',
+  }, BrowseDirectoryFlow)
   // Both declaration lifetimes must be live before the pair installs; the
   // generator makes the two registrations one transactional effect. The
   // outer/inner nesting order is arbitrary; neither hole has precedence.

@@ -15,6 +15,8 @@ This package lets users browse grouped or flat Session lists, choose a Workspace
 
 ## Table of Contents
 
+Other surfaces can render `workspace.directoryFlow` through `renderFactorySlot` to use the composed chooser without calling a native-only Remote. Its caller supplies the directory actions, locale function, and `DirectoryFlowOwnerProps` callbacks; it owns adoption, cancellation, and failure reporting. The composed native or browse package registers the factory.
+
 - [Use this package](#use-this-package)
 - [Understand the implementation](#understand-the-implementation)
 - [Further Exploration](#further-exploration)

@@ -15,6 +15,8 @@ kind: "package-reference"
 
 ## 目录
 
+其他界面可通过 `renderFactorySlot` 渲染 `workspace.directoryFlow`，使用当前组合的选择器，避免直接调用仅支持原生选择器的 Remote。调用方提供目录操作、翻译函数和 `DirectoryFlowOwnerProps` 回调，并负责路径采用、取消和错误报告；组合的原生或浏览选择器包负责注册工厂。
+
 - [使用本包](#use-this-package)
 - [理解实现](#understand-the-implementation)
 - [进一步探索](#further-exploration)

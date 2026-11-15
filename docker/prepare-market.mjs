@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { pluginMarketPackages, seedPluginMarketStorage, tarballMarketPackages, workbenchMarketPackages } from '../apps/desktop/src/plugin-market.ts'
 import { prepareOfflineDependencies } from '../market-registry/prepare-offline-dependencies.mjs'
+import { prepareMindWorkbench, mindWorkbenchVersion } from '../market-registry/prepare-mind-workbench.mjs'
 
 const source = resolve(import.meta.dirname, '../market-registry')
 const output = resolve(process.argv[2])
@@ -30,6 +31,8 @@ try {
     mkdirSync(dirname(alias), { recursive: true })
     copyFileSync(packed, alias)
   }
+  await prepareMindWorkbench(staging)
+  versions.add(`dsh-mind-workbench@${mindWorkbenchVersion}`)
   await prepareOfflineDependencies({ lockPath: join(source, 'offline-dependencies.lock.json'), tarballsDir: staging,
     cacheDir: process.env.DSH_MARKET_CACHE })
   const packages = tarballMarketPackages(staging)

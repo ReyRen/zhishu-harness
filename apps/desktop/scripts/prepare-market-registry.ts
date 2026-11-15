@@ -6,6 +6,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, write
 import { join, resolve } from 'node:path'
 import { desktopTargetBuildPaths, resolveDesktopBuildTarget } from './desktop-build-paths.mjs'
 import { prepareOfflineDependencies } from '../../../market-registry/prepare-offline-dependencies.mjs'
+import { prepareMindWorkbench } from '../../../market-registry/prepare-mind-workbench.mjs'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
 const SOURCE = resolve(APP_ROOT, '..', '..', 'market-registry')
@@ -32,6 +33,7 @@ async function main(): Promise<void> {
   cpSync(catalog, join(output, 'plugins.json'))
   cpSync(workbenches, join(output, 'workbenches.json'))
   cpSync(tarballs, join(output, 'tarballs'), { recursive: true })
+  await prepareMindWorkbench(join(output, 'tarballs'))
   await prepareOfflineDependencies({ lockPath: join(SOURCE, 'offline-dependencies.lock.json'),
     tarballsDir: join(output, 'tarballs'), cacheDir: join(APP_ROOT, '.desktop-build', 'downloads', 'market-dependencies') })
   const bin = join(output, 'node_modules', 'verdaccio', 'bin', 'verdaccio')

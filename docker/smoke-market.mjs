@@ -114,9 +114,9 @@ try {
     timeout: 180_000, maxBuffer: 2 * 1024 * 1024,
   })
   await runPnpm(['install'])
-  await runPnpm(['add', '--save-exact', 'dsh-mind-workbench@1.0.15'])
+  await runPnpm(['add', '--save-exact', 'dsh-mind-workbench@1.0.16-zhishu.1'])
   const mind = JSON.parse(await readFile(join(existing, 'node_modules/dsh-mind-workbench/package.json'), 'utf8'))
-  assert.equal(mind.version, '1.0.15')
+  assert.equal(mind.version, '1.0.16-zhishu.1')
   const offered = await webRequest('/api/desktop-workbenches/catalog')
   assert.equal(offered.status, 200)
   assert.deepEqual(JSON.parse(offered.body).workbenches.map(item => item.npm), workbenches.workbenches.map(item => item.npm))

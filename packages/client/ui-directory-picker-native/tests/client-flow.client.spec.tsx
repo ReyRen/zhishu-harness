@@ -64,6 +64,7 @@ describe('directory-picker-native client half', () => {
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     expect(allows).toHaveBeenCalledWith('directoryPicker/pick')
+    expect(b.slots.snapshot('factory:workspace.directoryFlow')).toHaveLength(0)
     for (const hole of HOLES) expect(b.slots.entries(hole)).toEqual([])
     await fiber.dispose()
     await b.ctx.fiber.dispose()
@@ -75,8 +76,10 @@ describe('directory-picker-native client half', () => {
     const fiber = before.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     for (const hole of HOLES) expect(before.slots.entries(hole)).toHaveLength(1)
+    expect(before.slots.snapshot('factory:workspace.directoryFlow')).toHaveLength(1)
     // Registry-contribution disposal proof: the fiber going down empties the holes.
     await fiber.dispose()
+    expect(before.slots.snapshot('factory:workspace.directoryFlow')).toHaveLength(0)
     for (const hole of HOLES) expect(before.slots.entries(hole)).toHaveLength(0)
 
     const after = await bench()
@@ -92,7 +95,7 @@ describe('directory-picker-native client half', () => {
     b.declare()
     await b.ctx.plugin({ inject: [...inject], apply }).await()
     const duplicate = b.ctx.plugin({ inject: [...inject], apply })
-    await expect(duplicate.await()).rejects.toThrow(/already has a registration/)
+    await expect(duplicate.await()).rejects.toThrow('slot factory "workspace.directoryFlow" already has a definition')
     for (const hole of HOLES) expect(b.slots.entries(hole)).toHaveLength(1)
   })
 

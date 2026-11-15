@@ -1,0 +1,138 @@
+diff --git a/app/bridge.js b/app/bridge.js
+index 610edcd..3277570 100644
+--- a/app/bridge.js
++++ b/app/bridge.js
+@@ -36,0 +37,2 @@
++  var editRevision = 0
++  var savedRevision = 0
+@@ -67,0 +70,3 @@
++    if (state.conflicted) return
++    clearTimeout(saveTimer)
++    if (editRevision === savedRevision) return
+@@ -72,0 +78,3 @@
++    var revision = editRevision
++    var documentId = state.documentId
++    notify('saving', { documentId: documentId })
+@@ -77 +85 @@
+-      body: JSON.stringify({ documentId: state.documentId, data: state.data })
++      body: JSON.stringify({ documentId: state.documentId, data: state.data, expectedUpdatedAt: state.updatedAt })
+@@ -79,0 +88,5 @@
++        if (response.status === 409) {
++          state.conflicted = true
++          notify('conflict', { documentId: documentId })
++          return null
++        }
+@@ -84,2 +97,5 @@
+-        dirtyNotified = false
+-        notify('saved', { documentId: state.documentId, updatedAt: payload.updatedAt || null })
++        if (!payload) return
++        savedRevision = revision
++        dirtyNotified = editRevision !== savedRevision
++        state.updatedAt = payload.updatedAt || null
++        notify('saved', { documentId: documentId, updatedAt: state.updatedAt, pending: dirtyNotified })
+@@ -114 +130,3 @@
+-    var body = JSON.stringify({ documentId: state.documentId, data: state.data })
++    if (state.conflicted) return
++    if (editRevision === savedRevision) return
++    var body = JSON.stringify({ documentId: state.documentId, data: state.data, expectedUpdatedAt: state.updatedAt })
+@@ -171,0 +190 @@
++      editRevision += 1
+@@ -205,0 +225 @@
++        state.updatedAt = payload.updatedAt || null
+@@ -228,0 +249 @@
++    if (event.source !== window.parent) return
+@@ -320,0 +342 @@
++            updatedAt: state.updatedAt,
+diff --git a/lib/client.js b/lib/client.js
+index 7146df9..1ea3f30 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -544,0 +545,2 @@ window.__ModuleLoader__.load({
++        const saveGenerationRef = React.useRef(0)
++        const savingRef = React.useRef(false)
+@@ -596,0 +599 @@ window.__ModuleLoader__.load({
++          saveGenerationRef.current += 1
+@@ -634,0 +638 @@ window.__ModuleLoader__.load({
++            if (event.source !== frameRef.current?.contentWindow) return
+@@ -643 +647,3 @@ window.__ModuleLoader__.load({
+-              seenUpdatedAtRef.current = ''
++              seenUpdatedAtRef.current = payload.updatedAt || ''
++              saveGenerationRef.current += 1
++              savingRef.current = false
+@@ -647,0 +654,12 @@ window.__ModuleLoader__.load({
++            if (payload.type === 'saving') {
++              savingRef.current = true
++              saveGenerationRef.current += 1
++              return
++            }
++            if (payload.type === 'conflict') {
++              savingRef.current = false
++              saveGenerationRef.current += 1
++              setDirty(true)
++              setExternalStale(true)
++              return
++            }
+@@ -649 +667,4 @@ window.__ModuleLoader__.load({
+-              setDirty(false)
++              setDirty(payload.pending === true)
++              savingRef.current = false
++              saveGenerationRef.current += 1
++              setExternalStale(false)
+@@ -663 +684,5 @@ window.__ModuleLoader__.load({
+-              if (payload.scope === 'save') setDirty(true)
++              if (payload.scope === 'save') {
++                savingRef.current = false
++                saveGenerationRef.current += 1
++                setDirty(true)
++              }
+@@ -837,0 +863,2 @@ window.__ModuleLoader__.load({
++          let cancelled = false
++          let polling = false
+@@ -838,0 +866,3 @@ window.__ModuleLoader__.load({
++            if (polling || savingRef.current) return
++            polling = true
++            const generation = saveGenerationRef.current
+@@ -839,0 +870 @@ window.__ModuleLoader__.load({
++              if (cancelled || savingRef.current || generation !== saveGenerationRef.current) return
+@@ -852 +883 @@ window.__ModuleLoader__.load({
+-              if (nextUpdatedAt && nextUpdatedAt !== seenUpdatedAtRef.current) setExternalStale(true)
++              if (nextUpdatedAt && nextUpdatedAt > seenUpdatedAtRef.current) setExternalStale(true)
+@@ -853,0 +885 @@ window.__ModuleLoader__.load({
++              .finally(() => { polling = false })
+@@ -855 +887 @@ window.__ModuleLoader__.load({
+-          return () => clearInterval(timer)
++          return () => { cancelled = true; clearInterval(timer) }
+diff --git a/dsh/index.js b/dsh/index.js
+index afe9df5..3476156 100644
+--- a/dsh/index.js
++++ b/dsh/index.js
+@@ -451,0 +452,6 @@ export function apply(ctx, config) {
++  let writes = Promise.resolve()
++  const serialize = (operation) => {
++    const pending = writes.then(operation)
++    writes = pending.catch(() => {}) // The caller receives the original rejection.
++    return pending
++  }
+@@ -511 +517,3 @@ export function apply(ctx, config) {
+-        const dispose = ctx.connection.fetch.register(entry)
++        const changesDocuments = entry.methods.includes('POST') && [API + '/session/data', API + '/documents'].includes(entry.path)
++        const definition = changesDocuments ? { ...entry, fetch: (request) => serialize(() => entry.fetch(request)) } : entry
++        const dispose = ctx.connection.fetch.register(definition)
+@@ -569 +577,6 @@ export function apply(ctx, config) {
+-        const document = await writeDocument(root, { ...existing, id, data })
++        if (Object.hasOwn(payload, 'expectedUpdatedAt') && payload.expectedUpdatedAt !== existing.updatedAt) {
++          throw new WorkbenchError('导图已有新的修改，请重新载入画布；当前编辑仍可导出。', 409)
++        }
++        const document = JSON.stringify(existing.data) === JSON.stringify(data)
++          ? existing
++          : await writeDocument(root, { ...existing, id, data })
+@@ -785 +798 @@ export function apply(ctx, config) {
+-    return () => {
++    return async () => {
+@@ -788,0 +802 @@ export function apply(ctx, config) {
++      await writes
+@@ -802 +816,3 @@ export function apply(ctx, config) {
+-  registerMindMapTools(ctx, defineTool, root)
++  registerMindMapTools(ctx, (definition) => defineTool({
++    ...definition, execute: (...args) => serialize(() => definition.execute(...args))
++  }), root)
