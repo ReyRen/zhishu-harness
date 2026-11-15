@@ -56,6 +56,23 @@ test('preparing the reviewed patch is reproducible and keeps a distinct version'
   assert.equal(JSON.parse(await readFile(join(root, 'package/package.json'), 'utf8')).version, mindWorkbenchVersion)
 })
 
+test('document revisions advance when writes share a clock tick or the clock moves backward', async () => {
+  const source = await readFile(join(root, 'package/dsh/index.js'), 'utf8')
+  const write = source.slice(source.indexOf('async function writeDocument('), source.indexOf('\nasync function listDocuments('))
+  const writes = []
+  const writeDocument = runInNewContext(write + '\nwriteDocument', {
+    Date: class extends Date { static now() { return Date.parse('2026-01-01T00:00:00.000Z') } },
+    documentFile: (_root, id) => id, writeJsonAtomic: async (_path, document) => { writes.push(document) },
+  })
+  const current = { id: 'default', data: { root: {} }, updatedAt: '2026-01-01T00:00:00.000Z' }
+  const sameTick = await writeDocument('/scratch', current)
+  assert.equal(sameTick.updatedAt, '2026-01-01T00:00:00.001Z')
+  const afterRollback = await writeDocument('/scratch', { ...current, updatedAt: '2027-01-01T00:00:00.000Z' })
+  assert.equal(afterRollback.updatedAt, '2027-01-01T00:00:00.001Z')
+  assert.equal(writes.length, 2)
+  assert.equal(writes[1].data, current.data)
+})
+
 test('an idle canvas publishes its loaded version and never writes on hiding or manual flush', async () => {
   const c = canvas(); await c.ready()
   assert.equal(c.messages.find(item => item.type === 'ready').updatedAt, '2026-01-01T00:00:00.000Z')
