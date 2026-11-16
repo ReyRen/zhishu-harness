@@ -94,6 +94,8 @@ try {
   assert.ok(catalog.plugins.length > 0)
   const workbenches = await (await fetch('http://127.0.0.1:4874/workbenches.json')).json()
   assert.ok(workbenches.workbenches.length > 0)
+  assert.equal(workbenches.workbenches.some(item => item.npm === 'deepseek-harness-daily'), false)
+  assert.equal(catalog.plugins.some(item => item.npm === 'dsh-visual-workflow'), true)
   const dependencyLock = JSON.parse(await readFile('/opt/dsh/market-registry/offline-dependencies.lock.json', 'utf8'))
   for (const item of dependencyLock.packages) {
     const metadata = await fetch(`${registry}/${encodeURIComponent(item.name)}`)
@@ -117,6 +119,13 @@ try {
   await runPnpm(['add', '--save-exact', 'dsh-mind-workbench@1.0.16-zhishu.1'])
   const mind = JSON.parse(await readFile(join(existing, 'node_modules/dsh-mind-workbench/package.json'), 'utf8'))
   assert.equal(mind.version, '1.0.16-zhishu.1')
+  const guarded = join(root, 'unreviewed-build')
+  await mkdir(guarded)
+  await writeFile(join(guarded, 'package.json'), JSON.stringify({ private: true, dependencies: { sharp: '0.34.5' } }))
+  await assert.rejects(promisify(execFile)('pnpm', ['install', '--registry', registry], {
+    cwd: guarded, env, timeout: 180_000, maxBuffer: 2 * 1024 * 1024,
+  }), error => error.code === 1 && /Ignored build scripts.*sharp/u.test(error.stdout + error.stderr),
+  'Unreviewed original install hooks must retain pnpm\'s approval requirement')
   const offered = await webRequest('/api/desktop-workbenches/catalog')
   assert.equal(offered.status, 200)
   assert.deepEqual(JSON.parse(offered.body).workbenches.map(item => item.npm), workbenches.workbenches.map(item => item.npm))
@@ -151,21 +160,49 @@ try {
     const manifest = JSON.parse(await readFile(join(env.DSH_HOME, 'profiles/web/node_modules', name, 'package.json'), 'utf8'))
     assert.equal(manifest.version, item.version)
   }
+  for (const endpoint of ['listFlowTemplates', 'listTemplates', 'models', 'presets', 'toolCombos']) {
+    const options = { method: 'POST', body: JSON.stringify({ args: { kind: 'role' } }),
+      extraHeaders: { origin: `http://${authority}`, 'content-type': 'application/json' } }
+    const deadline = Date.now() + 30_000
+    let response = await webRequest(`/visual-workflow/${endpoint}`, options)
+    while ([404, 405, 503].includes(response.status) && Date.now() < deadline) {
+      await delay(100, undefined, { signal: owner.signal })
+      response = await webRequest(`/visual-workflow/${endpoint}`, options)
+    }
+    assert.equal(response.status, 200, endpoint)
+    assert.equal(JSON.parse(response.body).ok, true, response.body)
+  }
+  const gui = { method: 'POST', body: JSON.stringify({ args: {} }),
+    extraHeaders: { origin: `http://${authority}`, 'content-type': 'application/json', cookie: '' } }
+  assert.equal((await webRequest('/visual-workflow/listFlowTemplates', gui)).status, 401)
+  assert.equal((await webRequest('/visual-workflow/files/nonexistent.txt', { extraHeaders: { cookie: '' } })).status, 401)
+  assert.equal((await webRequest('/visual-workflow/listFlowTemplates', { ...gui,
+    extraHeaders: { ...gui.extraHeaders, cookie: headers.cookie, origin: 'http://untrusted.invalid' } })).status, 403)
+  await promisify(execFile)(process.execPath, ['/opt/dsh/docker/smoke-workflow.mjs'], {
+    env: { ...env, OMP_NUM_THREADS: '2' }, timeout: 180_000, maxBuffer: 2 * 1024 * 1024,
+  })
+  const retained = join(env.DSH_HOME, 'visual-workflow', 'offline-user-data.txt')
+  await mkdir(join(env.DSH_HOME, 'visual-workflow'), { recursive: true })
+  await writeFile(retained, 'retained after plugin removal')
+  const workflowCli = args => promisify(execFile)(process.execPath,
+    ['/opt/dsh/apps/cli/lib/bin.js', 'plugin', '--profile', 'web', ...args],
+    { env, cwd: env.DSH_DEFAULT_WORKSPACE, timeout: 180_000, maxBuffer: 2 * 1024 * 1024 })
+  await workflowCli(['remove', 'dsh-visual-workflow'])
+  assert.equal(await readFile(retained, 'utf8'), 'retained after plugin removal')
+  const workflow = catalog.plugins.find(item => item.npm === 'dsh-visual-workflow')
+  await workflowCli(['add', '--registry', registry, '--save-exact', `dsh-visual-workflow@${workflow.version}`])
+  assert.equal(await readFile(retained, 'utf8'), 'retained after plugin removal')
+  // Unlisted legacy packages remain subject to the official host-compatibility check.
+  await assert.rejects(workflowCli(['add', '--registry', registry, '--save-exact', 'deepseek-harness-daily@0.4.10']), error => error.code === 1
+    && error.stderr.includes('is incompatible with dsh')
+    && /nothing was installed|restored package\.json, pnpm-lock\.yaml, and node_modules/u.test(error.stderr))
+  const profile = JSON.parse(await readFile(join(env.DSH_HOME, 'profiles/web/package.json'), 'utf8'))
+  assert.equal(profile.dependencies?.['deepseek-harness-daily'], undefined)
   const installedWorkbenches = []
   for (const item of workbenches.workbenches) {
     const install = () => promisify(execFile)(process.execPath, ['/opt/dsh/apps/cli/lib/bin.js', 'plugin', '--profile', 'web',
       'add', '--registry', registry, '--save-exact', `${item.npm}@${item.version}`],
     { env, cwd: env.DSH_DEFAULT_WORKSPACE, timeout: 120_000, maxBuffer: 2 * 1024 * 1024 })
-    // This pinned community release explicitly excludes the current DSH host.
-    // Its catalog presence must not bypass the official compatibility guard.
-    if (item.npm === 'deepseek-harness-daily' && item.version === '0.4.10') {
-      await assert.rejects(install, error => error.code === 1
-        && error.stderr.includes('is incompatible with dsh')
-        && /nothing was installed|restored package\.json, pnpm-lock\.yaml, and node_modules/u.test(error.stderr))
-      const profile = JSON.parse(await readFile(join(env.DSH_HOME, 'profiles/web/package.json'), 'utf8'))
-      assert.equal(profile.dependencies?.[item.npm], undefined)
-      continue
-    }
     await install()
     const manifest = JSON.parse(await readFile(join(env.DSH_HOME, 'profiles/web/node_modules', item.npm, 'package.json'), 'utf8'))
     assert.equal(manifest.version, item.version)
@@ -193,7 +230,10 @@ try {
   await startWeb()
   const separate = JSON.parse((await webRequest('/api/desktop-workbenches/state')).body)
   assert.deepEqual(separate.state.sessionBindings, {})
-  console.log('Offline market: compatible cold-cache plugins/workbenches, incompatible-release rejection, native Web, ownership conflict/restart/isolation and read-only registry passed')
+  assert.equal((await webRequest('/')).body.includes('dsh-visual-workflow/client'), false, 'Other users must choose installation themselves')
+  const separateProfile = JSON.parse(await readFile(join(env.DSH_HOME, 'profiles/web/package.json'), 'utf8'))
+  assert.equal(separateProfile.dependencies?.['dsh-visual-workflow'], undefined)
+  console.log('Offline market: cold-cache plugins/workbenches, Workflow local embedding and uninstall/data retention, incompatible-release rejection, native Web, ownership conflict/restart/isolation and read-only registry passed')
 } catch (error) {
   console.error(logs.replace(/([?&]token=)[\w-]+/gu, '$1<redacted>'))
   throw error

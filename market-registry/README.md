@@ -10,6 +10,10 @@ There is no public-registry proxy. A package absent from Verdaccio fails to inst
 
 The mind-map adaptation is built from the hash-pinned upstream archive and the reviewed patch in `patches/` by `prepare-mind-workbench.mjs`. Registry startup, container preparation, and Desktop packaging generate the same distinct package version; generated archives are not committed. Canvas saves keep unsaved edits pending, skip unchanged documents, and exclude stale polls from external-update notices. Genuine newer writes still require an explicit canvas reload.
 
+Visual Workflow is assembled from a pinned compiled-source archive by [`prepare-visual-workflow.mjs`](prepare-visual-workflow.mjs). Its GUI and file routes use Harness Host authentication. Container and Desktop packaging prepare the complete dependencies and quantized `bge-small-zh-v1.5` model, checking every model file's SHA-256. Users choose installation in Settings → Plugin market into their own profile. Workflow data lives in their `DSH_HOME/visual-workflow` and survives removal. Installation and local vector retrieval need no public network; workflow models and tools still use their configured services.
+
+[`prepare-workflow-runtime.mjs`](prepare-workflow-runtime.mjs) creates distinct `zhishu-runtime.1` versions of the CPU inference and image libraries and their referring packages. It retains compiled code, platform binaries and licenses, omitting install hooks that download optional CUDA libraries, check local build tools, or print version advice. Original archives, integrity metadata and pnpm's default approval requirement for unknown scripts remain intact; no scripts are automatically approved. The disconnected smoke exercises CPU embedding, image encoding and protobuf encoding/decoding.
+
 | Package | Version | Source |
 | --- | --- | --- |
 | `open-sea-skin` | 1.2.6 | Community npm; tarball in `tarballs/` |
@@ -17,7 +21,7 @@ The mind-map adaptation is built from the hash-pinned upstream archive and the r
 | `pdfjs-dist` | 6.3.289 | Runtime dependency of `dsh-paper-reader` |
 | `@typesafe-ai/sdk` | 0.6.0 | Runtime dependency of `dsh-paper-reader` |
 | `undici` | 8.10.2 | Runtime dependency of `dsh-paper-reader` |
-| `deepseek-harness-daily` | 0.4.10 | Workbench “产品更新追踪”, GitHub Release |
+| `dsh-visual-workflow` | 0.11.1-zhishu.1 | Visual Workflow plugin, an offline build of upstream 0.11.0 including its local embedding model |
 | `dsh-mind-workbench` | 1.0.16-zhishu.1 | Workbench “DSH 思维导图工作台”, Zhishu adaptation of upstream 1.0.15 |
 | `dsh-xiaohongshu-note-workbench` | 0.1.1 | Workbench “小红书笔记创作”, packed from GitHub source commit |
 | `dsh-bianqu-workbench` | 0.1.1 | Workbench “编曲工作台”, packed from GitHub source commit |
@@ -31,7 +35,7 @@ Packaged Desktop and Web also include the exact dependencies in [`offline-depend
 
 Workbench catalog entries still need `npm` and `version`, and `url` stays `https://github.com/owner/repo`. Do not point the host at `https://market.dshdesktop.com/index.json`: those packages are GitHub Releases and are not downloaded from this registry.
 
-`deepseek-harness-daily` requires host `0.2.0-rc.2` or `0.2.1-rc.2`. This repository is `0.2.2-alpha.2`, so installation is refused until upstream widens that range or an exact-version exemption is granted. `dsh-mind-workbench` accepts the current host. Disable automatic peer installation before installing, or peers such as `cordis` that are absent from the private registry fail the install. `pnpm dsh:private` already sets this. For `pnpm dev:desktop`, set `npm_config_auto_install_peers=false` and `pnpm_config_auto_install_peers=false` in the same terminal first.
+Product update tracker is unlisted; its legacy archive is retained for compatibility-rejection validation without bypassing host version checks. Disable automatic peer installation before installing, or peers such as `cordis` that are absent from the private registry fail the install. `pnpm dsh:private` already sets this. For `pnpm dev:desktop`, set `npm_config_auto_install_peers=false` and `pnpm_config_auto_install_peers=false` in the same terminal first.
 
 <a id="environment-variables"></a>
 
@@ -61,6 +65,14 @@ pnpm market:registry
 ```
 
 Before the first run, execute `pnpm install --ignore-workspace` in this directory.
+
+Before running the registry from source, prepare the Workflow model and locked dependencies from the repository root on a networked packaging machine:
+
+```sh
+node --input-type=module -e "import {prepareVisualWorkflow} from './market-registry/prepare-visual-workflow.mjs'; import {prepareOfflineDependencies} from './market-registry/prepare-offline-dependencies.mjs'; import {prepareWorkflowRuntime} from './market-registry/prepare-workflow-runtime.mjs'; await prepareOfflineDependencies({lockPath:'market-registry/offline-dependencies.lock.json',tarballsDir:'market-registry/tarballs'}); await prepareWorkflowRuntime('market-registry/tarballs'); await prepareVisualWorkflow('market-registry/tarballs', {allowDownload:true});"
+```
+
+Source-registry startup does not download a missing model and stops explicitly for incomplete resources. Preserve generated tarballs, metadata, and `tarballs/.cache/` when copying a prepared source registry. Container and Desktop packaging prepare these automatically; offline sites use the built image or installer without running this command.
 
 Then open another terminal:
 

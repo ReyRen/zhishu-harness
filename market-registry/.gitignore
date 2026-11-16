@@ -4,3 +4,6 @@ htpasswd
 .npmrc
 /*.tgz
 /tarballs/dsh-mind-workbench-*-zhishu.*.tgz
+/tarballs/dsh-visual-workflow-*-zhishu.*.tgz
+/tarballs/.cache/
+/tarballs/*zhishu-runtime.1.tgz

@@ -47,8 +47,10 @@ describe('desktop plugin market', () => {
     expect(packages.map(item => `${item.name}@${item.version}`)).toEqual([
       'open-sea-skin@1.2.6',
       '@zhishu/dsh-paper-reader@1.6.0',
+      'dsh-visual-workflow@0.11.1-zhishu.1',
     ])
-    seedPluginMarketStorage(storage, join(SOURCE, 'tarballs'), packages)
+    // Workflow's complete model archive is assembled at packaging time and installed by the offline container smoke.
+    seedPluginMarketStorage(storage, join(SOURCE, 'tarballs'), packages.filter(item => item.name !== 'dsh-visual-workflow'))
     const metadata = JSON.parse(readFileSync(join(storage, 'open-sea-skin', 'package.json'), 'utf8')) as {
       versions: Record<string, { dist: { tarball: string } }>
       'dist-tags': { latest: string }
@@ -71,7 +73,6 @@ describe('desktop plugin market', () => {
 
   it('names the workbench packages published from the private catalog', () => {
     expect(workbenchMarketPackages(join(SOURCE, 'workbenches.json')).map(item => `${item.name}@${item.version}`)).toEqual([
-      'deepseek-harness-daily@0.4.10',
       'dsh-mind-workbench@1.0.16-zhishu.1',
       'dsh-xiaohongshu-note-workbench@0.1.1',
       'dsh-bianqu-workbench@0.1.1',

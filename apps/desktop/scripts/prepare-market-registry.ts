@@ -7,6 +7,8 @@ import { join, resolve } from 'node:path'
 import { desktopTargetBuildPaths, resolveDesktopBuildTarget } from './desktop-build-paths.mjs'
 import { prepareOfflineDependencies } from '../../../market-registry/prepare-offline-dependencies.mjs'
 import { prepareMindWorkbench } from '../../../market-registry/prepare-mind-workbench.mjs'
+import { prepareVisualWorkflow } from '../../../market-registry/prepare-visual-workflow.mjs'
+import { prepareWorkflowRuntime } from '../../../market-registry/prepare-workflow-runtime.mjs'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
 const SOURCE = resolve(APP_ROOT, '..', '..', 'market-registry')
@@ -34,8 +36,12 @@ async function main(): Promise<void> {
   cpSync(workbenches, join(output, 'workbenches.json'))
   cpSync(tarballs, join(output, 'tarballs'), { recursive: true })
   await prepareMindWorkbench(join(output, 'tarballs'))
+  await prepareVisualWorkflow(join(output, 'tarballs'), {
+    cacheDir: join(APP_ROOT, '.desktop-build', 'downloads', 'market-dependencies'), allowDownload: true,
+  })
   await prepareOfflineDependencies({ lockPath: join(SOURCE, 'offline-dependencies.lock.json'),
     tarballsDir: join(output, 'tarballs'), cacheDir: join(APP_ROOT, '.desktop-build', 'downloads', 'market-dependencies') })
+  await prepareWorkflowRuntime(join(output, 'tarballs'))
   const bin = join(output, 'node_modules', 'verdaccio', 'bin', 'verdaccio')
   if (!existsSync(bin)) throw new Error(`desktop plugin market: verdaccio was not installed at ${bin}`)
   assertRealTree(join(output, 'node_modules'))

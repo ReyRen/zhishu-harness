@@ -6,6 +6,8 @@ import { dirname, join, resolve } from 'node:path'
 import { pluginMarketPackages, seedPluginMarketStorage, tarballMarketPackages, workbenchMarketPackages } from '../apps/desktop/src/plugin-market.ts'
 import { prepareOfflineDependencies } from '../market-registry/prepare-offline-dependencies.mjs'
 import { prepareMindWorkbench, mindWorkbenchVersion } from '../market-registry/prepare-mind-workbench.mjs'
+import { prepareVisualWorkflow, visualWorkflowVersion } from '../market-registry/prepare-visual-workflow.mjs'
+import { prepareWorkflowRuntime } from '../market-registry/prepare-workflow-runtime.mjs'
 
 const source = resolve(import.meta.dirname, '../market-registry')
 const output = resolve(process.argv[2])
@@ -33,8 +35,11 @@ try {
   }
   await prepareMindWorkbench(staging)
   versions.add(`dsh-mind-workbench@${mindWorkbenchVersion}`)
+  await prepareVisualWorkflow(staging, { allowDownload: true })
+  versions.add(`dsh-visual-workflow@${visualWorkflowVersion}`)
   await prepareOfflineDependencies({ lockPath: join(source, 'offline-dependencies.lock.json'), tarballsDir: staging,
     cacheDir: process.env.DSH_MARKET_CACHE })
+  await prepareWorkflowRuntime(staging)
   const packages = tarballMarketPackages(staging)
   for (const item of [...pluginMarketPackages(join(source, 'plugins.json')), ...workbenchMarketPackages(join(source, 'workbenches.json'))]) {
     if (!versions.has(`${item.name}@${item.version}`)) throw new Error(`Missing catalog tarball: ${item.name}@${item.version}`)

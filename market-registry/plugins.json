@@ -1,6 +1,6 @@
 {
-  "updated": "2026-11-04",
-  "count": 2,
+  "updated": "2026-11-16",
+  "count": 3,
   "categories": {
     "theme": {
       "zh": "主题",
@@ -9,6 +9,10 @@
     "docs": {
       "zh": "文档与渲染",
       "en": "Docs & rendering"
+    },
+    "workflow": {
+      "zh": "工作流",
+      "en": "Workflow"
     }
   },
   "plugins": [
@@ -39,6 +43,20 @@
       "version": "1.6.0",
       "install": "dsh plugin --profile web add @zhishu/dsh-paper-reader",
       "added": "2026-11-04"
+    },
+    {
+      "name": "dsh-visual-workflow",
+      "owner": "etoilestar",
+      "url": "https://github.com/etoilestar/dsh-Visual-Workflow",
+      "category": "workflow",
+      "description": {
+        "zh": "可视化 Agent 工作流：通过节点编排角色、工具与知识检索，支持模板和运行管理。依赖与本地向量模型随镜像提供，可离线安装到个人空间。",
+        "en": "Compose Agent workflows with roles, tools, retrieval, templates, and run management. Dependencies and a local embedding model are bundled for offline installation into your own profile."
+      },
+      "npm": "dsh-visual-workflow",
+      "version": "0.11.1-zhishu.1",
+      "install": "dsh plugin --profile web add dsh-visual-workflow",
+      "added": "2026-11-16"
     }
   ]
 }
