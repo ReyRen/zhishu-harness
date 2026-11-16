@@ -10,6 +10,10 @@
 
 思维导图适配版由 `prepare-mind-workbench.mjs` 根据哈希锁定的上游归档和 `patches/` 中的已审查补丁构建。仓库启动、容器准备和 Desktop 打包生成同一个独立版本，生成的归档不提交。画布保存会保留待保存的编辑、跳过内容未变的文档，并排除过期轮询造成的外部更新误报；真正的新写入仍须由用户明确重新载入画布。
 
+Visual Workflow 由 [`prepare-visual-workflow.mjs`](prepare-visual-workflow.mjs) 根据锁定的已编译源码归档生成，GUI 和文件路由使用 Harness Host 的认证。容器和 Desktop 打包阶段准备完整依赖及 `bge-small-zh-v1.5` 量化模型，并校验模型每个文件的 SHA-256。用户在「设置 → 插件市场」自主安装到自己的 profile，工作流数据保存在该用户 `DSH_HOME/visual-workflow`；卸载插件保留数据。安装与本地向量检索无需公网，工作流中的模型及工具仍使用各自配置的服务。
+
+[`prepare-workflow-runtime.mjs`](prepare-workflow-runtime.mjs) 为 CPU 推理、图像库及其引用链生成独立的 `zhishu-runtime.1` 版本：保留已编译代码、平台二进制和许可证，省略下载可选 CUDA 库、检查本机编译环境或输出版本提示的安装脚本。原始包、校验信息和 pnpm 默认的未知脚本审批要求均保留；不自动放行脚本。断网烟测验证实际 CPU 嵌入、图像编码及 protobuf 编解码。
+
 | 包 | 版本 | 来源 |
 | --- | --- | --- |
 | `open-sea-skin` | 1.2.6 | 社区 npm，tarball 在 `tarballs/` |
@@ -17,7 +21,7 @@
 | `pdfjs-dist` | 6.3.289 | `dsh-paper-reader` 的运行时依赖 |
 | `@typesafe-ai/sdk` | 0.6.0 | `dsh-paper-reader` 的运行时依赖 |
 | `undici` | 8.10.2 | `dsh-paper-reader` 的运行时依赖 |
-| `deepseek-harness-daily` | 0.4.10 | 工作台「产品更新追踪」，GitHub Release |
+| `dsh-visual-workflow` | 0.11.1-zhishu.1 | 插件「可视化工作流」，基于上游 0.11.0 的离线适配版，含本地向量模型 |
 | `dsh-mind-workbench` | 1.0.16-zhishu.1 | 工作台「DSH 思维导图工作台」，基于上游 1.0.15 的智枢适配版 |
 | `dsh-xiaohongshu-note-workbench` | 0.1.1 | 工作台「小红书笔记创作」，按公网目录指定的 GitHub commit 打包 |
 | `dsh-bianqu-workbench` | 0.1.1 | 工作台「编曲工作台」，按公网目录指定的 GitHub commit 打包 |
@@ -31,7 +35,7 @@
 
 工作台目录条目仍要给出 `npm` 和 `version`，`url` 保持 `https://github.com/owner/repo`。不要把宿主指到 `https://market.dshdesktop.com/index.json`：那份目录的安装包在 GitHub Release，不会从这份私有源下载。
 
-`deepseek-harness-daily` 声明的宿主版本是 `0.2.0-rc.2` 或 `0.2.1-rc.2`。当前仓库是 `0.2.2-alpha.2`，安装会被宿主拒绝，直到上游放宽版本或单独授权。`dsh-mind-workbench` 的版本范围可以装到当前宿主。安装前要关掉 peer 自动安装，否则私有源里没有的 `cordis` 等 peer 会导致安装失败。`pnpm dsh:private` 已经带上这个设置。`pnpm dev:desktop` 要在同一个终端里先设置 `npm_config_auto_install_peers=false` 和 `pnpm_config_auto_install_peers=false`。
+「产品更新追踪」未上架；保留的旧归档用于兼容性拒绝验证，不绕过宿主版本检查。安装前要关掉 peer 自动安装，否则私有源里没有的 `cordis` 等 peer 会导致安装失败。`pnpm dsh:private` 已经带上这个设置。`pnpm dev:desktop` 要在同一个终端里先设置 `npm_config_auto_install_peers=false` 和 `pnpm_config_auto_install_peers=false`。
 
 <a id="environment-variables"></a>
 
@@ -61,6 +65,14 @@ pnpm market:registry
 ```
 
 第一次使用前，在本目录执行 `pnpm install --ignore-workspace`。
+
+直接从源码运行私有源前，在有网络的打包机器从仓库根目录准备 Workflow 模型及锁定依赖：
+
+```sh
+node --input-type=module -e "import {prepareVisualWorkflow} from './market-registry/prepare-visual-workflow.mjs'; import {prepareOfflineDependencies} from './market-registry/prepare-offline-dependencies.mjs'; import {prepareWorkflowRuntime} from './market-registry/prepare-workflow-runtime.mjs'; await prepareOfflineDependencies({lockPath:'market-registry/offline-dependencies.lock.json',tarballsDir:'market-registry/tarballs'}); await prepareWorkflowRuntime('market-registry/tarballs'); await prepareVisualWorkflow('market-registry/tarballs', {allowDownload:true});"
+```
+
+源码私有源启动不会下载缺失的模型，资源不完整时会明确停止。拷贝这类预备源时应保留生成的 tarball、元数据和 `tarballs/.cache/`。容器与 Desktop 打包会自动完成准备；现场使用已构建镜像或安装包，无需执行上述命令。
 
 然后另开一个终端：
 

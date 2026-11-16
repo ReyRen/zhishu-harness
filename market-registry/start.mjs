@@ -12,6 +12,8 @@ import { fileURLToPath } from 'node:url'
 import { gunzipSync } from 'node:zlib'
 import { setTimeout as delay } from 'node:timers/promises'
 import { prepareMindWorkbench } from './prepare-mind-workbench.mjs'
+import { prepareVisualWorkflow } from './prepare-visual-workflow.mjs'
+import { prepareWorkflowRuntime } from './prepare-workflow-runtime.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const registry = 'http://127.0.0.1:4873'
@@ -192,6 +194,8 @@ function serveCatalog() {
 }
 
 await prepareMindWorkbench(join(root, 'tarballs'))
+await prepareVisualWorkflow(join(root, 'tarballs'))
+await prepareWorkflowRuntime(join(root, 'tarballs'))
 const verdaccio = track(spawn(process.execPath, [
   binary('verdaccio'),
   '--config', join(root, 'verdaccio.yaml'),
