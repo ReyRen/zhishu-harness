@@ -4,7 +4,7 @@ import { access, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { prepareVisualWorkflow } from '../../market-registry/prepare-visual-workflow.mjs'
+import { prepareVisualWorkflow, visualWorkflowVersion } from '../../market-registry/prepare-visual-workflow.mjs'
 import { webServerOf } from '../../market-registry/patches/visual-workflow-web-server.mjs'
 import { offlineWorkflowManifest } from '../../market-registry/prepare-workflow-runtime.mjs'
 
@@ -32,7 +32,7 @@ test('offline assembly refuses a missing model without attempting to download it
   const root = await mkdtemp(join(tmpdir(), 'workflow-offline-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   await assert.rejects(prepareVisualWorkflow(root, { cacheDir: root }), /prepare it on the packaging machine/u)
-  await assert.rejects(access(join(root, 'dsh-visual-workflow-0.11.1-zhishu.1.tgz')))
+  await assert.rejects(access(join(root, `dsh-visual-workflow-${visualWorkflowVersion}.tgz`)))
 })
 
 test('a corrupt cached model cannot enter an installable archive', async t => {

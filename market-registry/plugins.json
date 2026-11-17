@@ -54,7 +54,7 @@
         "en": "Compose Agent workflows with roles, tools, retrieval, templates, and run management. Dependencies and a local embedding model are bundled for offline installation into your own profile."
       },
       "npm": "dsh-visual-workflow",
-      "version": "0.11.1-zhishu.1",
+      "version": "1.1.1-zhishu.1",
       "install": "dsh plugin --profile web add dsh-visual-workflow",
       "added": "2026-11-16"
     }

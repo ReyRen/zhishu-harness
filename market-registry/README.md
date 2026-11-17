@@ -10,7 +10,7 @@ There is no public-registry proxy. A package absent from Verdaccio fails to inst
 
 The mind-map adaptation is built from the hash-pinned upstream archive and the reviewed patch in `patches/` by `prepare-mind-workbench.mjs`. Registry startup, container preparation, and Desktop packaging generate the same distinct package version; generated archives are not committed. Canvas saves keep unsaved edits pending, skip unchanged documents, and exclude stale polls from external-update notices. Genuine newer writes still require an explicit canvas reload.
 
-Visual Workflow is assembled from a pinned compiled-source archive by [`prepare-visual-workflow.mjs`](prepare-visual-workflow.mjs). Its GUI and file routes use Harness Host authentication. Container and Desktop packaging prepare the complete dependencies and quantized `bge-small-zh-v1.5` model, checking every model file's SHA-256. Users choose installation in Settings → Plugin market into their own profile. Workflow data lives in their `DSH_HOME/visual-workflow` and survives removal. Installation and local vector retrieval need no public network; workflow models and tools still use their configured services.
+Visual Workflow is assembled from a pinned compiled-source archive by [`prepare-visual-workflow.mjs`](prepare-visual-workflow.mjs). Its GUI and file routes use Harness Host authentication. Container and Desktop packaging prepare the complete dependencies and quantized `bge-small-zh-v1.5` model, checking every model file's SHA-256. Users choose installation in Settings → Plugin market into their own profile. Workflow data lives in their `DSH_HOME/visual-workflow` and survives removal. Installation and local vector retrieval need no public network; workflow models and tools still use their configured services. The registry retains the byte-identical `0.11.1-zhishu.1` archive so installed profiles can verify their existing lockfiles before upgrading.
 
 [`prepare-workflow-runtime.mjs`](prepare-workflow-runtime.mjs) creates distinct `zhishu-runtime.1` versions of the CPU inference and image libraries and their referring packages. It retains compiled code, platform binaries and licenses, omitting install hooks that download optional CUDA libraries, check local build tools, or print version advice. Original archives, integrity metadata and pnpm's default approval requirement for unknown scripts remain intact; no scripts are automatically approved. The disconnected smoke exercises CPU embedding, image encoding and protobuf encoding/decoding.
 
@@ -21,7 +21,7 @@ Visual Workflow is assembled from a pinned compiled-source archive by [`prepare-
 | `pdfjs-dist` | 6.3.289 | Runtime dependency of `dsh-paper-reader` |
 | `@typesafe-ai/sdk` | 0.6.0 | Runtime dependency of `dsh-paper-reader` |
 | `undici` | 8.10.2 | Runtime dependency of `dsh-paper-reader` |
-| `dsh-visual-workflow` | 0.11.1-zhishu.1 | Visual Workflow plugin, an offline build of upstream 0.11.0 including its local embedding model |
+| `dsh-visual-workflow` | 1.1.1-zhishu.1 | Visual Workflow plugin, an offline build of upstream 1.1.1 with Dify import and its local embedding model |
 | `dsh-mind-workbench` | 1.0.16-zhishu.1 | Workbench “DSH 思维导图工作台”, Zhishu adaptation of upstream 1.0.15 |
 | `dsh-xiaohongshu-note-workbench` | 0.1.1 | Workbench “小红书笔记创作”, packed from GitHub source commit |
 | `dsh-bianqu-workbench` | 0.1.1 | Workbench “编曲工作台”, packed from GitHub source commit |

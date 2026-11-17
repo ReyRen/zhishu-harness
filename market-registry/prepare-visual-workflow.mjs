@@ -8,26 +8,48 @@ import { create, extract } from 'tar'
 import { workflowRuntimeVersions } from './prepare-workflow-runtime.mjs'
 
 /** Private-registry release of the Web-authenticated, offline Workflow package. */
-export const visualWorkflowVersion = '0.11.1-zhishu.1'
+export const visualWorkflowVersion = '1.1.1-zhishu.1'
 
-const sourceArchive = new URL('./sources/dsh-visual-workflow-420d89c.tgz', import.meta.url)
-const sourceHash = '92b45a5e6b8fed52cbe4e832725b1871a7a673735883aee2ca72a828e9fb3f0e'
+const previousRelease = {
+  version: '0.11.1-zhishu.1', upstreamVersion: '0.11.0',
+  archive: new URL('./sources/dsh-visual-workflow-420d89c.tgz', import.meta.url),
+  sourceHash: '92b45a5e6b8fed52cbe4e832725b1871a7a673735883aee2ca72a828e9fb3f0e',
+  outputHash: 'c3f9879948fbef5cb0ccb5296bfdb771c6e47f5bdfc410d5257df6548eea53ac',
+}
+const currentRelease = {
+  version: visualWorkflowVersion, upstreamVersion: '1.1.1',
+  archive: new URL('./sources/dsh-visual-workflow-e3d9335.tgz', import.meta.url),
+  sourceHash: '770e216de494bbb3a91493559305df42e3e9aad94c3e796cde5ed778aa8f142f',
+}
 const modelWeight = 'onnx/model_quantized.onnx'
 
 /**
- * Write a complete plugin archive; network access is permitted only by an explicit packaging call.
+ * Write the current plugin archive and its byte-identical predecessor for installed profile lockfiles.
  * @param {string} tarballsDir - Output directory for the installable package.
  * @param {{cacheDir?: string, allowDownload?: boolean}} [options] - Verified model cache and packaging-only download permission.
  * @returns {Promise<string>} Prepared archive path. Missing or altered resources reject the operation.
  */
 export async function prepareVisualWorkflow(tarballsDir, { cacheDir = process.env.DSH_MARKET_CACHE ?? join(tarballsDir, '.cache'), allowDownload = false } = {}) {
-  const original = await readFile(sourceArchive)
-  if (sha256(original) !== sourceHash) throw new Error('Workflow source archive does not match the reviewed release')
+  const options = { cacheDir, allowDownload }
+  await prepareRelease(tarballsDir, previousRelease, options)
+  return prepareRelease(tarballsDir, currentRelease, options)
+}
+
+/**
+ * Preserve the reviewed payload and reject any change to an archive referenced by existing lockfiles.
+ * @param {string} tarballsDir - Output directory.
+ * @param {{version: string, upstreamVersion: string, archive: URL, sourceHash: string, outputHash?: string}} release - Pinned source and retained archive checksums.
+ * @param {{cacheDir: string, allowDownload: boolean}} options - Packaging cache and download permission.
+ * @returns {Promise<string>} Complete installable archive.
+ */
+async function prepareRelease(tarballsDir, release, { cacheDir, allowDownload }) {
+  const original = await readFile(release.archive)
+  if (sha256(original) !== release.sourceHash) throw new Error('Workflow source archive does not match the reviewed release')
   const stage = await mkdtemp(join(tmpdir(), 'dsh-workflow-package-'))
-  const packed = join(tarballsDir, `dsh-visual-workflow-${visualWorkflowVersion}.tgz`)
+  const packed = join(tarballsDir, `dsh-visual-workflow-${release.version}.tgz`)
   const temporary = `${packed}.${randomUUID()}.tmp`
   try {
-    await extract({ file: fileURLToPath(sourceArchive), cwd: stage })
+    await extract({ file: fileURLToPath(release.archive), cwd: stage })
     const root = join(stage, 'package')
     const model = join(root, 'assets/models/bge-small-zh-v1.5')
     const modelManifestPath = join(model, 'manifest.json')
@@ -59,8 +81,8 @@ export async function prepareVisualWorkflow(tarballsDir, { cacheDir = process.en
     await rm(join(root, 'lib/web-server.js.map'), { force: true })
     const manifestPath = join(root, 'package.json')
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
-    if (manifest.name !== 'dsh-visual-workflow' || manifest.version !== '0.11.0') throw new Error('Unexpected Workflow source manifest')
-    manifest.version = visualWorkflowVersion
+    if (manifest.name !== 'dsh-visual-workflow' || manifest.version !== release.upstreamVersion) throw new Error('Unexpected Workflow source manifest')
+    manifest.version = release.version
     manifest.dependencies['@huggingface/transformers'] = workflowRuntimeVersions['@huggingface/transformers']
     manifest.repository = { type: 'git', url: 'https://github.com/etoilestar/dsh-Visual-Workflow.git' }
     manifest.engines = { ...manifest.engines, dsh: '>=0.2.2-rc.2 <0.3.0-0' }
@@ -82,6 +104,9 @@ export async function prepareVisualWorkflow(tarballsDir, { cacheDir = process.en
     await visit('package')
     await mkdir(tarballsDir, { recursive: true })
     await create({ file: join(stage, 'plugin.tgz'), cwd: stage, gzip: true, portable: true, noDirRecurse: true, mtime: new Date(0) }, files)
+    if (release.outputHash !== undefined && sha256(await readFile(join(stage, 'plugin.tgz'))) !== release.outputHash) {
+      throw new Error('Workflow retained archive integrity changed; existing profile lockfiles cannot use it')
+    }
     await copyFile(join(stage, 'plugin.tgz'), temporary)
     await rename(temporary, packed)
     return packed
