@@ -1,6 +1,7 @@
 /** Verify cold-cache installation, native Web assets and persisted plugins with networking disabled. */
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -145,9 +146,13 @@ try {
   })))
   assert.equal((await webRequest('/dsh-market/registry', { extraHeaders: { cookie: '' } })).status, 401)
   assert.equal((await webRequest('/dsh-market/registry', { extraHeaders: { host: 'undeclared.invalid' } })).status, 403)
+  const retained = join(env.DSH_HOME, 'visual-workflow', 'offline-user-data.txt')
+  await mkdir(join(env.DSH_HOME, 'visual-workflow'), { recursive: true })
+  await writeFile(retained, 'retained across plugin upgrade and removal')
   for (const item of catalog.plugins) {
     const name = item.npm ?? item.name
-    const body = JSON.stringify({ url: item.url, version: item.version })
+    const version = name === 'dsh-visual-workflow' ? '0.11.1-zhishu.1' : item.version
+    const body = JSON.stringify({ url: item.url, version })
     const extraHeaders = { origin: `http://${authority}`, 'content-type': 'application/json' }
     assert.equal((await webRequest('/dsh-market/install', { method: 'POST', body,
       extraHeaders: { ...extraHeaders, origin: 'http://untrusted.invalid' } })).status, 403)
@@ -158,7 +163,25 @@ try {
     assert.equal(installed.status, 200, JSON.stringify(result))
     assert.equal(result.ok, true, JSON.stringify(result))
     const manifest = JSON.parse(await readFile(join(env.DSH_HOME, 'profiles/web/node_modules', name, 'package.json'), 'utf8'))
-    assert.equal(manifest.version, item.version)
+    assert.equal(manifest.version, version)
+    if (name === 'dsh-visual-workflow') {
+      const metadata = await (await fetch(`${registry}/dsh-visual-workflow`)).json()
+      assert.equal(metadata.versions[version].dist.integrity,
+        'sha512-1bPdd2G97JEF6JSicWiCD5gveLU1Go9vYmhOUKRvGb+Zc3ESRglaDBhXfRXeKmvG08yzIXrZz0GxsPsBRWUOmg==')
+      const method = 'pluginManager/updateBundle'
+      const updated = await webRequest(`/api/${method}`, { method: 'POST', extraHeaders,
+        body: JSON.stringify({ type: 'client-request', rpcId: randomUUID(), method,
+          payload: { args: { name, version: item.version, options: { registry } } } }) })
+      const reply = JSON.parse(updated.body)
+      assert.equal(updated.status, 200, updated.body)
+      assert.equal(reply.result.ok, true, updated.body)
+      assert.equal(reply.result.value.step, 'install', updated.body)
+      assert.ok(['applied', 'restart-required'].includes(reply.result.value.result.application), updated.body)
+      assert.equal(reply.result.value.restore, undefined, updated.body)
+      const current = JSON.parse(await readFile(join(env.DSH_HOME, 'profiles/web/node_modules', name, 'package.json'), 'utf8'))
+      assert.equal(current.version, item.version)
+      assert.equal(await readFile(retained, 'utf8'), 'retained across plugin upgrade and removal')
+    }
   }
   for (const endpoint of ['listFlowTemplates', 'listTemplates', 'models', 'presets', 'toolCombos']) {
     const options = { method: 'POST', body: JSON.stringify({ args: { kind: 'role' } }),
@@ -181,17 +204,14 @@ try {
   await promisify(execFile)(process.execPath, ['/opt/dsh/docker/smoke-workflow.mjs'], {
     env: { ...env, OMP_NUM_THREADS: '2' }, timeout: 180_000, maxBuffer: 2 * 1024 * 1024,
   })
-  const retained = join(env.DSH_HOME, 'visual-workflow', 'offline-user-data.txt')
-  await mkdir(join(env.DSH_HOME, 'visual-workflow'), { recursive: true })
-  await writeFile(retained, 'retained after plugin removal')
   const workflowCli = args => promisify(execFile)(process.execPath,
     ['/opt/dsh/apps/cli/lib/bin.js', 'plugin', '--profile', 'web', ...args],
     { env, cwd: env.DSH_DEFAULT_WORKSPACE, timeout: 180_000, maxBuffer: 2 * 1024 * 1024 })
   await workflowCli(['remove', 'dsh-visual-workflow'])
-  assert.equal(await readFile(retained, 'utf8'), 'retained after plugin removal')
+  assert.equal(await readFile(retained, 'utf8'), 'retained across plugin upgrade and removal')
   const workflow = catalog.plugins.find(item => item.npm === 'dsh-visual-workflow')
   await workflowCli(['add', '--registry', registry, '--save-exact', `dsh-visual-workflow@${workflow.version}`])
-  assert.equal(await readFile(retained, 'utf8'), 'retained after plugin removal')
+  assert.equal(await readFile(retained, 'utf8'), 'retained across plugin upgrade and removal')
   // Unlisted legacy packages remain subject to the official host-compatibility check.
   await assert.rejects(workflowCli(['add', '--registry', registry, '--save-exact', 'deepseek-harness-daily@0.4.10']), error => error.code === 1
     && error.stderr.includes('is incompatible with dsh')
@@ -233,7 +253,7 @@ try {
   assert.equal((await webRequest('/')).body.includes('dsh-visual-workflow/client'), false, 'Other users must choose installation themselves')
   const separateProfile = JSON.parse(await readFile(join(env.DSH_HOME, 'profiles/web/package.json'), 'utf8'))
   assert.equal(separateProfile.dependencies?.['dsh-visual-workflow'], undefined)
-  console.log('Offline market: cold-cache plugins/workbenches, Workflow local embedding and uninstall/data retention, incompatible-release rejection, native Web, ownership conflict/restart/isolation and read-only registry passed')
+  console.log('Offline market: cold-cache plugins/workbenches, Workflow upgrade/local embedding/import/data retention, incompatible-release rejection, native Web, ownership conflict/restart/isolation and read-only registry passed')
 } catch (error) {
   console.error(logs.replace(/([?&]token=)[\w-]+/gu, '$1<redacted>'))
   throw error
