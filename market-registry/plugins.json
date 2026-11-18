@@ -1,6 +1,6 @@
 {
   "updated": "2026-11-18",
-  "count": 3,
+  "count": 4,
   "categories": {
     "theme": {
       "zh": "主题",
@@ -45,16 +45,30 @@
       "added": "2026-11-04"
     },
     {
+      "name": "dsh-dify-migrator",
+      "owner": "etoilestar",
+      "url": "https://github.com/etoilestar/dsh-dify-migrator",
+      "category": "workflow",
+      "description": {
+        "zh": "离线转换 Dify 工具包和 Xinference 模型提供商。支持单独安装命令行转换器，也可从可视化工作流的「迁移 Dify 工具」入口上传 .difypkg 或 ZIP。",
+        "en": "Convert Dify tool packages and Xinference model providers offline. Install the command-line compiler separately or upload .difypkg or ZIP files from Visual Workflow’s Dify migration action."
+      },
+      "npm": "dsh-dify-migrator",
+      "version": "0.4.0-zhishu.1",
+      "install": "dsh plugin --profile web add dsh-dify-migrator",
+      "added": "2026-11-18"
+    },
+    {
       "name": "dsh-visual-workflow",
       "owner": "etoilestar",
       "url": "https://github.com/etoilestar/dsh-Visual-Workflow",
       "category": "workflow",
       "description": {
-        "zh": "可视化编排 Agent 工作流，支持导入 Dify 工作流，以及从 .difypkg 或 ZIP 批量迁移兼容工具。安装包已包含离线迁移器、运行依赖和本地向量模型。",
-        "en": "Compose Agent workflows, import Dify workflows, and migrate compatible tools from .difypkg files or ZIP archives. The offline package includes the migrator, runtime dependencies, and a local embedding model."
+        "zh": "可视化编排 Agent 工作流，支持导入 Dify 工作流和批量迁移兼容的工具与 Xinference 模型提供商。安装包包含离线迁移器、运行依赖和本地向量模型。",
+        "en": "Compose Agent workflows, import Dify workflows, and migrate compatible tools and Xinference model providers in batches. The offline package includes the migrator, runtime dependencies, and a local embedding model."
       },
       "npm": "dsh-visual-workflow",
-      "version": "1.3.0-zhishu.1",
+      "version": "1.4.0-zhishu.1",
       "install": "dsh plugin --profile web add dsh-visual-workflow",
       "added": "2026-11-16"
     }

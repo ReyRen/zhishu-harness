@@ -1,0 +1,99 @@
+diff --git a/package.json b/package.json
+index f3c13d4..4287f32 100644
+--- a/package.json
++++ b/package.json
+@@ -3,2 +3 @@
+-  "version": "0.4.0",
+-  "private": true,
++  "version": "0.4.0-zhishu.1",
+@@ -9 +8,2 @@
+-    "node": ">=20"
++    "node": ">=20",
++    "dsh": ">=0.2.2-rc.2 <0.3.0-0"
+@@ -25,6 +24,0 @@
+-  "scripts": {
+-    "build": "node scripts/clean.mjs && tsc -p tsconfig.json",
+-    "typecheck": "tsc -p tsconfig.test.json --noEmit",
+-    "test": "vitest run",
+-    "check": "npm run typecheck && npm test && npm run build"
+-  },
+@@ -32,3 +26,7 @@
+-    "semver": "^7.7.3",
+-    "yaml": "^2.8.1",
+-    "yauzl": "^3.2.0"
++    "semver": "7.8.6",
++    "yaml": "2.9.1",
++    "yauzl": "3.4.0"
++  },
++  "repository": {
++    "type": "git",
++    "url": "https://github.com/etoilestar/dsh-dify-migrator.git"
+@@ -36,8 +34,8 @@
+-  "devDependencies": {
+-    "@types/node": "^24.10.1",
+-    "@types/semver": "^7.7.1",
+-    "@types/yauzl": "^2.10.3",
+-    "@types/yazl": "^3.3.0",
+-    "typescript": "^6.0.3",
+-    "vitest": "^4.0.14",
+-    "yazl": "^3.3.1"
++  "zhishuSource": {
++    "upstreamVersion": "0.4.0",
++    "commit": "6d8223001e359ee22fb6d4784039352ade67b8ec"
++  },
++  "dsh": {
++    "bundle": {
++      "patch": []
++    }
+@@ -46 +43,0 @@
+-
+diff --git a/src/dify/manifest.ts b/src/dify/manifest.ts
+index 69838ba..806013f 100644
+--- a/src/dify/manifest.ts
++++ b/src/dify/manifest.ts
+@@ -0,0 +1 @@
++import semver from "semver"
+@@ -27,0 +29,3 @@ export function parseDifyManifest(pkg: RawDifyPackage): DifyManifestIR {
++  if (!semver.valid(version) || version.length > 128) {
++    throw new MigrationError("MANIFEST_INVALID", "manifest.yaml version must be a semantic version of at most 128 characters")
++  }
+diff --git a/src/dify/model-provider.ts b/src/dify/model-provider.ts
+index 6b41b7f..98ca567 100644
+--- a/src/dify/model-provider.ts
++++ b/src/dify/model-provider.ts
+@@ -38 +38 @@ function parseModelProvider(pkg: RawDifyPackage, declarationPath: string): DifyM
+-function parseCredential(value: unknown, path: string, index: number): DifyCredentialIR & { defaultValue?: unknown } {
++function parseCredential(value: unknown, path: string, index: number): DifyCredentialIR {
+@@ -48 +47,0 @@ function parseCredential(value: unknown, path: string, index: number): DifyCrede
+-    ...(Object.hasOwn(value, "default") ? { defaultValue: value.default } : {}),
+diff --git a/src/migration/installer.ts b/src/migration/installer.ts
+index 9ebc019..17bfc49 100644
+--- a/src/migration/installer.ts
++++ b/src/migration/installer.ts
+@@ -2 +2,2 @@ import { cp, mkdir, readFile, rename, rm, stat } from "node:fs/promises"
+-import { basename, dirname, join, resolve } from "node:path"
++import { join, resolve } from "node:path"
++import semver from "semver"
+@@ -31 +32 @@ async function installDshPackage(
+-  const staging = join(root, `.install-${basename(target)}-${randomUUID()}`)
++  const staging = join(root, `.install-${randomUUID()}`)
+@@ -45 +45,0 @@ async function installDshPackage(
+-  await mkdir(dirname(target), { recursive: true, mode: 0o700 })
+@@ -60 +60,3 @@ async function readManifest(path: string, schemaVersion: number): Promise<Instal
+-    || typeof parsed.version !== "string" || !isRecord(parsed.origin) || typeof parsed.origin.sha256 !== "string") {
++    || !/^dsh_dify__[a-z0-9_]{1,48}__[a-z0-9_]{1,48}$/u.test(parsed.id)
++    || typeof parsed.version !== "string" || parsed.version.length > 128 || !semver.valid(parsed.version)
++    || !isRecord(parsed.origin) || typeof parsed.origin.sha256 !== "string") {
+diff --git a/tests/model-compiler.test.ts b/tests/model-compiler.test.ts
+index d39aa27..6a0f5a5 100644
+--- a/tests/model-compiler.test.ts
++++ b/tests/model-compiler.test.ts
+@@ -43,0 +44,2 @@ describe("DSH Model package compiler", () => {
++    expect(serialized).not.toContain("https://fixture.invalid")
++    expect(serialized).not.toContain("source-model-uid")
+@@ -72,0 +75 @@ model_credential_schema:
++      default: "https://fixture.invalid"
+@@ -76,0 +80 @@ model_credential_schema:
++      default: "source-model-uid"
+@@ -80,0 +85 @@ model_credential_schema:
++      default: "secret-value"

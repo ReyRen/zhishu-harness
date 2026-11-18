@@ -9,7 +9,7 @@ import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { promisify } from 'node:util'
 import { serviceOwner, waitForService } from './services.mjs'
-import { verifyDifyMigration } from './smoke-dify-migration.mjs'
+import { verifyDifyMigration, verifyStandaloneDifyCompiler } from './smoke-dify-migration.mjs'
 
 const root = await mkdtemp(join(tmpdir(), 'dsh-offline-market-smoke-'))
 const authority = 'offline.localhost:3081'
@@ -94,10 +94,12 @@ try {
   assert.equal(response.status, 200)
   const catalog = await response.json()
   assert.ok(catalog.plugins.length > 0)
+  assert.equal(catalog.count, catalog.plugins.length)
   const workbenches = await (await fetch('http://127.0.0.1:4874/workbenches.json')).json()
   assert.ok(workbenches.workbenches.length > 0)
   assert.equal(workbenches.workbenches.some(item => item.npm === 'deepseek-harness-daily'), false)
-  assert.equal(catalog.plugins.some(item => item.npm === 'dsh-visual-workflow'), true)
+  assert.equal(catalog.plugins.find(item => item.npm === 'dsh-visual-workflow')?.version, '1.4.0-zhishu.1')
+  assert.equal(catalog.plugins.find(item => item.npm === 'dsh-dify-migrator')?.version, '0.4.0-zhishu.1')
   const dependencyLock = JSON.parse(await readFile('/opt/dsh/market-registry/offline-dependencies.lock.json', 'utf8'))
   for (const item of dependencyLock.packages) {
     const metadata = await fetch(`${registry}/${encodeURIComponent(item.name)}`)
@@ -152,7 +154,7 @@ try {
   await writeFile(retained, 'retained across plugin upgrade and removal')
   for (const item of catalog.plugins) {
     const name = item.npm ?? item.name
-    const version = name === 'dsh-visual-workflow' ? '1.1.1-zhishu.1' : item.version
+    const version = name === 'dsh-visual-workflow' ? '1.3.0-zhishu.1' : item.version
     const body = JSON.stringify({ url: item.url, version })
     const extraHeaders = { origin: `http://${authority}`, 'content-type': 'application/json' }
     assert.equal((await webRequest('/dsh-market/install', { method: 'POST', body,
@@ -165,6 +167,7 @@ try {
     assert.equal(result.ok, true, JSON.stringify(result))
     const manifest = JSON.parse(await readFile(join(env.DSH_HOME, 'profiles/web/node_modules', name, 'package.json'), 'utf8'))
     assert.equal(manifest.version, version)
+    if (name === 'dsh-dify-migrator') await verifyStandaloneDifyCompiler(root, env.DSH_HOME)
     if (name === 'dsh-visual-workflow') {
       const metadata = await (await fetch(`${registry}/dsh-visual-workflow`)).json()
       assert.equal(metadata.versions['0.11.1-zhishu.1'].dist.integrity,
@@ -172,7 +175,7 @@ try {
       const previous = await fetch(metadata.versions[version].dist.tarball)
       assert.equal(previous.status, 200)
       assert.equal(createHash('sha256').update(Buffer.from(await previous.arrayBuffer())).digest('hex'),
-        '0bb7d2ece3d32c9afb6517568191d14046449edff80e64f96618838193ffa064')
+        '20dd81725c020d7598407c1bb7dcdc9cd5326fba00444da46a471ca7173e7033')
       const method = 'pluginManager/updateBundle'
       const updated = await webRequest(`/api/${method}`, { method: 'POST', extraHeaders,
         body: JSON.stringify({ type: 'client-request', rpcId: randomUUID(), method,

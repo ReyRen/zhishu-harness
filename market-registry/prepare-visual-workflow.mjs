@@ -8,7 +8,7 @@ import { create, extract } from 'tar'
 import { workflowRuntimeVersions } from './prepare-workflow-runtime.mjs'
 
 /** Private-registry release of the Web-authenticated, offline Workflow package. */
-export const visualWorkflowVersion = '1.3.0-zhishu.1'
+export const visualWorkflowVersion = '1.4.0-zhishu.1'
 
 const retainedReleases = [{
   version: '0.11.1-zhishu.1', upstreamVersion: '0.11.0',
@@ -20,12 +20,18 @@ const retainedReleases = [{
   archive: new URL('./sources/dsh-visual-workflow-e3d9335.tgz', import.meta.url),
   sourceHash: '770e216de494bbb3a91493559305df42e3e9aad94c3e796cde5ed778aa8f142f',
   outputHash: '0bb7d2ece3d32c9afb6517568191d14046449edff80e64f96618838193ffa064',
-}]
-const currentRelease = {
-  version: visualWorkflowVersion, upstreamVersion: '1.3.0',
+}, {
+  version: '1.3.0-zhishu.1', upstreamVersion: '1.3.0',
   archive: new URL('./sources/dsh-visual-workflow-ffda808.tgz', import.meta.url),
   sourceHash: 'f43dc3dd7ce82af93b144304378bed23e6ceeb3ab05e18037026b7a4aa6f3791',
+  outputHash: '20dd81725c020d7598407c1bb7dcdc9cd5326fba00444da46a471ca7173e7033',
   dependencies: { 'dsh-dify-migrator': '0.3.0-zhishu.1', yaml: '2.8.1' },
+}]
+const currentRelease = {
+  version: visualWorkflowVersion, upstreamVersion: '1.4.0',
+  archive: new URL('./sources/dsh-visual-workflow-3d35005.tgz', import.meta.url),
+  sourceHash: '2446bcbb9f1e7cef1fb4c6cc6b0f682536af4c165a0e050996d0182fd3d6c355',
+  dependencies: { 'dsh-dify-migrator': '0.4.0-zhishu.1', yaml: '2.8.1' },
 }
 const modelWeight = 'onnx/model_quantized.onnx'
 

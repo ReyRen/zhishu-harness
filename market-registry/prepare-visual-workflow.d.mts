@@ -1,5 +1,5 @@
 /** Private-registry release of the Web-authenticated, offline Workflow package. */
-export declare const visualWorkflowVersion: '1.3.0-zhishu.1'
+export declare const visualWorkflowVersion: '1.4.0-zhishu.1'
 
 /**
  * Write the current plugin archive and retain byte-identical releases referenced by installed profile lockfiles.
