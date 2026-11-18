@@ -1,7 +1,7 @@
 /** Verify cold-cache installation, native Web assets and persisted plugins with networking disabled. */
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { promisify } from 'node:util'
 import { serviceOwner, waitForService } from './services.mjs'
+import { verifyDifyMigration } from './smoke-dify-migration.mjs'
 
 const root = await mkdtemp(join(tmpdir(), 'dsh-offline-market-smoke-'))
 const authority = 'offline.localhost:3081'
@@ -151,7 +152,7 @@ try {
   await writeFile(retained, 'retained across plugin upgrade and removal')
   for (const item of catalog.plugins) {
     const name = item.npm ?? item.name
-    const version = name === 'dsh-visual-workflow' ? '0.11.1-zhishu.1' : item.version
+    const version = name === 'dsh-visual-workflow' ? '1.1.1-zhishu.1' : item.version
     const body = JSON.stringify({ url: item.url, version })
     const extraHeaders = { origin: `http://${authority}`, 'content-type': 'application/json' }
     assert.equal((await webRequest('/dsh-market/install', { method: 'POST', body,
@@ -166,8 +167,12 @@ try {
     assert.equal(manifest.version, version)
     if (name === 'dsh-visual-workflow') {
       const metadata = await (await fetch(`${registry}/dsh-visual-workflow`)).json()
-      assert.equal(metadata.versions[version].dist.integrity,
+      assert.equal(metadata.versions['0.11.1-zhishu.1'].dist.integrity,
         'sha512-1bPdd2G97JEF6JSicWiCD5gveLU1Go9vYmhOUKRvGb+Zc3ESRglaDBhXfRXeKmvG08yzIXrZz0GxsPsBRWUOmg==')
+      const previous = await fetch(metadata.versions[version].dist.tarball)
+      assert.equal(previous.status, 200)
+      assert.equal(createHash('sha256').update(Buffer.from(await previous.arrayBuffer())).digest('hex'),
+        '0bb7d2ece3d32c9afb6517568191d14046449edff80e64f96618838193ffa064')
       const method = 'pluginManager/updateBundle'
       const updated = await webRequest(`/api/${method}`, { method: 'POST', extraHeaders,
         body: JSON.stringify({ type: 'client-request', rpcId: randomUUID(), method,
@@ -204,6 +209,7 @@ try {
   await promisify(execFile)(process.execPath, ['/opt/dsh/docker/smoke-workflow.mjs'], {
     env: { ...env, OMP_NUM_THREADS: '2' }, timeout: 180_000, maxBuffer: 2 * 1024 * 1024,
   })
+  await verifyDifyMigration(webRequest, authority, env.DSH_HOME, process.argv.includes('--exercise-dify-worker'))
   const workflowCli = args => promisify(execFile)(process.execPath,
     ['/opt/dsh/apps/cli/lib/bin.js', 'plugin', '--profile', 'web', ...args],
     { env, cwd: env.DSH_DEFAULT_WORKSPACE, timeout: 180_000, maxBuffer: 2 * 1024 * 1024 })
@@ -253,6 +259,7 @@ try {
   assert.equal((await webRequest('/')).body.includes('dsh-visual-workflow/client'), false, 'Other users must choose installation themselves')
   const separateProfile = JSON.parse(await readFile(join(env.DSH_HOME, 'profiles/web/package.json'), 'utf8'))
   assert.equal(separateProfile.dependencies?.['dsh-visual-workflow'], undefined)
+  assert.equal(separateProfile.dependencies?.['dsh-dify-migrator'], undefined)
   console.log('Offline market: cold-cache plugins/workbenches, Workflow upgrade/local embedding/import/data retention, incompatible-release rejection, native Web, ownership conflict/restart/isolation and read-only registry passed')
 } catch (error) {
   console.error(logs.replace(/([?&]token=)[\w-]+/gu, '$1<redacted>'))

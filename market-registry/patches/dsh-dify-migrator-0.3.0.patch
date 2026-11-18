@@ -1,0 +1,28 @@
+diff --git a/src/dify/manifest.ts b/src/dify/manifest.ts
+index 69838ba..081446f 100644
+--- a/src/dify/manifest.ts
++++ b/src/dify/manifest.ts
+@@ -1,0 +2 @@ import { parse } from "yaml"
++import semver from "semver"
+@@ -27,0 +29,3 @@ export function parseDifyManifest(pkg: RawDifyPackage): DifyManifestIR {
++  if (!semver.valid(version) || version.length > 128) {
++    throw new MigrationError("MANIFEST_INVALID", "manifest.yaml version must be a semantic version of at most 128 characters")
++  }
+diff --git a/src/migration/installer.ts b/src/migration/installer.ts
+index 75fa9b1..ab6175b 100644
+--- a/src/migration/installer.ts
++++ b/src/migration/installer.ts
+@@ -2 +2,2 @@ import { cp, mkdir, readFile, rename, rm, stat } from "node:fs/promises"
+-import { basename, dirname, join, resolve } from "node:path"
++import { join, resolve } from "node:path"
++import semver from "semver"
+@@ -12 +13 @@ export async function installDshToolPackage(compiledDirectory: string, dshDataDi
+-  const staging = join(root, `.install-${basename(target)}-${randomUUID()}`)
++  const staging = join(root, `.install-${randomUUID()}`)
+@@ -26 +26,0 @@ export async function installDshToolPackage(compiledDirectory: string, dshDataDi
+-  await mkdir(dirname(target), { recursive: true, mode: 0o700 })
+@@ -39 +39,3 @@ async function readManifest(path: string): Promise<DshToolPackageManifest> {
+-    || typeof parsed.version !== "string" || !isRecord(parsed.origin) || typeof parsed.origin.sha256 !== "string") {
++    || !/^dsh_dify__[a-z0-9_]{1,48}__[a-z0-9_]{1,48}$/u.test(parsed.id)
++    || typeof parsed.version !== "string" || parsed.version.length > 128 || !semver.valid(parsed.version)
++    || !isRecord(parsed.origin) || typeof parsed.origin.sha256 !== "string") {
