@@ -23,10 +23,11 @@ type: plugin
 meta: {{runner: {{language: python}}}}
 plugins: {{{capability}: [provider/echo.yaml]}}
 """)
-        archive.writestr("provider/echo.yaml", """identity: {name: echo, label: {en_US: Echo}}
+        provider = "provider: unsupported\nsupported_model_types: [llm]\n" if kind == "model" else """identity: {name: echo, label: {en_US: Echo}}
 tools: [tools/echo.yaml]
 extra: {python: {source: provider/echo.py}}
-""")
+"""
+        archive.writestr("provider/echo.yaml", provider)
         archive.writestr("tools/echo.yaml", """identity: {name: echo, label: {en_US: Echo}}
 description: {llm: Echo fixture text.}
 parameters:
@@ -61,6 +62,7 @@ else:
 name: xinference
 version: 0.0.1
 type: plugin
+meta: {runner: {language: python}}
 plugins: {models: [provider/xinference.yaml]}
 """)
             model.writestr("provider/xinference.yaml", """provider: xinference
@@ -68,6 +70,8 @@ label: {en_US: Xinference}
 supported_model_types: [llm, text-embedding, rerank, speech2text, tts]
 model_credential_schema:
   credential_form_schemas:
+    - {variable: server_url, type: text-input, required: true}
+    - {variable: model_uid, type: text-input, required: true}
     - {variable: api_key, type: secret-input, default: fixture-secret-value}
 """)
         archive.writestr("xinference.difypkg", xinference.getvalue())
@@ -133,7 +137,7 @@ export async function verifyDifyMigration(request, authority, home, exerciseWork
   assert.equal(batch.status, 200, batch.body)
   const migrated = JSON.parse(batch.body)
   assert.equal(migrated.ok, true, batch.body)
-  assert.deepEqual(migrated.value.summary, { discovered: 5, installed: 2, converted: 0, skipped: 1, duplicates: 1, failed: 1 })
+  assert.deepEqual(migrated.value.summary, { discovered: 5, installed: 2, converted: 0, skipped: 1, duplicates: 1, failed: 1 }, batch.body)
   assert.ok(migrated.value.packages.some(x => x.status === 'failed' && x.error.code === 'MANIFEST_INVALID'))
   const data = join(home, 'visual-workflow')
   assert.deepEqual((await readdir(join(data, 'migrated-tools'))).sort(), [
