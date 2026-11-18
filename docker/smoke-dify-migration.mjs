@@ -1,7 +1,7 @@
 /** Verify migration through the installed Workflow bundle and its authenticated Web Host. */
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { readFile, readdir } from 'node:fs/promises'
+import { readFile, readdir, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -55,9 +55,51 @@ else:
         archive.writestr("echo.difypkg", echo)
         archive.writestr("echo-copy.difypkg", echo)
         archive.writestr("model.difypkg", package("model"))
+        xinference = io.BytesIO()
+        with zipfile.ZipFile(xinference, "w", zipfile.ZIP_DEFLATED) as model:
+            model.writestr("manifest.yaml", """author: fixture
+name: xinference
+version: 0.0.1
+type: plugin
+plugins: {models: [provider/xinference.yaml]}
+""")
+            model.writestr("provider/xinference.yaml", """provider: xinference
+label: {en_US: Xinference}
+supported_model_types: [llm, text-embedding, rerank, speech2text, tts]
+model_credential_schema:
+  credential_form_schemas:
+    - {variable: api_key, type: secret-input, default: fixture-secret-value}
+""")
+        archive.writestr("xinference.difypkg", xinference.getvalue())
         archive.writestr("invalid.difypkg", package("invalid"))
     sys.stdout.buffer.write(batch.getvalue())
 `
+
+async function fixture(mode) {
+  const { stdout } = await promisify(execFile)('/usr/bin/python3', ['-c', buildFixture, mode], { encoding: 'buffer', timeout: 10_000 })
+  return stdout
+}
+
+/**
+ * Scan a tool package with the independently installed market bundle.
+ * @param {string} root - Disposable smoke directory.
+ * @param {string} home - Disposable Web profile home.
+ * @returns {Promise<void>} Resolves when the installed compiler reports one package.
+ */
+export async function verifyStandaloneDifyCompiler(root, home) {
+  const profile = join(home, 'profiles/web')
+  const manifest = JSON.parse(await readFile(join(profile, 'package.json'), 'utf8'))
+  assert.ok(manifest.dsh.profile.bundles.includes('dsh-dify-migrator'))
+  assert.equal(manifest.dependencies['dsh-visual-workflow'], undefined)
+  const compiler = join(profile, 'node_modules/dsh-dify-migrator/dist/cli.js')
+  const input = join(root, 'standalone-dify.difypkg')
+  await writeFile(input, await fixture('single'))
+  const { stdout } = await promisify(execFile)(process.execPath, [compiler, 'scan', input], { timeout: 10_000 })
+  const report = JSON.parse(stdout)
+  assert.equal(report.summary.discovered, 1)
+  assert.equal(report.summary.failed, 0)
+  console.log('Dify migrator: standalone compiler scanned the fixture offline')
+}
 
 /**
  * Check offline conversion and package registration through the authenticated Web Host.
@@ -72,10 +114,10 @@ export async function verifyDifyMigration(request, authority, home, exerciseWork
   const imported = createRequire(join(plugin, 'package.json'))
   const entry = pathToFileURL(imported.resolve('dsh-dify-migrator'))
   const manifest = JSON.parse(await readFile(new URL('../package.json', entry), 'utf8'))
-  assert.equal(manifest.version, '0.3.0-zhishu.1')
+  assert.equal(manifest.version, '0.4.0-zhishu.1')
   const upload = async (name, mode) => {
-    const { stdout } = await promisify(execFile)('/usr/bin/python3', ['-c', buildFixture, mode], { encoding: 'buffer', timeout: 10_000 })
-    return { method: 'POST', body: JSON.stringify({ args: { name, base64: stdout.toString('base64') } }),
+    const archive = await fixture(mode)
+    return { method: 'POST', body: JSON.stringify({ args: { name, base64: archive.toString('base64') } }),
       extraHeaders: { origin: `http://${authority}`, 'content-type': 'application/json' } }
   }
   const endpoint = '/visual-workflow/migrateDifyTools'
@@ -91,12 +133,17 @@ export async function verifyDifyMigration(request, authority, home, exerciseWork
   assert.equal(batch.status, 200, batch.body)
   const migrated = JSON.parse(batch.body)
   assert.equal(migrated.ok, true, batch.body)
-  assert.deepEqual(migrated.value.summary, { discovered: 4, installed: 1, converted: 0, skipped: 1, duplicates: 1, failed: 1 })
+  assert.deepEqual(migrated.value.summary, { discovered: 5, installed: 2, converted: 0, skipped: 1, duplicates: 1, failed: 1 })
   assert.ok(migrated.value.packages.some(x => x.status === 'failed' && x.error.code === 'MANIFEST_INVALID'))
   const data = join(home, 'visual-workflow')
   assert.deepEqual((await readdir(join(data, 'migrated-tools'))).sort(), [
     'dsh_dify__fixture__direct@0.0.1', 'dsh_dify__fixture__echo@0.0.1',
   ])
+  const model = await readFile(join(data, 'migrated-models/dsh_dify__fixture__xinference@0.0.1/dsh-model-package.json'), 'utf8')
+  assert.ok(!model.includes('fixture-secret-value'))
+  const [provider] = JSON.parse(model).providers
+  assert.equal(provider.adapter, 'xinference-openai-compatible')
+  assert.deepEqual(provider.supportedModelTypes, ['llm', 'text-embedding', 'rerank', 'speech2text', 'tts'])
   const tool = 'dsh_migrated__fixture__echo__echo'
   const { MigratedToolRegistry } = await import(pathToFileURL(join(plugin, 'lib/migrated-tools/registry.js')).href)
   const registry = new MigratedToolRegistry(data)
@@ -106,5 +153,5 @@ export async function verifyDifyMigration(request, authority, home, exerciseWork
     const value = await registry.invoke(tool, { query: 'offline' }, undefined, 'fixture/echo:0.0.1')
     assert.equal(value.text, 'echo:offline')
   }
-  console.log(`Dify migrator: authenticated offline .difypkg and batch ZIP conversion passed${exerciseWorker ? ', including isolated Python execution' : ''}`)
+  console.log(`Dify migrator: authenticated offline tool/Xinference conversion passed${exerciseWorker ? ', including isolated Python execution' : ''}`)
 }
