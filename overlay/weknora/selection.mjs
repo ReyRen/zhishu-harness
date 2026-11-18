@@ -2,6 +2,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { WeknoraClient, WeknoraApiError } from '@wxg-prc-cpg/dsh-weknora'
+import { HarnessError } from '@deepseek-ai/dsh-llm'
 
 export const SELECTION_KEY = 'zhishuKnowledge'
 export const SELECT_COMMAND = 'knowledge'
@@ -21,8 +22,8 @@ function parseSelection(rawInput) {
 }
 
 /** Stable refusals; never contain backend credentials or retrieved document content. */
-export class KnowledgeScopeError extends Error {
-  constructor(code, message) { super(message); this.code = code }
+export class KnowledgeScopeError extends HarnessError {
+  constructor(code, message) { super(message, code) }
 }
 
 /** Reconstruct selections only from successfully completed human commands. */
@@ -67,15 +68,21 @@ export async function visibleBases(client, allowedIds, signal) {
   const bases = await client.listKnowledgeBases(signal)
   return bases.filter(base => idSchema.safeParse(base.id).success
     && (!allowedIds.length || allowedIds.includes(base.id)))
-    .map(base => ({ id: base.id, name: typeof base.name === 'string' && base.name.trim() ? base.name : base.id }))
+    .map(base => ({ id: base.id, name: typeof base.name === 'string' && base.name.trim() ? base.name : base.id,
+      wiki: base.capabilities?.wiki === true,
+      documentSearch: !(base.capabilities?.wiki === true && base.capabilities.vector === false && base.capabilities.keyword === false),
+    }))
 }
 
 /** All retrieval methods enforce the selected KB set, including document-only calls. */
 export class SelectedKnowledgeClient extends AccessibleKnowledgeClient {
-  constructor(config, knowledgeBaseIds, requestID) {
+  constructor(config, knowledgeBaseIds, requestID, bases = []) {
     super(config)
     this.knowledgeBaseIds = knowledgeBaseIds
     this.requestID = requestID
+    const selected = bases.filter(base => knowledgeBaseIds.includes(base.id))
+    this.wikiBaseIds = selected.filter(base => base.wiki).map(base => base.id)
+    this.documentBaseIds = knowledgeBaseIds.filter(id => !selected.some(base => base.id === id && !base.documentSearch))
   }
   headers() { return { ...super.headers(), 'X-Request-ID': this.requestID } }
   async listKnowledgeBases(signal) {
@@ -106,8 +113,9 @@ export class SelectedKnowledgeClient extends AccessibleKnowledgeClient {
   async searchResult(input, signal) {
     this.checkScope(input.knowledgeBaseIds)
     for (const id of input.knowledgeIds) await this.getDocument(id, signal)
+    if (!this.documentBaseIds.length) return { hits: [], diagnostics: { status: 'not_searched', reason: 'wiki_only' } }
     const envelope = await this.fetchJson('/knowledge-search', { method: 'POST', body: {
-      query: input.query, knowledge_base_ids: this.knowledgeBaseIds,
+      query: input.query, knowledge_base_ids: this.documentBaseIds,
       ...(input.knowledgeIds.length ? { knowledge_ids: input.knowledgeIds } : {}),
     } }, signal)
     if (envelope?.success === false || !Array.isArray(envelope?.data)) throw new WeknoraApiError('Invalid knowledge search response', 502)
@@ -140,7 +148,10 @@ export class SelectedKnowledgeClient extends AccessibleKnowledgeClient {
     if (input.agentId !== undefined || input.webSearch) {
       throw new KnowledgeScopeError('knowledge_scope_denied', 'Selected knowledge uses the scoped RAG pipeline without web search.')
     }
-    return super.ask({ ...input, knowledgeBaseIds: this.knowledgeBaseIds }, signal)
+    if (!this.documentBaseIds.length) {
+      throw new KnowledgeScopeError('knowledge_no_document_index', 'Use search to retrieve Wiki pages from the selected bases.')
+    }
+    return super.ask({ ...input, knowledgeBaseIds: this.documentBaseIds }, signal)
   }
 }
 
@@ -191,7 +202,10 @@ export async function installSelection(ctx, client, allowedIds) {
   }), 'knowledge: cancel retrieval after scope changes')
   ctx.effect(() => ctx.connection.fetch.register({ path: '/api/zhishu-knowledge/catalog', methods: ['GET'], requestBody: 'buffered',
     async fetch(request) {
-      try { return Response.json({ knowledgeBases: await catalog(request.signal) }, { headers: { 'cache-control': 'no-store' } }) }
+      try {
+        const bases = await catalog(request.signal)
+        return Response.json({ knowledgeBases: bases.map(({ id, name }) => ({ id, name })) }, { headers: { 'cache-control': 'no-store' } })
+      }
       catch (error) {
         const status = error instanceof KnowledgeScopeError ? 409 : error.status || 502
         return Response.json({ error: error.code || 'knowledge_catalog_unavailable' }, { status })
@@ -216,7 +230,7 @@ export async function installSelection(ctx, client, allowedIds) {
         }
         signal.throwIfAborted()
         if (selectionOf(exec.agent) !== ids) throw new KnowledgeScopeError('knowledge_scope_changed', 'Knowledge selection changed; retry the question.')
-        const result = await callback(ids, signal)
+        const result = await callback(ids, signal, visible)
         signal.throwIfAborted()
         return result
       } catch (error) {

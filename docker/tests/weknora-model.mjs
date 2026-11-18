@@ -12,10 +12,21 @@ export const calls = [
 
 export const selectedCalls = [calls[0], ['weknora_overview', {}], ...calls.slice(1)]
 
+/** Resolve the calls for owned, shared and legacy-profile fixture sessions.
+ * @param managed Whether the platform wrapper supplies selected knowledge.
+ * @param base The fixture knowledge base ID.
+ * @returns The tool calls in their expected execution order.
+ */
+export function plannedCalls(managed, base) {
+  if (!managed) return calls
+  if (!base.endsWith('-shared')) return selectedCalls
+  return [...selectedCalls, ['weknora_wiki_read_page', { knowledge_base_id: base, slug: 'concept/backup-retention' }]]
+}
+
 export class KnowledgeModel extends LlmAdapter {
   async * stream(options) {
     const managed = options.tools.some(tool => tool.name === 'weknora_overview')
-    const planned = managed ? selectedCalls : calls
+    const planned = plannedCalls(managed, this.selectedBase)
     for (const [name] of planned) {
       const tool = options.tools.find(tool => tool.name === name)
       assert.ok(tool, `${name} is model-visible`)
@@ -32,6 +43,8 @@ export class KnowledgeModel extends LlmAdapter {
       assert.equal(typeof this.selectedBase, 'string')
       const expected = JSON.parse(readFileSync(new URL('./expected/weknora-context.json', import.meta.url), 'utf8')
         .replaceAll('<selected-base>', this.selectedBase))
+      if (this.selectedBase.endsWith('-shared')) expected.wiki = JSON.parse(readFileSync(
+        new URL('./expected/weknora-wiki-context.json', import.meta.url), 'utf8').replaceAll('<selected-base>', this.selectedBase))
       assert.deepEqual(evidence, expected, 'model-visible evidence matches the keyless context snapshot')
       assert.equal(evidence.status, 'retrieved')
       assert.equal(evidence.overview.total_documents, 1)
@@ -55,6 +68,7 @@ export class KnowledgeModel extends LlmAdapter {
     for (const result of results) assert.equal(result.isError, false, JSON.stringify(result.content))
     const evidence = results.flatMap(result => result.content).filter(block => block.type === 'text').map(block => block.text).join('\n')
     assert.match(evidence, /Backups are retained for 30 days/u)
+    if (managed && this.selectedBase.endsWith('-shared')) assert.match(evidence, /doc-backups\|Backup policy/u)
     const text = 'Backups are retained for 30 days. Source: Backup policy.'
     yield { type: 'block-start', index: 0, blockType: 'text' }
     yield { type: 'text-delta', index: 0, text }

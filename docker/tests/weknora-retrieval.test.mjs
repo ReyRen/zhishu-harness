@@ -17,18 +17,29 @@ async function fixture(t, options = {}) {
       calls.push({ path: url.pathname, body, query: Object.fromEntries(url.searchParams) })
       const send = (status, data) => { response.writeHead(status, { 'content-type': 'application/json' }); response.end(JSON.stringify(data)) }
       if (url.pathname === '/api/v1/knowledge-bases') return send(200, { data: [{ id: 'own', name: 'Owned' }] })
-      if (url.pathname === '/api/v1/shared-knowledge-bases') return send(200, { data: state.revoked ? [] : [{ knowledge_base: { id: 'shared', name: 'Shared' } }] })
+      if (url.pathname === '/api/v1/shared-knowledge-bases') return send(200, { data: state.revoked ? [] : [{ knowledge_base: {
+        id: 'shared', name: 'Shared', ...(options.wiki ? { capabilities: { wiki: true, vector: false, keyword: false } } : {}),
+      } }] })
       const catalog = /^\/api\/v1\/knowledge-bases\/(own|shared)\/knowledge$/u.exec(url.pathname)
       if (catalog) {
         await state.beforeDocuments?.()
         if (response.destroyed) return
         if (state.broken) return send(503, { error: 'fixture unavailable' })
         const page = Number(url.searchParams.get('page')), size = Number(url.searchParams.get('page_size'))
-        const documents = options.empty ? [] : Array.from({ length: 3 }, (_, index) => ({
+        const documents = options.empty || (options.wiki && catalog[1] === 'shared') ? [] : Array.from({ length: 3 }, (_, index) => ({
           id: `${catalog[1]}-doc-${index}`, knowledge_base_id: catalog[1], title: `Document ${index}`,
           parse_status: index === 2 ? 'processing' : 'completed', description: `Summary ${index}`,
         }))
         return send(200, { data: documents.slice((page - 1) * size, page * size), total: documents.length, page, page_size: size })
+      }
+      if (options.wiki && url.pathname === '/api/v1/wiki-search') {
+        const matches = body.query === 'Cedar' ? [{ id: 'wiki-cedar', knowledge_base_id: 'shared', slug: 'concept/cedar',
+          title: 'Cedar policy', summary: 'Cedar records are retained for 47 days.' }] : []
+        return send(200, { success: true, data: matches })
+      }
+      if (options.wiki && url.pathname === '/api/v1/knowledgebase/shared/wiki/pages/concept/cedar') {
+        return send(200, { id: 'wiki-cedar', knowledge_base_id: 'shared', slug: 'concept/cedar', title: 'Cedar policy',
+          content: 'Cedar records are retained for 47 days.', source_refs: ['cedar-source|Policy notes'] })
       }
       if (url.pathname === '/api/v1/knowledge-search') return send(200, { data: state.filtered ? [] : [{
         knowledge_id: 'own-doc-0', knowledge_title: 'Backup policy', content: 'Backups last 30 days.', chunk_index: 0,
@@ -155,6 +166,34 @@ test('only an authenticated zero-document catalog establishes an empty library',
   assert.equal(f.snapshot().overview.total_documents, 0)
   assert.equal(f.snapshot().overview.complete, true)
   assert.equal(f.calls.some(row => row.path.endsWith('/knowledge-search')), false)
+})
+
+test('a selected Wiki-only base supplies evidence for a question even without source documents', async t => {
+  const f = await fixture(t, { ids: ['shared'], wiki: true })
+  await f.prepare('What is the Cedar limit? Cite the encyclopedia page as your source.')
+  const result = f.snapshot()
+  assert.equal(result.overview.total_documents, 0)
+  assert.equal(result.wiki.status, 'matches')
+  assert.equal(result.wiki.pages[0].summary, 'Cedar records are retained for 47 days.')
+  assert.equal(f.calls.some(row => row.path.endsWith('/knowledge-search')), false)
+  assert.ok(f.calls.filter(row => row.path.endsWith('/wiki-search')).every(row =>
+    JSON.stringify(row.body.knowledge_base_ids) === '["shared"]'))
+})
+
+test('mixed selections search each index and Wiki reads stop after revocation', async t => {
+  const f = await fixture(t, { ids: ['own', 'shared'], wiki: true })
+  const result = await f.execute('search', { query: 'Cedar' })
+  assert.equal(result.count, 1)
+  assert.equal(result.wiki.pages[0].slug, 'concept/cedar')
+  assert.deepEqual(f.calls.find(row => row.path.endsWith('/knowledge-search')).body.knowledge_base_ids, ['own'])
+  const page = await f.execute('wiki_read_page', { knowledge_base_id: 'shared', slug: 'concept/cedar' })
+  assert.match(page.content, /47 days/u)
+  assert.deepEqual(page.source_refs, ['cedar-source|Policy notes'])
+  f.state.revoked = true
+  const before = f.calls.length
+  await assert.rejects(f.execute('wiki_read_page', { knowledge_base_id: 'shared', slug: 'concept/cedar' }),
+    { code: 'knowledge_scope_denied' })
+  assert.equal(f.calls.slice(before).some(row => row.path.includes('/wiki/pages/')), false)
 })
 
 test('unloading automatic retrieval aborts pending discovery before it can publish model context', async t => {

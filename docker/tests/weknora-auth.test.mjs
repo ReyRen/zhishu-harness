@@ -105,6 +105,24 @@ test('shared catalog reads use the same authenticated user and never forward the
   assert.equal(JSON.parse(Buffer.from(request.authorization.split('.')[1], 'base64url')).sub, '369')
 })
 
+test('the SSO bridge forwards Wiki search and page reads with user credentials', async t => {
+  const f = await fixture(t)
+  const path = '/knowledgebase/kb-test/wiki/pages/concept/cedar'
+  await f.runtime.signIn({ access_token: 'platform-369' })
+  const query = JSON.stringify({ query: 'Cedar', knowledge_base_ids: ['kb-test'] })
+  for (const response of [await f.request('/wiki-search', { method: 'POST', body: query }), await f.request(path)]) {
+    assert.equal(response.status, 200)
+    await response.arrayBuffer()
+  }
+  assert.deepEqual(f.calls.slice(1).map(call => [call.method, call.path]), [
+    ['POST', '/api/v1/wiki-search'], ['GET', '/api/v1' + path],
+  ])
+  assert.ok(f.calls.slice(1).every(call => call.authorization?.startsWith('Bearer ') && call.apiKey === undefined))
+  assert.equal((await f.request(path, { method: 'PUT', body: '{}' })).status, 404)
+  assert.equal((await f.request(path, { method: 'DELETE' })).status, 404)
+  assert.equal(f.calls.length, 3)
+})
+
 test('expired credentials refresh once across concurrent retrievals', async t => {
   const f = await fixture(t, { expired: true })
   await f.runtime.signIn({ access_token: 'platform-369' })
