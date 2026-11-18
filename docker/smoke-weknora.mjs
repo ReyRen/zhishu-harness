@@ -44,13 +44,23 @@ const backend = createServer((request, response) => {
     if (url.pathname === '/api/v1/knowledge-bases') {
       send(200, { data: [{ id: `kb-${user}`, name: `Policies ${user}`, description: 'Backup policies' }] })
     } else if (url.pathname === '/api/v1/shared-knowledge-bases') {
-      send(200, { data: [{ knowledge_base: { id: `kb-${user}-shared`, name: `Shared policies ${user}` }, permission: 'viewer' }] })
+      send(200, { data: [{ knowledge_base: { id: `kb-${user}-shared`, name: `Shared policies ${user}`,
+        capabilities: { wiki: true, vector: true, keyword: true } }, permission: 'viewer' }] })
     } else if (url.pathname === `/api/v1/knowledge-bases/${selectedKB}/knowledge`) {
       send(200, { data: [{ id: 'doc-backups', knowledge_base_id: selectedKB, title: 'Backup policy',
         parse_status: 'completed', description: text }], total: 1, page: 1, page_size: 8 })
     } else if (url.pathname === '/api/v1/knowledge-search') {
       assert.deepEqual(body.knowledge_base_ids, [selectedKB])
       send(200, { data: [chunk] })
+    } else if (url.pathname === '/api/v1/wiki-search') {
+      assert.ok(request.headers.authorization?.startsWith('Bearer fixture.'))
+      assert.deepEqual(body.knowledge_base_ids, [selectedKB])
+      send(200, { success: true, data: [{ id: 'wiki-backup-retention', knowledge_base_id: selectedKB,
+        slug: 'concept/backup-retention', title: 'Backup retention', summary: text }] })
+    } else if (url.pathname === `/api/v1/knowledgebase/${selectedKB}/wiki/pages/concept/backup-retention`) {
+      assert.ok(request.headers.authorization?.startsWith('Bearer fixture.'))
+      send(200, { knowledge_base_id: selectedKB, slug: 'concept/backup-retention', title: 'Backup retention',
+        content: text, source_refs: ['doc-backups|Backup policy'] })
     } else if (url.pathname === '/api/v1/knowledge/search') {
       send(200, { data: [] })
     } else if (url.pathname === '/api/v1/knowledge/doc-backups') {
@@ -172,6 +182,10 @@ try {
   await probe('b', false, true)
   assert.ok(requests.some(request => request.path === '/api/v1/knowledge-search'
     && request.body?.knowledge_base_ids?.includes('kb-b-shared')))
+  assert.ok(requests.some(request => request.path === '/api/v1/wiki-search'
+    && request.body?.knowledge_base_ids?.includes('kb-b-shared')))
+  assert.ok(requests.some(request => request.path === '/api/v1/knowledgebase/kb-b-shared/wiki/pages/concept/backup-retention'
+    && request.method === 'GET'))
   for (const user of ['a', 'b']) {
     assert.ok(requests.some(request => request.user === user && request.path === '/api/v1/knowledge-search'))
     assert.ok(requests.filter(request => request.user === user).every(request => request.tenant === `tenant-${user}`))

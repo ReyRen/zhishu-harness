@@ -1,7 +1,7 @@
 /** Drive the built Web agent through the installation's unmodified WeKnora tools. */
 import assert from 'node:assert/strict'
 import { createUserMessage } from '../../packages/llm/llm/lib/index.js'
-import { calls, selectedCalls, KnowledgeModel } from './weknora-model.mjs'
+import { KnowledgeModel, plannedCalls } from './weknora-model.mjs'
 
 export const inject = ['loader', 'llm', 'tools', 'agents', 'profileContext', 'commands']
 
@@ -28,7 +28,7 @@ export function apply(ctx) {
       try {
         const managed = ctx.commands.find(handle.agent, 'knowledge') !== undefined
         const enhanced = managed && ctx.tools.get('weknora_overview') !== undefined
-        const planned = enhanced ? selectedCalls : calls
+        const planned = plannedCalls(enhanced, message.knowledgeBaseId)
         const resolveTools = () => ctx.tools.resolve({ agent: handle.agent,
           modelSelection: { provider: 'weknora-smoke', model: 'weknora-smoke' }, signal: AbortSignal.timeout(5_000) })
         if (managed) {

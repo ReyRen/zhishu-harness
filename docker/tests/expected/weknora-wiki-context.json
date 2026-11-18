@@ -1,0 +1,13 @@
+{
+  "status": "matches",
+  "query": "Consult the knowledge base and explain the backup policy",
+  "pages": [
+    {
+      "knowledge_base_id": "<selected-base>",
+      "slug": "concept/backup-retention",
+      "title": "Backup retention",
+      "summary": "Backups are retained for 30 days.",
+      "snippet": ""
+    }
+  ]
+}

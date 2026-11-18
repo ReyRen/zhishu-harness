@@ -7,8 +7,8 @@ import { pipeline } from 'node:stream/promises'
 const BODY_LIMIT = 70_000
 const TOOL_BODY_LIMIT = 1024 * 1024
 const routes = new Map([
-  ['GET', /^\/(?:knowledge-bases|knowledge-bases\/[^/]+\/knowledge|shared-knowledge-bases|knowledge\/search|knowledge\/[^/]+|chunks\/[^/]+)$/u],
-  ['POST', /^\/(?:knowledge-search|sessions|knowledge-chat\/[^/]+|agent-chat\/[^/]+)$/u],
+  ['GET', /^\/(?:knowledge-bases|knowledge-bases\/[^/]+\/knowledge|shared-knowledge-bases|knowledge\/search|knowledge\/[^/]+|chunks\/[^/]+|knowledgebase\/[^/]+\/wiki\/pages\/[^/]+(?:\/[^/]+)*)$/u],
+  ['POST', /^\/(?:knowledge-search|wiki-search|sessions|knowledge-chat\/[^/]+|agent-chat\/[^/]+)$/u],
 ])
 
 /** A stable failure code, safe to return without backend credentials or bodies. */

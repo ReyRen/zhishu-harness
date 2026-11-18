@@ -3,6 +3,7 @@ import { createTools, resolveConfig, WeknoraClient } from '@wxg-prc-cpg/dsh-wekn
 import { createKnowledgeRuntime } from './runtime.mjs'
 import { AccessibleKnowledgeClient, installSelection, knowledgeRequestID, SelectedKnowledgeClient, selectedArguments } from './selection.mjs'
 import { executeKnowledgeTool, installKnowledgeContext, knowledgeTool, overviewTool } from './retrieval.mjs'
+import { wikiReadTool } from './wiki.mjs'
 
 export const inject = ['tools', 'connection', 'commands', 'sessionProjections', 'agents', 'systemPrompt']
 
@@ -35,9 +36,10 @@ export async function apply(ctx, config) {
   }
   const proxied = { ...resolved, ...transport, tenantId: resolved.apiKey ? resolved.tenantId : undefined }
   const selection = await installSelection(ctx, new AccessibleKnowledgeClient(proxied), resolved.knowledgeBaseIds)
-  const run = (context, callback) => selection.run(context, (ids, signal) => {
+  const run = (context, callback) => selection.run(context, (ids, signal, visible) => {
     const requestID = knowledgeRequestID(platformUserID, context.agent.id, context.callId)
-    return callback(new SelectedKnowledgeClient({ ...proxied, knowledgeBaseIds: ids, agentId: undefined }, ids, requestID), signal)
+    const config = { ...proxied, knowledgeBaseIds: ids, agentId: undefined }
+    return callback(new SelectedKnowledgeClient(config, ids, requestID, visible), signal, config)
   })
   installKnowledgeContext(ctx, selection, resolved, run)
   const descriptions = {
@@ -51,15 +53,14 @@ export async function apply(ctx, config) {
       description: descriptions[definition.name.slice(resolved.toolPrefix.length + 1)] }, resolved)
     ctx.tools.register({ ...selected,
       execute(args, context) {
-        return selection.run(context, async (ids, signal) => {
-          const config = { ...proxied, knowledgeBaseIds: ids, agentId: undefined }
-          const requestID = knowledgeRequestID(platformUserID, context.agent.id, context.callId)
-          const client = new SelectedKnowledgeClient(config, ids, requestID)
+        return run(context, (client, signal, config) => {
           const current = createTools(client, config).find(tool => tool.name === definition.name)
-          return executeKnowledgeTool(current, client, selectedArguments(args, ids), { ...context, signal })
+          return executeKnowledgeTool(current, client, selectedArguments(args, client.knowledgeBaseIds), { ...context, signal }, config)
         })
       },
     }, { when: ({ agent }) => selection.selectionOf(agent).length > 0 })
   }
   ctx.tools.register(overviewTool(resolved, run), { when: ({ agent }) => selection.selectionOf(agent).length > 0 })
+  ctx.effect(() => ctx.tools.register(wikiReadTool(resolved, run), { when: ({ agent }) => selection.selectionOf(agent).length > 0 }),
+    'knowledge: Wiki page reader')
 }
