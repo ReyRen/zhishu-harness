@@ -10,7 +10,9 @@
 
 思维导图适配版由 `prepare-mind-workbench.mjs` 根据哈希锁定的上游归档和 `patches/` 中的已审查补丁构建。仓库启动、容器准备和 Desktop 打包生成同一个独立版本，生成的归档不提交。画布保存会保留待保存的编辑、跳过内容未变的文档，并排除过期轮询造成的外部更新误报；真正的新写入仍须由用户明确重新载入画布。
 
-Visual Workflow 由 [`prepare-visual-workflow.mjs`](prepare-visual-workflow.mjs) 根据锁定的已编译源码归档生成，GUI 和文件路由使用 Harness Host 的认证。容器和 Desktop 打包阶段准备完整依赖及 `bge-small-zh-v1.5` 量化模型，并校验模型每个文件的 SHA-256。用户在「设置 → 插件市场」自主安装到自己的 profile，工作流数据保存在该用户 `DSH_HOME/visual-workflow`；卸载插件保留数据。安装与本地向量检索无需公网，工作流中的模型及工具仍使用各自配置的服务。私有源保留逐字节一致的 `0.11.1-zhishu.1` 归档，使已安装的 profile 能先校验原有锁文件再升级。
+Visual Workflow 由 [`prepare-visual-workflow.mjs`](prepare-visual-workflow.mjs) 根据锁定的已编译源码归档生成，GUI 和文件路由使用 Harness Host 的认证。容器和 Desktop 打包阶段准备完整依赖及 `bge-small-zh-v1.5` 量化模型，并校验每个模型文件的 SHA-256。用户从「设置 → 插件市场」安装到自己的 profile。工作流数据保存在 `DSH_HOME/visual-workflow`，卸载插件会保留数据。私有源保留逐字节一致的 `0.11.1-zhishu.1` 和 `1.1.1-zhishu.1` 归档，供已有 profile 校验锁文件。
+
+在工作流工作台选择「迁移 Dify 工具」，上传 `.difypkg` 文件或包含它们的 ZIP。安装 Workflow 时会一并安装随包提供的 Dify Migrator。兼容的 Dify Tool 包会转换到当前用户的工作流数据目录，并注册为 Harness 工具。转换和本地向量检索可离线运行。Linux Web 镜像在 bubblewrap 中运行转换后的 Python 工具，使用只读的工具包及独立的临时目录。需要额外 Python 库、凭据或网络服务的工具包，须在目标环境提供相应资源。
 
 [`prepare-workflow-runtime.mjs`](prepare-workflow-runtime.mjs) 为 CPU 推理、图像库及其引用链生成独立的 `zhishu-runtime.1` 版本：保留已编译代码、平台二进制和许可证，省略下载可选 CUDA 库、检查本机编译环境或输出版本提示的安装脚本。原始包、校验信息和 pnpm 默认的未知脚本审批要求均保留；不自动放行脚本。断网烟测验证实际 CPU 嵌入、图像编码及 protobuf 编解码。
 
@@ -21,7 +23,8 @@ Visual Workflow 由 [`prepare-visual-workflow.mjs`](prepare-visual-workflow.mjs)
 | `pdfjs-dist` | 6.3.289 | `dsh-paper-reader` 的运行时依赖 |
 | `@typesafe-ai/sdk` | 0.6.0 | `dsh-paper-reader` 的运行时依赖 |
 | `undici` | 8.10.2 | `dsh-paper-reader` 的运行时依赖 |
-| `dsh-visual-workflow` | 1.1.1-zhishu.1 | 插件「可视化工作流」，基于上游 1.1.1 的离线适配版，支持 Dify 导入并包含本地向量模型 |
+| `dsh-visual-workflow` | 1.3.0-zhishu.1 | 插件「可视化工作流」，基于上游 1.3.0，支持导入 Dify 工作流和批量迁移工具 |
+| `dsh-dify-migrator` | 0.3.0-zhishu.1 | 随工作流安装的转换器依赖，基于上游 0.3.0 |
 | `dsh-mind-workbench` | 1.0.16-zhishu.1 | 工作台「DSH 思维导图工作台」，基于上游 1.0.15 的智枢适配版 |
 | `dsh-xiaohongshu-note-workbench` | 0.1.1 | 工作台「小红书笔记创作」，按公网目录指定的 GitHub commit 打包 |
 | `dsh-bianqu-workbench` | 0.1.1 | 工作台「编曲工作台」，按公网目录指定的 GitHub commit 打包 |

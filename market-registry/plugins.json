@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-16",
+  "updated": "2026-11-18",
   "count": 3,
   "categories": {
     "theme": {
@@ -50,11 +50,11 @@
       "url": "https://github.com/etoilestar/dsh-Visual-Workflow",
       "category": "workflow",
       "description": {
-        "zh": "可视化 Agent 工作流：通过节点编排角色、工具与知识检索，支持模板和运行管理。依赖与本地向量模型随镜像提供，可离线安装到个人空间。",
-        "en": "Compose Agent workflows with roles, tools, retrieval, templates, and run management. Dependencies and a local embedding model are bundled for offline installation into your own profile."
+        "zh": "可视化编排 Agent 工作流，支持导入 Dify 工作流，以及从 .difypkg 或 ZIP 批量迁移兼容工具。安装包已包含离线迁移器、运行依赖和本地向量模型。",
+        "en": "Compose Agent workflows, import Dify workflows, and migrate compatible tools from .difypkg files or ZIP archives. The offline package includes the migrator, runtime dependencies, and a local embedding model."
       },
       "npm": "dsh-visual-workflow",
-      "version": "1.1.1-zhishu.1",
+      "version": "1.3.0-zhishu.1",
       "install": "dsh plugin --profile web add dsh-visual-workflow",
       "added": "2026-11-16"
     }

@@ -1,0 +1,112 @@
+diff --git a/src/host/migrated-tools/migration-service.ts b/src/host/migrated-tools/migration-service.ts
+index 01e1b68..776d220 100644
+--- a/src/host/migrated-tools/migration-service.ts
++++ b/src/host/migrated-tools/migration-service.ts
+@@ -3,0 +4 @@ import { basename, extname, join } from "node:path"
++import { fileURLToPath } from "node:url"
+@@ -69 +70,6 @@ class CommandMigrationDriver implements MigrationDriver {
+-    await runProcess(this.command, [
++    // The default compiler is a dependency of this bundle. Resolve it relative to
++    // the installed plugin and invoke Node directly, including on Windows.
++    const bundled = this.command === "dsh-dify-migrator"
++    const entry = bundled ? [fileURLToPath(new URL("./cli.js", import.meta.resolve("dsh-dify-migrator")))] : []
++    await runProcess(bundled ? process.execPath : this.command, [
++      ...entry,
+diff --git a/src/host/migrated-tools/registry.ts b/src/host/migrated-tools/registry.ts
+index ae020f7..2bdccdf 100644
+--- a/src/host/migrated-tools/registry.ts
++++ b/src/host/migrated-tools/registry.ts
+@@ -3 +3 @@ import { readdir, readFile, realpath } from "node:fs/promises"
+-import { join, resolve, sep } from "node:path"
++import { join, relative, resolve, sep } from "node:path"
+@@ -121 +121 @@ export class MigratedToolRegistry implements MigratedToolExecutor {
+-    return invokeWorker(loaded, argumentsValue, credentials, signal)
++    return invokeWorker(join(this.dataDirectory, "migrated-tools"), loaded, argumentsValue, credentials, signal)
+@@ -144,0 +145 @@ async function invokeWorker(
++  directory: string,
+@@ -151 +152,4 @@ async function invokeWorker(
+-  const packageDirectory = await realpath(loaded.packageDirectory)
++  if (process.platform !== "linux") throw new Error("迁移工具运行需要 Linux bubblewrap 沙箱")
++  if (runtime.command !== "python3") throw new Error("迁移工具仅支持平台的 Python 3 解释器")
++  const toolRoot = await realpath(directory)
++  const packageDirectory = await safeRealpath(toolRoot, loaded.packageDirectory)
+@@ -153,0 +158 @@ async function invokeWorker(
++  const toolPath = (path: string): string => join("/tool", relative(packageDirectory, path))
+@@ -155 +160 @@ async function invokeWorker(
+-    payloadPath,
++    payloadPath: toolPath(payloadPath),
+@@ -160,0 +166 @@ async function invokeWorker(
++    signal?.throwIfAborted()
+@@ -165,7 +171,12 @@ async function invokeWorker(
+-    const child = spawn(runtime.command, [workerPath], {
+-      cwd: payloadPath,
+-      env: workerEnvironment(),
+-      stdio: ["pipe", "pipe", "pipe"],
+-      signal: controller.signal,
+-      windowsHide: true,
+-    })
++    const child = spawn("/usr/bin/bwrap", [
++      "--unshare-user", "--unshare-pid", "--die-with-parent", "--new-session", "--clearenv",
++      "--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib", "--ro-bind-try", "/lib64", "/lib64",
++      "--ro-bind-try", "/etc/ssl/certs", "/etc/ssl/certs",
++      "--ro-bind-try", "/etc/resolv.conf", "/etc/resolv.conf",
++      "--ro-bind-try", "/etc/hosts", "/etc/hosts",
++      "--ro-bind-try", "/etc/ld.so.cache", "/etc/ld.so.cache",
++      "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp",
++      "--ro-bind", packageDirectory, "/tool", "--chdir", toolPath(payloadPath),
++      "--setenv", "PATH", "/usr/bin", "--setenv", "HOME", "/tmp", "--setenv", "LANG", "C.UTF-8",
++      "--", "/usr/bin/python3", "-I", "-B", toolPath(workerPath),
++    ], { env: {}, stdio: ["pipe", "pipe", "pipe"], signal: controller.signal, killSignal: "SIGKILL" })
+@@ -182 +193,5 @@ async function invokeWorker(
+-    child.on("error", finishError)
++    let failure: Error | undefined
++    child.on("error", (error: NodeJS.ErrnoException) => {
++      failure = error.code === "ENOENT" ? new Error("无法启动迁移工具沙箱：缺少 bubblewrap", { cause: error }) : error
++    })
++    child.stdin.on("error", (error: Error) => { failure ??= error })
+@@ -184,2 +199,3 @@ async function invokeWorker(
+-      cleanup()
+-      let response: WorkerResponse
++      clearTimeout(timeout)
++      signal?.removeEventListener("abort", onAbort)
++      if (controller.signal.aborted) return reject(controller.signal.reason)
+@@ -187,8 +203,11 @@ async function invokeWorker(
+-        response = JSON.parse(Buffer.concat(stdout).toString("utf8")) as WorkerResponse
+-      } catch {
+-        reject(new Error(`迁移工具返回无效 JSON（exit ${code ?? "unknown"}）：${Buffer.concat(stderr).toString("utf8").slice(0, 2000)}`))
+-        return
+-      }
+-      if (code !== 0 || response.ok !== true) {
+-        reject(new Error(`迁移工具执行失败：${String(response.error?.message ?? (Buffer.concat(stderr).toString("utf8") || `exit ${code}`))}`))
+-        return
++        if (failure) throw failure
++        const response: WorkerResponse = JSON.parse(Buffer.concat(stdout).toString("utf8"))
++        if (code !== 0 || response.ok !== true) {
++          throw new Error(`迁移工具执行失败：${String(response.error?.message ?? `exit ${code}`)}`)
++        }
++        const messages = parseMessages(response.messages)
++        resolvePromise({ text: messages.map(messageText).filter(Boolean).join("\n"), messages })
++      } catch (error) {
++        reject(error instanceof SyntaxError
++          ? new Error(`迁移工具返回无效 JSON（exit ${code ?? "unknown"}）：${Buffer.concat(stderr).toString("utf8").slice(0, 2000)}`, { cause: error })
++          : error)
+@@ -196,2 +214,0 @@ async function invokeWorker(
+-      const messages = parseMessages(response.messages)
+-      resolvePromise({ text: messages.map(messageText).filter(Boolean).join("\n"), messages })
+@@ -200,9 +216,0 @@ async function invokeWorker(
+-
+-    function cleanup(): void {
+-      clearTimeout(timeout)
+-      signal?.removeEventListener("abort", onAbort)
+-    }
+-    function finishError(error: Error): void {
+-      cleanup()
+-      reject(error)
+-    }
+@@ -242,6 +249,0 @@ async function readCredentials(dataDirectory: string): Promise<Record<string, Re
+-function workerEnvironment(): NodeJS.ProcessEnv {
+-  // Deliberately omit the Host's PYTHONPATH and every application/model secret.
+-  const keys = ["PATH", "SYSTEMROOT", "WINDIR", "TMPDIR", "TMP", "TEMP", "LANG", "LC_ALL", "PYTHONHOME"]
+-  return Object.fromEntries(keys.flatMap((key) => process.env[key] === undefined ? [] : [[key, process.env[key]]]))
+-}
+-

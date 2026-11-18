@@ -40,8 +40,8 @@ version: 0.1.0
   assert.equal(conflict.conflict, true)
   const renamed = await importWorkflowSource(store, source, { sourceName: 'workflow.yaml', conflictMode: 'rename' })
   assert.notEqual(renamed.template.id, imported.template.id)
-  const blocked = await importWorkflowSource(store, source.replace('Offline Dify', 'Unsupported tool')
-    .replace('type: llm', 'type: tool'))
+  const blocked = await importWorkflowSource(store, source.replace('Offline Dify', 'Unsupported node')
+    .replace('type: llm', 'type: unsupported-fixture'))
   assert.equal(blocked.report.status, 'blocked')
   assert.ok(blocked.report.issues.some(item => item.code === 'DIFY_NODE_UNSUPPORTED'))
   await assert.rejects(importWorkflowSource(store, '"workflow": [', { sourceName: 'broken.YAML' }),
