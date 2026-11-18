@@ -57,6 +57,15 @@ index 69838ba..806013f 100644
 +  if (!semver.valid(version) || version.length > 128) {
 +    throw new MigrationError("MANIFEST_INVALID", "manifest.yaml version must be a semantic version of at most 128 characters")
 +  }
+diff --git a/src/dify/model-provider.ts b/src/dify/model-provider.ts
+index 6b41b7f..98ca567 100644
+--- a/src/dify/model-provider.ts
++++ b/src/dify/model-provider.ts
+@@ -38 +38 @@ function parseModelProvider(pkg: RawDifyPackage, declarationPath: string): DifyM
+-function parseCredential(value: unknown, path: string, index: number): DifyCredentialIR & { defaultValue?: unknown } {
++function parseCredential(value: unknown, path: string, index: number): DifyCredentialIR {
+@@ -48 +47,0 @@ function parseCredential(value: unknown, path: string, index: number): DifyCrede
+-    ...(Object.hasOwn(value, "default") ? { defaultValue: value.default } : {}),
 diff --git a/src/migration/installer.ts b/src/migration/installer.ts
 index 9ebc019..17bfc49 100644
 --- a/src/migration/installer.ts
@@ -75,3 +84,16 @@ index 9ebc019..17bfc49 100644
 +    || !/^dsh_dify__[a-z0-9_]{1,48}__[a-z0-9_]{1,48}$/u.test(parsed.id)
 +    || typeof parsed.version !== "string" || parsed.version.length > 128 || !semver.valid(parsed.version)
 +    || !isRecord(parsed.origin) || typeof parsed.origin.sha256 !== "string") {
+diff --git a/tests/model-compiler.test.ts b/tests/model-compiler.test.ts
+index d39aa27..6a0f5a5 100644
+--- a/tests/model-compiler.test.ts
++++ b/tests/model-compiler.test.ts
+@@ -43,0 +44,2 @@ describe("DSH Model package compiler", () => {
++    expect(serialized).not.toContain("https://fixture.invalid")
++    expect(serialized).not.toContain("source-model-uid")
+@@ -72,0 +75 @@ model_credential_schema:
++      default: "https://fixture.invalid"
+@@ -76,0 +80 @@ model_credential_schema:
++      default: "source-model-uid"
+@@ -80,0 +85 @@ model_credential_schema:
++      default: "secret-value"
