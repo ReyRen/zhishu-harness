@@ -6,5 +6,4 @@
     - id: zhishu-knowledge-base
       name: ./index.js
       config:
-        webUrl: !!js process.env.WEKNORA_WEB_URL
-        baseUrl: !!js process.env.WEKNORA_BASE_URL
+        desktopBaseUrl: !!js "process.env.ELECTRON_RUN_AS_NODE === '1' ? process.env.WEKNORA_BASE_URL : undefined"

@@ -1412,7 +1412,7 @@ async function main(): Promise<void> {
     windowsLanguage = locale.id
     refreshApplicationMenu()
     const window = mainWindow ?? createMainWindow()
-    if (!development) await startPackagedModelSite(process.resourcesPath)
+    if (!development) await startPackagedModelSite(process.resourcesPath, hostEnvironment.WEKNORA_BASE_URL)
     modelGate ??= new ModelPlatformGate(modelPreload, () => enterWorkspace())
     modelGate.attach(window)
     // Model login is the gate. A valid platform cookie continues into the model

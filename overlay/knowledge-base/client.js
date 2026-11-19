@@ -9,8 +9,7 @@ window.__ModuleLoader__.load({
     const { IconChevronDownOutlineRegular } = require('@deepseek-ai/dsh-client-ui-primitives')
     const h = React.createElement
 
-    const iframeUrl = window.__DSH_WEKNORA_IFRAME_URL__
-    const knowledgePage = iframeUrl ? new URL(iframeUrl) : undefined
+    const KNOWLEDGE_PATH = '/weknora/sso/platform'
     const SSO_CLIENT_ID = 'gcs-webnora'
     const READY_TYPE = 'weknora:sso-ready'
     const TOKEN_TYPE = 'weknora:sso-token'
@@ -500,6 +499,10 @@ window.__ModuleLoader__.load({
     /** Full-page WeKnora UI (main panel), same shell pattern as Plugins. */
     function KnowledgePanel(props) {
       const startAssistant = props.startAssistant
+      const iframeUrl = window.location.protocol === 'dsh-app:'
+        ? window.__DSH_WEKNORA_DESKTOP_URL__
+        : KNOWLEDGE_PATH
+      const allowed = iframeUrl ? new URL(iframeUrl, window.location.href).origin : undefined
       const frameRef = React.useRef(null)
       const nonceRef = React.useRef('')
       const [signedIn, setSignedIn] = React.useState(false)
@@ -529,8 +532,7 @@ window.__ModuleLoader__.load({
       }, [])
 
       React.useEffect(() => {
-        if (!signedIn || !knowledgePage) return undefined
-        const allowed = knowledgePage.origin
+        if (!signedIn || !allowed) return undefined
         const onMessage = (event) => {
           const frame = frameRef.current
           if (!frame || event.source !== frame.contentWindow) return
@@ -625,10 +627,10 @@ window.__ModuleLoader__.load({
           stopModels()
           nonceRef.current = ''
         }
-      }, [signedIn])
+      }, [signedIn, allowed])
 
       const gateHint = !signedIn ? '请先登录平台，登录后将自动加载知识库。' : ''
-      const barError = knowledgePage ? error : props.t('pageNotConfigured')
+      const barError = iframeUrl ? error : props.t('pageNotConfigured')
       const barText = barError || status || gateHint
 
       return h(
@@ -658,7 +660,7 @@ window.__ModuleLoader__.load({
             ref: frameRef,
             className: 'zhishuKbFrame',
             title: '知识库',
-            src: signedIn && knowledgePage ? knowledgePage.href : 'about:blank',
+            src: signedIn && iframeUrl ? iframeUrl : 'about:blank',
             allow: 'clipboard-read; clipboard-write',
           }),
         ),

@@ -19,22 +19,17 @@ function indexRows(config) {
   return rows
 }
 
-test('publishes the browser URL independently of the API address', () => {
-  const baseUrl = 'http://knowledge.internal:5175/weknora/api/v1/'
-  const iframeUrl = 'https://site.test:3002/custom/knowledge/sso/platform'
-  for (const webUrl of ['https://site.test:3002/custom/knowledge/', iframeUrl]) {
-    assert.deepEqual(indexRows({ webUrl, baseUrl }), [
-      { kind: 'global', name: '__DSH_WEKNORA_IFRAME_URL__', value: iframeUrl },
-    ])
-  }
-  assert.equal(indexRows({ webUrl: '', baseUrl })[0]?.value, 'http://knowledge.internal:5175/weknora/sso/platform')
+test('publishes a destination for the native desktop renderer', () => {
+  assert.deepEqual(indexRows({ desktopBaseUrl: 'http://knowledge.internal:5175/weknora/api/v1/' }), [
+    { kind: 'global', name: '__DSH_WEKNORA_DESKTOP_URL__', value: 'http://knowledge.internal:5175/weknora/sso/platform' },
+  ])
   assert.deepEqual(indexRows({}), [])
 })
 
-test('rejects invalid explicit browser URLs even with a valid API address', () => {
-  for (const webUrl of ['/weknora', 'file:///tmp/knowledge', 'http://user:secret@knowledge.test',
+test('rejects invalid Desktop API addresses', () => {
+  for (const desktopBaseUrl of ['/weknora', 'file:///tmp/knowledge', 'http://user:secret@knowledge.test',
     'https://knowledge.test/weknora?token=secret', 'https://knowledge.test/weknora#anchor']) {
-    assert.throws(() => indexRows({ webUrl, baseUrl: 'http://knowledge.internal/api/v1' }), /WEKNORA_WEB_URL/u)
+    assert.throws(() => indexRows({ desktopBaseUrl }), /WEKNORA_BASE_URL/u)
   }
 })
 

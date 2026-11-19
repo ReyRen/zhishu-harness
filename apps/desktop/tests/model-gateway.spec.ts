@@ -87,7 +87,11 @@ describe('model gateway server', () => {
     config.upstreams[0]!.target = `http://127.0.0.1:${String(address.port)}`
     writeFileSync(configPath, JSON.stringify({ ...config, harness: { target: `http://127.0.0.1:${String(address.port)}` } }))
     expect(ensureGatewayConfig(resources)).toBe(configPath)
-    const gateway = await startModelGateway({ siteDir: site, configPath })
+    const gateway = await startModelGateway({
+      siteDir: site,
+      configPath,
+      weknoraBaseURL: `http://127.0.0.1:${String(address.port)}/knowledge-proxy/api/v1/`,
+    })
     closers.push(() => gateway.close())
     const page = await fetch(`${gateway.origin}/login`)
     expect(await page.text()).toBe('<p>model</p>')
@@ -103,6 +107,11 @@ describe('model gateway server', () => {
     expect(api.headers.get('set-cookie')).toBe('JSESSIONID=abc; Path=/')
     const parsed = readGatewayConfig(configPath)
     expect(parsed.harness.target).toContain('127.0.0.1')
+    const harnessOrigin = `http://127.0.0.1:${String(MODEL_HARNESS_PORT)}`
+    const frame = await fetch(`${harnessOrigin}/weknora/sso/platform`)
+    expect((await frame.json()).url).toBe('/knowledge-proxy/sso/platform')
+    const rest = await fetch(`${harnessOrigin}/api/health`)
+    expect((await rest.json()).url).toBe('/api/health')
   })
 
   it('keeps Upgrade and Connection on the harness WebSocket handshake', async () => {
