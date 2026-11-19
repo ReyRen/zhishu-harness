@@ -20,13 +20,18 @@ The platform client automatically obtains a `gcs-webnora` SSO ticket and hands i
 
 | Variable | Meaning | Default |
 |---|---|---|
-| `WEKNORA_BASE_URL` | Backend API URL (not the SSO iframe page); `/api/v1` is appended when absent. Workers/compose inject it for containers; Desktop fills `http://172.18.36.230:5175/weknora/api/v1` when unset | Overlay fallback `http://localhost:8080/api/v1` |
+| `WEKNORA_BASE_URL` | API URL reachable from the Harness Host. The tools append `/api/v1` when absent. Desktop fills `http://172.18.36.230:5175/weknora/api/v1` when unset | Overlay fallback `http://localhost:8080/api/v1` |
+| `WEKNORA_WEB_URL` | Knowledge page base reachable from the browser, including any proxy prefix, or the complete `/sso/platform` URL. The Host publishes it at page load and the client uses its origin for iframe SSO | Removes the trailing `/api/v1` from the configured `WEKNORA_BASE_URL` and appends `/sso/platform`. With neither address configured, the panel asks the user to contact an administrator |
 | `DSH_PLATFORM_USER_ID` | Worker-assigned platform user; the backend must verify this identity during SSO | Unset for standalone Desktop |
 | `WEKNORA_API_KEY` | Explicit standalone machine credential; rejected in Worker-assigned user runtimes | Unset |
 | `WEKNORA_TENANT_ID` | Optional workspace selector; the backend checks membership | The SSO user's active workspace |
 | `WEKNORA_KNOWLEDGE_BASE_IDS` | Comma-separated allowlist for the human picker; never automatically enables retrieval | All bases visible to the credential |
 | `WEKNORA_AGENT_ID` | Upstream profile setting; the platform selection wrapper always uses scoped RAG | RAG pipeline |
 | `WEKNORA_RESOURCE_URLS` | `public` for loadable citations or `handle` for internal references | `handle` |
+
+Set these addresses in [`docker/.env`](../../docker/.env.example) for Compose, or in the Worker deployment's `worker.json` as `weknoraBaseURL` and `weknoraWebURL`. Use absolute HTTP(S) URLs without credentials, query or fragment. Set the browser address explicitly when a gateway supplies a different origin or proxy prefix. Serve the knowledge page over HTTPS when Harness uses HTTPS. Values are read at startup, so recreate the Compose container or deploy the Worker configuration and roll out existing users after changing the addresses.
+
+With front-web, route `/weknora/` to the site's gcs-webnora HTTP upstream before the general Harness route. Set `WEKNORA_WEB_URL` to the HTTPS address of that path on front-web. Use an upstream address reachable from front-web, such as a service name on a shared Docker network or a backend host address. Set `WEKNORA_BASE_URL` to an API address reachable from the user containers.
 
 Only native Host owner requests reach `/api/zhishu-knowledge/auth`. The Worker identity overrides the browser's identity assertion; gcs-webnora verifies the platform ticket and applies its existing user/workspace permissions. Local credentials refresh through `/auth/refresh`; a rejected login or refresh clears authorization. A 403 never falls back to another credential, and failed chat requests are not automatically repeated. Platform signout clears the Host credentials; upstream revocation remains enforced by gcs-webnora.
 

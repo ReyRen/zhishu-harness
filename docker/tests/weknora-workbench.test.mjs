@@ -1,13 +1,42 @@
-/** Knowledge navigation uses main sessions and preserves retired workbench chats. */
+/** Knowledge page configuration and navigation through the built-in panel. */
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 import { runInNewContext } from 'node:vm'
+import { apply as applyHost } from '../../overlay/knowledge-base/index.js'
 
 const source = await readFile(new URL('../../overlay/knowledge-base/client.js', import.meta.url), 'utf8')
 const workbenchSource = await readFile(new URL('../../overlay/workbenches/client.js', import.meta.url), 'utf8')
 const legacy = 'local:@zhishu/dsh-overlay-knowledge-base'
 const turn = () => new Promise(resolve => setImmediate(resolve))
+
+function indexRows(config) {
+  const rows = []
+  applyHost({ on(event, inject) {
+    assert.equal(event, 'webserver/index-inject')
+    inject(rows)
+  } }, config)
+  return rows
+}
+
+test('publishes the browser URL independently of the API address', () => {
+  const baseUrl = 'http://knowledge.internal:5175/weknora/api/v1/'
+  const iframeUrl = 'https://site.test:3002/custom/knowledge/sso/platform'
+  for (const webUrl of ['https://site.test:3002/custom/knowledge/', iframeUrl]) {
+    assert.deepEqual(indexRows({ webUrl, baseUrl }), [
+      { kind: 'global', name: '__DSH_WEKNORA_IFRAME_URL__', value: iframeUrl },
+    ])
+  }
+  assert.equal(indexRows({ webUrl: '', baseUrl })[0]?.value, 'http://knowledge.internal:5175/weknora/sso/platform')
+  assert.deepEqual(indexRows({}), [])
+})
+
+test('rejects invalid explicit browser URLs even with a valid API address', () => {
+  for (const webUrl of ['/weknora', 'file:///tmp/knowledge', 'http://user:secret@knowledge.test',
+    'https://knowledge.test/weknora?token=secret', 'https://knowledge.test/weknora#anchor']) {
+    assert.throws(() => indexRows({ webUrl, baseUrl: 'http://knowledge.internal/api/v1' }), /WEKNORA_WEB_URL/u)
+  }
+})
 
 function fixture(t, { ready = true, added = false, bound = false, loadGate, releaseGate, failure } = {}) {
   let plugin, panel = null

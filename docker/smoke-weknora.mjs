@@ -84,6 +84,7 @@ const backend = createServer((request, response) => {
 backend.listen(0, '127.0.0.1')
 await once(backend, 'listening')
 const baseUrl = `http://127.0.0.1:${backend.address().port}`
+const webUrl = 'https://knowledge.test/site/weknora'
 
 async function probe(user, installed = false, sso = false) {
   const home = join(root, user, 'dsh-home')
@@ -97,7 +98,8 @@ async function probe(user, installed = false, sso = false) {
   const environment = {
     ...Object.fromEntries(Object.entries(process.env).filter(([name]) => !/(?:KEY|SECRET|TOKEN|PASSWORD|^WEKNORA_)/iu.test(name))),
     HOME: join(root, user), DSH_HOME: home, DSH_DEFAULT_WORKSPACE: workspace, DSH_WORKSPACE_ROOT: join(root, user),
-    DSH_TELEMETRY_DISABLED: '1', WEKNORA_BASE_URL: baseUrl, WEKNORA_API_KEY: `smoke-user-${user}`,
+    DSH_TELEMETRY_DISABLED: '1', WEKNORA_BASE_URL: baseUrl, WEKNORA_WEB_URL: webUrl,
+    WEKNORA_API_KEY: `smoke-user-${user}`,
     WEKNORA_TENANT_ID: `tenant-${user}`,
   }
   if (sso) {
@@ -130,6 +132,10 @@ async function probe(user, installed = false, sso = false) {
               const cookie = login.headers.getSetCookie().map(value => value.split(';')[0]).join('; ')
               await login.arrayBuffer()
               assert.notEqual(cookie, '')
+              const index = await fetch(`${origin}/`, { headers: { cookie } })
+              assert.equal(index.status, 200)
+              assert.ok((await index.text()).includes(JSON.stringify(`${webUrl}/sso/platform`)),
+                'Web boot publishes WEKNORA_WEB_URL instead of the backend API origin')
               const response = await fetch(`${origin}/api/zhishu-knowledge/auth`, {
                 method: 'POST', headers: { cookie, origin, 'content-type': 'application/json' },
                 body: JSON.stringify({ access_token: `platform-${user}`, user_id: `user-${user}` }),

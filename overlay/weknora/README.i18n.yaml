@@ -3,5 +3,5 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write overlay/weknora/README.md
 /built-in-weknora:
-  en: cd09292087fa5858
-  zh: 8f11540c6b23ab0b
+  en: 52d27dd3b31e5625
+  zh: 94eb64f1c2ee9b5f
