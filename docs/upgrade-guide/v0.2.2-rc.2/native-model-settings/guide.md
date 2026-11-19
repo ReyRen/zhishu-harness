@@ -9,7 +9,7 @@ English | [中文](guide.zh.md)
 
 ## Change
 
-Platform compositions using `platformModelManagement: true` display **Settings → Model settings** through native Harness components. The shared gcs-webnora registry, saved model ids, migrated aliases, credentials and knowledge-base bindings remain unchanged. The `/api/zhishu-models/config` URL endpoint is replaced by owner-authenticated `/api/zhishu-models/manage` operations. Model settings no longer use `WEKNORA_WEB_URL`; the knowledge page keeps its separate browser URL configuration.
+Platform compositions using `platformModelManagement: true` display **Settings → Model settings** through native Harness components. The shared gcs-webnora registry, saved model ids, migrated aliases, credentials and knowledge-base bindings remain unchanged. The `/api/zhishu-models/config` URL endpoint is replaced by owner-authenticated `/api/zhishu-models/manage` operations. The [knowledge panel Web gateway](../knowledge-web-gateway/guide.md) covers knowledge page routing.
 
 ## Migration
 

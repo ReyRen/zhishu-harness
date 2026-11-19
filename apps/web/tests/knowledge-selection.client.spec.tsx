@@ -19,13 +19,15 @@ const disposers: Array<() => void> = []
 beforeEach(() => { Element.prototype.scrollIntoView = vi.fn() })
 afterEach(() => { cleanup(); disposers.splice(0).reverse().forEach((dispose) => { dispose() }) })
 
-function fixture() {
+function fixture(panelURL?: string) {
   type Session = { sessionId: string }
   let apply: (ctx: object) => void
   let decoration: { label(): string; hideAlias: boolean; ui: PopupSpec<Session> }
   let dictionary: Record<string, string>
   let summary: React.ComponentType<Record<string, unknown>>
   let summaryProps: (sessionID: string) => Record<string, unknown>
+  let knowledgePanel: React.ComponentType<Record<string, unknown>>
+  let knowledgePanelProps: () => Record<string, unknown>
   const state = createSnapshotStore({ knowledgeBaseIds: [] as string[] })
   const useSelection = bindSnapshotSelector(state)
   const useProjection = () => useSelection(value => value)
@@ -36,6 +38,7 @@ function fixture() {
   })
   const parent = { postMessage() {} }
   const fakeWindow = { parent, top: parent, setTimeout, clearTimeout,
+    location: new URL(panelURL ?? 'https://harness.test'),
     setInterval() { return 1 }, clearInterval() {}, addEventListener() {}, removeEventListener() {},
     __ModuleLoader__: { load(entry: { factory: (require: (id: string) => unknown) => { apply: typeof apply } }) {
       apply = entry.factory((id) => {
@@ -45,7 +48,7 @@ function fixture() {
       }).apply
     } },
   }
-  runInNewContext(source, { window: fakeWindow, document, AbortController, AbortSignal, console,
+  runInNewContext(source, { window: fakeWindow, document, AbortController, AbortSignal, URL, console,
     location: { origin: 'https://harness.test' },
     fetch: async (path: string) => path.endsWith('/auth')
       ? Response.json({ mode: 'api-key', authenticated: true })
@@ -73,14 +76,18 @@ function fixture() {
     sessions: { binding() {
       return { session: { projections: { faceOf() { return state } } } }
     } },
-    remote: { commands: { execute } },
+    remote: { commands: { execute }, $on() { return () => {} } },
     desktopWorkbenches: { ready: true, state: { added: [], sessionBindings: {} }, report,
       run(task: Promise<void>) { void task.catch(report) }, async releaseToMainSession() {} },
     layout: { panelInfo: createSnapshotStore({ activePanelId: 'conversation' }) },
     uiWorkspace: { startSession: vi.fn() },
     slots: { inject(_name: string, setup: () => void) { setup() },
-      register(definition: { id: string; inject: typeof summaryProps }, component: typeof summary) {
+      register(definition: { id?: string; key?: string; inject: typeof summaryProps }, component: typeof summary) {
         if (definition.id === 'zhishu-knowledge-selection') { summaryProps = definition.inject; summary = component }
+        if (definition.key === 'zhishu-knowledge') {
+          knowledgePanelProps = () => definition.inject('session-a')
+          knowledgePanel = component
+        }
         return () => {}
       } },
   })
@@ -90,12 +97,27 @@ function fixture() {
   render(<><textarea aria-label="草稿" defaultValue="未发送的内容" /><span data-testid="attachment">附件.pdf</span>
     <Summary {...summaryProps!('session-a')} useProjection={useProjection} t={translate} />
     <PopupSelectView popup={popup} t={makeTranslate(zh, commonZh)} /></>)
+  if (panelURL !== undefined) {
+    const Panel = knowledgePanel!
+    render(<Panel {...knowledgePanelProps!()} t={translate} />)
+  }
   return { execute, consume, popup, open() {
     act(() => { popup.open('knowledge', decoration!.ui, { sessionId: 'session-a' }, { via: 'enter', token: '/知识库' }) })
   }, decoration: () => decoration!, selected: () => state.getSnapshot().knowledgeBaseIds,
   setSelected(ids: string[]) { act(() => { state.set({ knowledgeBaseIds: ids }) }) },
   failCatalog(value: boolean) { catalogFails = value }, failCommand(value: boolean) { commandFails = value } }
 }
+
+it.each(['https://front.test:3002/', 'https://another-site.test:8443/harness/'])(
+  'resolves the knowledge iframe at the current Web origin %s',
+  async (pageURL) => {
+    fixture(pageURL)
+    const frame = await screen.findByTitle('知识库')
+    await waitFor(() => expect(frame.getAttribute('src')).toBe('/weknora/sso/platform'))
+    const source = new URL(frame.getAttribute('src')!, pageURL)
+    expect(source.origin).toBe(new URL(pageURL).origin)
+  },
+)
 
 it('uses the native inline dropdown and immediately applies several toggles without a separate dialog or save', async () => {
   const f = fixture()

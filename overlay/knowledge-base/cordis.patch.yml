@@ -5,3 +5,5 @@
 - insert:
     - id: zhishu-knowledge-base
       name: ./index.js
+      config:
+        desktopBaseUrl: !!js "process.env.ELECTRON_RUN_AS_NODE === '1' ? process.env.WEKNORA_BASE_URL : undefined"

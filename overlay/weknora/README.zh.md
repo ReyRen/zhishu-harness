@@ -20,13 +20,37 @@
 
 | 变量 | 含义 | 默认值 |
 |---|---|---|
-| `WEKNORA_BASE_URL` | 后端 API 地址（不是 SSO iframe 页）；缺少 `/api/v1` 时自动补上。容器由 Worker/compose 注入；桌面在未设置时由 Electron 壳写入平台默认 `http://172.18.36.230:5175/weknora/api/v1` | overlay 内回退为 `http://localhost:8080/api/v1` |
+| `WEKNORA_BASE_URL` | Harness Host 可访问的 API 地址。工具在缺少 `/api/v1` 时自动补上。桌面未设置时使用 `http://172.18.36.230:5175/weknora/api/v1` | overlay 内回退为 `http://localhost:8080/api/v1` |
 | `DSH_PLATFORM_USER_ID` | Worker 指定的平台用户；后端换证时必须验证该身份 | 独立 Desktop 不设置 |
 | `WEKNORA_API_KEY` | 独立部署显式配置的机器凭据；Worker 用户运行时拒绝它 | 未设置 |
 | `WEKNORA_TENANT_ID` | 可选的空间选择；后端校验成员权限 | SSO 用户的当前空间 |
 | `WEKNORA_KNOWLEDGE_BASE_IDS` | 人工选择器的知识库 ID 允许列表，以逗号分隔；不会自动启用检索 | 当前凭证可见的全部知识库 |
 | `WEKNORA_AGENT_ID` | 上游 profile 设置；平台选择适配层始终使用限定范围的 RAG | RAG 流程 |
 | `WEKNORA_RESOURCE_URLS` | `public` 返回可加载的引用地址，`handle` 返回内部引用 | `handle` |
+
+API 地址在 [`docker/.env`](../../docker/.env.example) 中配置为 `WEKNORA_BASE_URL`，或在 Worker 部署目录的 `worker.json` 中配置为 `weknoraBaseURL`。使用绝对 HTTP(S) URL，地址不包含凭据、查询参数或片段。修改地址后，重建 Compose 容器，或重新部署 Worker 配置并逐用户 rollout。
+
+### Web 网关
+
+Harness Web 在当前源打开 `/weknora/sso/platform`。x86 和 ARM 都在提供 Harness 入口的 front-web 服务中，将整个 `/weknora/` 前缀转发给 gcs-webnora 的 HTTP 服务，包括静态资源和 API。两者处于共享网络时可使用服务名，分开部署时使用网关可达的内网地址。上游请求保留该路径前缀。
+
+```nginx
+location ^~ /weknora/ {
+    proxy_pass http://webnora.internal:5175;
+    proxy_http_version 1.1;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_buffering off;
+    proxy_read_timeout 1800s;
+}
+```
+
+将 `proxy_pass` 指向实际的 gcs-webnora 上游。将带端口的 Harness 访问源加入 gcs-webnora 的 `PLATFORM_SSO_PARENT_ORIGINS`，并保留外层平台页面的嵌入授权和平台已注册的 `gcs-webnora` SSO 客户端。
+
+桌面原生界面使用已配置 API 服务的知识库页面。打包后的业务工作区通过本地 HTTP 网关打开 Harness，该网关也代理同一个 `/weknora/` 前缀。
+
+### 认证与检索
 
 只有原生 Host 所有者请求可访问 `/api/zhishu-knowledge/auth`。Worker 身份优先于浏览器的身份声明；gcs-webnora 验证平台票据并按现有用户和空间权限授权。本地凭据通过 `/auth/refresh` 刷新；登录或刷新被拒绝时清除授权。403 不会改用其他凭据，失败的问答请求也不会自动重复。平台退出时清除 Host 凭据，上游撤销仍由 gcs-webnora 强制执行。
 

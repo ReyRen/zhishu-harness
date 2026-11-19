@@ -9,6 +9,7 @@ import { request as httpRequest, createServer, type IncomingMessage, type Server
 import { request as httpsRequest } from 'node:https'
 import { extname, join, normalize, sep } from 'node:path'
 import type { Duplex } from 'node:stream'
+import { DEFAULT_DESKTOP_WEKNORA_BASE_URL } from '../weknora-environment.ts'
 
 export const MODEL_SITE_PORT = 17321
 export const MODEL_HARNESS_PORT = 3002
@@ -114,12 +115,14 @@ let starting: Promise<void> | undefined
 /**
  * Start the local page when a packaged build contains it. Development keeps using the model dev server.
  * @param resourcesDir - `process.resourcesPath`.
+ * @param weknoraBaseURL - Knowledge API address used for the local iframe proxy.
  */
-export async function startPackagedModelSite(resourcesDir: string): Promise<void> {
+export async function startPackagedModelSite(resourcesDir: string, weknoraBaseURL = DEFAULT_DESKTOP_WEKNORA_BASE_URL): Promise<void> {
   if (modelSiteDirectory(resourcesDir) === undefined) return
   starting ??= startModelGateway({
     siteDir: join(resourcesDir, 'model-site'),
     configPath: ensureGatewayConfig(resourcesDir),
+    weknoraBaseURL,
   }).then(() => undefined).catch((error: unknown) => {
     starting = undefined
     throw error
@@ -144,14 +147,16 @@ export function readGatewayConfig(file: string): GatewayConfig {
 
 /**
  * Serve the packaged model site and proxy its APIs.
- * @param options - Static root (`app`, `flow`, `prompt`) and the editable config.
+ * @param options - Static root, editable gateway config and optional knowledge API address.
  * @returns Local page origin and a closer.
  */
 export async function startModelGateway(options: {
   siteDir: string
   configPath: string
+  weknoraBaseURL?: string
 }): Promise<{ origin: string; close(): Promise<void> }> {
   const config = readGatewayConfig(options.configPath)
+  const knowledgeRoute = knowledgeUpstream(options.weknoraBaseURL ?? DEFAULT_DESKTOP_WEKNORA_BASE_URL)
   const site = await listen(MODEL_SITE_PORT, (request, response) => {
     try { handleSite(options.siteDir, config, request, response) } catch (error) {
       if (!response.headersSent) response.writeHead(502).end()
@@ -165,12 +170,14 @@ export async function startModelGateway(options: {
     tunnel(route, url, config.publicOrigin, MODEL_SITE_ORIGIN, request, socket, head)
   })
   const harnessRoute: GatewayRoute = { prefix: '/', target: config.harness.target }
+  const harnessRoutes = [knowledgeRoute]
   const harnessOrigin = `http://127.0.0.1:${MODEL_HARNESS_PORT}`
   let harness: ReturnType<typeof createServer>
   try {
     harness = await listen(MODEL_HARNESS_PORT, (request, response) => {
       const url = new URL(request.url ?? '/', harnessOrigin)
-      proxy(harnessRoute, url, config.publicOrigin, harnessOrigin, request, response)
+      const route = matchRoute(url.pathname, harnessRoutes) ?? harnessRoute
+      proxy(route, url, config.publicOrigin, harnessOrigin, request, response)
     })
   } catch (error) {
     await closeServer(site)
@@ -178,11 +185,24 @@ export async function startModelGateway(options: {
   }
   harness.on('upgrade', (request, socket, head) => {
     const url = new URL(request.url ?? '/', harnessOrigin)
-    tunnel(harnessRoute, url, config.publicOrigin, harnessOrigin, request, socket, head)
+    const route = matchRoute(url.pathname, harnessRoutes) ?? harnessRoute
+    tunnel(route, url, config.publicOrigin, harnessOrigin, request, socket, head)
   })
   return {
     origin: MODEL_SITE_ORIGIN,
     close: () => Promise.all([closeServer(site), closeServer(harness)]).then(() => undefined),
+  }
+}
+
+function knowledgeUpstream(apiBase: string): GatewayRoute {
+  const url = new URL(apiBase)
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+    throw new Error('desktop model gateway: invalid WEKNORA_BASE_URL')
+  }
+  return {
+    prefix: '/weknora',
+    target: url.origin,
+    replace: url.pathname.replace(/\/+$/u, '').replace(/\/api\/v1$/u, ''),
   }
 }
 

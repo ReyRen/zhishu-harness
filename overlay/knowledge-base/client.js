@@ -9,7 +9,6 @@ window.__ModuleLoader__.load({
     const { IconChevronDownOutlineRegular } = require('@deepseek-ai/dsh-client-ui-primitives')
     const h = React.createElement
 
-    const IFRAME_URL = 'http://172.18.36.230:5175/weknora/sso/platform'
     const SSO_CLIENT_ID = 'gcs-webnora'
     const READY_TYPE = 'weknora:sso-ready'
     const TOKEN_TYPE = 'weknora:sso-token'
@@ -20,6 +19,7 @@ window.__ModuleLoader__.load({
     const HOST_SSO_TIMEOUT_MS = 30_000
     /** Main panel id (same pattern as plugins / schedules). */
     const PANEL_ID = 'zhishu-knowledge'
+    const LOCALE_NAMESPACE = 'zhishu.knowledge-selection'
     /** Legacy workbench / companion id — cleaned up on load if still present. */
     const LEGACY_WORKBENCH_ID = 'local:@zhishu/dsh-overlay-knowledge-base'
     const STYLE_ID = 'zhishu-overlay-knowledge-base-style'
@@ -31,10 +31,6 @@ window.__ModuleLoader__.load({
     const LOG_HOP0 = '[SSO hop0 desktop-ipc]'
     const LOG_HOP1 = '[SSO hop1 model↔harness]'
     const LOG_HOP2 = '[SSO hop2 harness↔weknora]'
-
-    function iframeOrigin() {
-      try { return new URL(IFRAME_URL).origin } catch { return '' }
-    }
 
     function newNonce() {
       return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
@@ -273,20 +269,24 @@ window.__ModuleLoader__.load({
       }
     }
 
-    function installKnowledgePicker(ctx, auth) {
-      const namespace = 'zhishu.knowledge-selection'
+    function installKnowledgeLocale(ctx) {
       const dictionaries = {
         zh: { title: '知识库', placeholder: '搜索可用知识库',
           empty: '暂无可用知识库', noResults: '没有匹配的知识库', selected: '知识库：', multiple: '知识库 · 已选 {count} 个',
           unavailable: '知识库暂不可用，请重新打开平台会话后重试', failed: '切换知识库失败，请重试',
-          revoked: '不可用，请取消选择', changed: '会话的知识库选择已更改，请重新打开选择器' },
+          revoked: '不可用，请取消选择', changed: '会话的知识库选择已更改，请重新打开选择器',
+          pageNotConfigured: '知识库页面地址未配置，请联系管理员' },
         en: { title: 'Knowledge bases', placeholder: 'Search available knowledge bases',
           empty: 'No knowledge bases available', noResults: 'No matching knowledge bases', selected: 'Knowledge: ', multiple: 'Knowledge · {count} selected',
           unavailable: 'Knowledge unavailable. Reopen the platform session and retry.', failed: 'Could not change knowledge. Retry.',
-          revoked: 'Unavailable; uncheck to continue', changed: 'Knowledge selection changed. Reopen the picker.' },
+          revoked: 'Unavailable; uncheck to continue', changed: 'Knowledge selection changed. Reopen the picker.',
+          pageNotConfigured: 'The knowledge page address is missing. Contact your administrator.' },
       }
-      ctx.effect(() => ctx.locale.register(namespace, dictionaries), 'knowledge: picker dictionaries')
-      const t = ctx.locale.bind(namespace)
+      ctx.effect(() => ctx.locale.register(LOCALE_NAMESPACE, dictionaries), 'knowledge: locale dictionaries')
+      return ctx.locale.bind(LOCALE_NAMESPACE)
+    }
+
+    function installKnowledgePicker(ctx, auth, t) {
       const live = sessionID => ctx.sessions.binding(sessionID)?.session
       const stateOf = sessionID => live(sessionID)?.projections.faceOf('zhishuKnowledge').getSnapshot()
       const request = async (path, signal) => {
@@ -409,7 +409,7 @@ window.__ModuleLoader__.load({
       }
       ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
         name: 'conversation.input.left', id: 'zhishu-knowledge-selection',
-        locale: namespace,
+        locale: LOCALE_NAMESPACE,
         inject: sessionID => ({ sessionID, loadCatalog: catalog,
           open: signal => ctx.commandUi.openPopup('knowledge', sessionID, signal) }),
       }, KnowledgeSelection))
@@ -498,6 +498,9 @@ window.__ModuleLoader__.load({
     /** Full-page WeKnora UI (main panel), same shell pattern as Plugins. */
     function KnowledgePanel(props) {
       const startAssistant = props.startAssistant
+      const iframeUrl = window.location.protocol === 'dsh-app:'
+        ? window.__DSH_WEKNORA_DESKTOP_URL__
+        : '/weknora/sso/platform'
       const frameRef = React.useRef(null)
       const nonceRef = React.useRef('')
       const [signedIn, setSignedIn] = React.useState(false)
@@ -527,19 +530,13 @@ window.__ModuleLoader__.load({
       }, [])
 
       React.useEffect(() => {
-        if (!signedIn) return undefined
-        const allowed = iframeOrigin()
+        if (!signedIn || !iframeUrl) return undefined
+        const allowed = new URL(iframeUrl, window.location.href).origin
         const onMessage = (event) => {
           const frame = frameRef.current
-          const fromWeknora = !!(frame && event.source === frame.contentWindow)
+          if (!frame || event.source !== frame.contentWindow) return
           const data = event.data
           const dataType = data && typeof data === 'object' && !Array.isArray(data) ? data.type : undefined
-
-          // hop1 replies from model arrive on the same window; do not treat as weknora.
-          if (!fromWeknora) {
-            if (dataType === HOST_SSO_RESPONSE || dataType === HOST_SSO_REQUEST) return
-            return
-          }
 
           console.info(`${LOG_HOP2} harness ← weknora message`, {
             direction: 'weknora → harness',
@@ -547,9 +544,8 @@ window.__ModuleLoader__.load({
             expectedOrigin: allowed,
             harnessOrigin: location.origin,
             type: dataType,
-            data,
           })
-          if (!allowed || event.origin !== allowed) {
+          if (event.origin !== allowed) {
             console.warn(`${LOG_HOP2} harness ← weknora ignored (origin mismatch)`, {
               direction: 'weknora → harness',
               origin: event.origin,
@@ -589,7 +585,7 @@ window.__ModuleLoader__.load({
             clientId: SSO_CLIENT_ID,
           })
           void fetchSsoTicket().then((ticket) => {
-            if (nonceRef.current !== data.nonce || !frameRef.current) return
+            if (nonceRef.current !== data.nonce || frameRef.current !== frame) return
             const message = {
               type: TOKEN_TYPE,
               nonce: data.nonce,
@@ -597,17 +593,16 @@ window.__ModuleLoader__.load({
             }
             if (ticket.refresh_token) message.refresh_token = ticket.refresh_token
             if (ticket.user_id) message.user_id = ticket.user_id
-            const target = allowed || '*'
             console.info(`${LOG_HOP2} harness → weknora ${TOKEN_TYPE}`, {
               direction: 'harness → weknora',
-              targetOrigin: target,
+              targetOrigin: allowed,
               type: message.type,
               nonce: message.nonce,
               access_token: maskToken(message.access_token),
               hasRefreshToken: !!message.refresh_token,
               user_id: message.user_id,
             })
-            frameRef.current.contentWindow?.postMessage(message, target)
+            frame.contentWindow?.postMessage(message, allowed)
             setStatus('')
           }).catch((err) => {
             if (nonceRef.current !== data.nonce) return
@@ -618,7 +613,7 @@ window.__ModuleLoader__.load({
         }
         window.addEventListener('message', onMessage)
         const stopModels = props.onModelsChanged(() => {
-          if (allowed) frameRef.current?.contentWindow?.postMessage({ type: 'weknora:models-updated' }, allowed)
+          frameRef.current?.contentWindow?.postMessage({ type: 'weknora:models-updated' }, allowed)
         })
         console.info(`${LOG_HOP2} harness listening for weknora`, {
           direction: 'weknora → harness (listener on)',
@@ -631,10 +626,11 @@ window.__ModuleLoader__.load({
           stopModels()
           nonceRef.current = ''
         }
-      }, [signedIn])
+      }, [signedIn, iframeUrl])
 
       const gateHint = !signedIn ? '请先登录平台，登录后将自动加载知识库。' : ''
-      const barText = error || status || gateHint
+      const barError = iframeUrl ? error : props.t('pageNotConfigured')
+      const barText = barError || status || gateHint
 
       return h(
         'div',
@@ -645,7 +641,7 @@ window.__ModuleLoader__.load({
           barText
             ? h('div', {
               className: 'zhishuKbBarStatus',
-              'data-error': error ? 'true' : 'false',
+              'data-error': barError ? 'true' : 'false',
             }, barText)
             : h('div', { className: 'zhishuKbBarStatus' }),
           h('button', {
@@ -663,7 +659,7 @@ window.__ModuleLoader__.load({
             ref: frameRef,
             className: 'zhishuKbFrame',
             title: '知识库',
-            src: signedIn ? IFRAME_URL : 'about:blank',
+            src: signedIn && iframeUrl ? iframeUrl : 'about:blank',
             allow: 'clipboard-read; clipboard-write',
           }),
         ),
@@ -673,8 +669,9 @@ window.__ModuleLoader__.load({
     const inject = ['slots', 'layout', 'uiWorkspace', 'desktopWorkbenches', 'commandUi', 'sessions', 'locale', 'connection', 'remote', 'remote.commands']
     function apply(ctx) {
       installStyles()
+      const t = installKnowledgeLocale(ctx)
       const auth = installToolAuthentication(ctx)
-      installKnowledgePicker(ctx, auth)
+      installKnowledgePicker(ctx, auth, t)
 
       // Drop leftover workbench / companion registration from earlier builds.
       const host = ctx.desktopWorkbenches
@@ -708,6 +705,7 @@ window.__ModuleLoader__.load({
       ctx.slots.inject('main', () => ctx.slots.register({
         name: 'main',
         key: PANEL_ID,
+        locale: LOCALE_NAMESPACE,
         inject: () => ({
           onModelsChanged: listener => ctx.remote.$on('llm/models-updated', listener),
           openModelSettings: () => ctx.emit('settings/open', 'models'),

@@ -9,7 +9,7 @@ description: 平台模型设置使用 Harness 原生控件和经过所有者认�
 
 ## 变更
 
-使用 `platformModelManagement: true` 的平台组合通过 Harness 原生组件显示**设置 → 模型设置**。统一的 gcs-webnora 模型目录、已存模型 ID、迁移别名、凭据和知识库绑定保持不变。`/api/zhishu-models/config` 地址接口由经过所有者认证的 `/api/zhishu-models/manage` 操作替代。模型设置不再使用 `WEKNORA_WEB_URL`，知识库页面保留独立的浏览器地址配置。
+使用 `platformModelManagement: true` 的平台组合通过 Harness 原生组件显示**设置 → 模型设置**。统一的 gcs-webnora 模型目录、已存模型 ID、迁移别名、凭据和知识库绑定保持不变。`/api/zhishu-models/config` 地址接口由经过所有者认证的 `/api/zhishu-models/manage` 操作替代。知识库页面的路由见[知识库面板的 Web 网关](../knowledge-web-gateway/guide.zh.md)。
 
 ## 迁移
 

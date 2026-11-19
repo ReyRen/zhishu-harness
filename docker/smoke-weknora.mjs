@@ -130,6 +130,10 @@ async function probe(user, installed = false, sso = false) {
               const cookie = login.headers.getSetCookie().map(value => value.split(';')[0]).join('; ')
               await login.arrayBuffer()
               assert.notEqual(cookie, '')
+              const index = await fetch(`${origin}/`, { headers: { cookie } })
+              assert.equal(index.status, 200)
+              assert.doesNotMatch(await index.text(), /__DSH_WEKNORA_DESKTOP_URL__/u,
+                'Browser Web pages resolve knowledge from their own origin')
               const response = await fetch(`${origin}/api/zhishu-knowledge/auth`, {
                 method: 'POST', headers: { cookie, origin, 'content-type': 'application/json' },
                 body: JSON.stringify({ access_token: `platform-${user}`, user_id: `user-${user}` }),
