@@ -117,12 +117,12 @@ let starting: Promise<void> | undefined
  * @param resourcesDir - `process.resourcesPath`.
  * @param weknoraBaseURL - Knowledge API address used for the local iframe proxy.
  */
-export async function startPackagedModelSite(resourcesDir: string, weknoraBaseURL?: string): Promise<void> {
+export async function startPackagedModelSite(resourcesDir: string, weknoraBaseURL = DEFAULT_DESKTOP_WEKNORA_BASE_URL): Promise<void> {
   if (modelSiteDirectory(resourcesDir) === undefined) return
   starting ??= startModelGateway({
     siteDir: join(resourcesDir, 'model-site'),
     configPath: ensureGatewayConfig(resourcesDir),
-    ...(weknoraBaseURL === undefined ? {} : { weknoraBaseURL }),
+    weknoraBaseURL,
   }).then(() => undefined).catch((error: unknown) => {
     starting = undefined
     throw error
@@ -156,8 +156,7 @@ export async function startModelGateway(options: {
   weknoraBaseURL?: string
 }): Promise<{ origin: string; close(): Promise<void> }> {
   const config = readGatewayConfig(options.configPath)
-  const knowledgeRoute = config.upstreams.find(route => route.prefix === '/weknora' || route.prefix === '/weknora/')
-    ?? knowledgeUpstream(options.weknoraBaseURL ?? DEFAULT_DESKTOP_WEKNORA_BASE_URL)
+  const knowledgeRoute = knowledgeUpstream(options.weknoraBaseURL ?? DEFAULT_DESKTOP_WEKNORA_BASE_URL)
   const site = await listen(MODEL_SITE_PORT, (request, response) => {
     try { handleSite(options.siteDir, config, request, response) } catch (error) {
       if (!response.headersSent) response.writeHead(502).end()

@@ -39,7 +39,6 @@ function fixture(panelURL?: string) {
   const parent = { postMessage() {} }
   const fakeWindow = { parent, top: parent, setTimeout, clearTimeout,
     location: new URL(panelURL ?? 'https://harness.test'),
-    __DSH_WEKNORA_IFRAME_URL__: 'http://legacy.invalid:5175/weknora/sso/platform',
     setInterval() { return 1 }, clearInterval() {}, addEventListener() {}, removeEventListener() {},
     __ModuleLoader__: { load(entry: { factory: (require: (id: string) => unknown) => { apply: typeof apply } }) {
       apply = entry.factory((id) => {
