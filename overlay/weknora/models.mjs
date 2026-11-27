@@ -93,7 +93,8 @@ export async function modelRequest(options, row, ctx) {
         case 'image': {
           const attachments = ctx.get('attachments')
           if (!attachments) throw failure('MODEL_IMAGE_STORAGE_UNAVAILABLE')
-          const target = { width: block.attachment.width, height: block.attachment.height, maxBytes: block.attachment.bytes }
+          const target = { width: block.attachment.width, height: block.attachment.height,
+            maxImageBytes: block.attachment.bytes, imageTargetBytes: block.attachment.bytes }
           const image = await attachments.readImageRequest(block.attachment, target, options.signal)
           const access = resolveImageAttachmentAccess(attachments, path => ctx.get('fs')?.processPathFromHostPath(path), block.attachment)
           parts.push({ type: 'text', text: requestImageHandleText(block.attachment, image, access) })

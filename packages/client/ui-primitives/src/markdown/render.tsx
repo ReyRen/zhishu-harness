@@ -84,6 +84,7 @@ function remoteImageUrl(url: string): string | undefined {
 /** Authenticated Host media routes as the Desktop application addresses them. */
 const DESKTOP_MEDIA_ROUTES = [
   'dsh-app://app/api/file?', 'dsh-app://app/api/plugin-market/detail-file?', 'dsh-app://app/api/plugin-manager/detail-file?',
+  'dsh-app://app/api/zhishu-knowledge/image?',
 ]
 
 /** Rewritten images may use Web media protocols or the Desktop application's media routes. */
@@ -127,7 +128,7 @@ const nextImageLoad = (): number => ++imageLoads
  * Tag a Host file-route image URL with its mount's load number. Browsers reuse
  * a same-URL image within one document despite `no-store`, so without the tag
  * a newly rendered image of a rewritten file would show the earlier bytes.
- * @param url - Absolute resolved image URL; URLs outside the `api/file` route stay unchanged.
+ * @param url - Absolute resolved image URL.
  * @param load - Number allocated once per mounted image or file link.
  * @returns The URL with a `load` query parameter, or the unchanged URL.
  */
@@ -135,7 +136,7 @@ function freshImageUrl(url: string, load: number): string {
   let fresh: URL
   try { fresh = new URL(url) }
   catch { return url } // Only an unparsable owner-supplied URL throws; it is emitted as before.
-  if (!fresh.pathname.endsWith('/api/file')) return url
+  if (!fresh.pathname.endsWith('/api/file') && !fresh.pathname.endsWith('/api/zhishu-knowledge/image')) return url
   // Appending preserves the resolver's existing query encoding.
   fresh.search = `${fresh.search === '' ? '?' : `${fresh.search}&`}load=${load}`
   return fresh.href

@@ -2,6 +2,7 @@
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import { ToolArgsError } from '@deepseek-ai/dsh-tools'
 import { WeknoraApiError } from '@wxg-prc-cpg/dsh-weknora'
+import { rewriteKnowledgeImages } from './media.mjs'
 
 const string = { type: 'string' }
 const references = { type: 'array', items: string }
@@ -106,7 +107,8 @@ export function wikiReadTool(config, run) {
         throw invalidWikiResponse()
       }
       return { knowledge_base_id: id, slug, title: clip(page.title, config.maxChunkChars),
-        content: clip(page.content, config.maxChunkChars), content_truncated: page.content.length > config.maxChunkChars,
+        content: rewriteKnowledgeImages(clip(page.content, config.maxChunkChars), id),
+        content_truncated: page.content.length > config.maxChunkChars,
         source_refs: (page.source_refs ?? []).slice(0, config.maxResults).map(ref => clip(ref, config.maxChunkChars)) }
     }),
   }

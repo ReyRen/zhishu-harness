@@ -12,6 +12,9 @@ const directory = dirname(fileURLToPath(import.meta.url))
 const repository = dirname(directory)
 const root = await mkdtemp(join(tmpdir(), 'dsh-weknora-smoke-'))
 const requests = []
+const imageHandle = 'resource://Abcdef0000000000000000'
+const imageBytes = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aW1cAAAAASUVORK5CYII=', 'base64')
+let imageRevoked = false
 const text = 'Backups are retained for 30 days.'
 const chunk = { id: 'chunk-backups', knowledge_id: 'doc-backups', knowledge_title: 'Backup policy',
   chunk_index: 0, score: 0.95, content: text }
@@ -49,6 +52,11 @@ const backend = createServer((request, response) => {
     } else if (url.pathname === `/api/v1/knowledge-bases/${selectedKB}/knowledge`) {
       send(200, { data: [{ id: 'doc-backups', knowledge_base_id: selectedKB, title: 'Backup policy',
         parse_status: 'completed', description: text }], total: 1, page: 1, page_size: 8 })
+    } else if (url.pathname === `/api/v1/knowledge-bases/${selectedKB}/files`) {
+      assert.equal(url.searchParams.get('file_path'), imageHandle)
+      if (imageRevoked) { send(403, { error: 'The share was revoked' }); return }
+      response.writeHead(200, { 'content-type': 'image/png' })
+      response.end(imageBytes)
     } else if (url.pathname === '/api/v1/knowledge-search') {
       assert.deepEqual(body.knowledge_base_ids, [selectedKB])
       send(200, { data: [chunk] })
@@ -123,9 +131,13 @@ async function probe(user, installed = false, sso = false) {
             if (sso) {
               const printed = /dsh web: (http:\/\/[^\s]+)/u.exec(logs)[1]
               const origin = new URL(printed).origin
+              const imageURL = `${origin}/api/zhishu-knowledge/image?${new URLSearchParams({
+                kb: `kb-${user}-shared`, ref: imageHandle, load: '1',
+              })}`
               const anonymous = await fetch(`${origin}/api/zhishu-knowledge/auth`)
               assert.equal(anonymous.status, 401, 'SSO handoff requires the native Host owner')
               await anonymous.arrayBuffer()
+              assert.equal((await fetch(imageURL)).status, 401, 'Knowledge images require the native Host owner')
               const login = await fetch(printed, { redirect: 'manual' })
               const cookie = login.headers.getSetCookie().map(value => value.split(';')[0]).join('; ')
               await login.arrayBuffer()
@@ -140,6 +152,15 @@ async function probe(user, installed = false, sso = false) {
               })
               assert.equal(response.status, 200)
               assert.deepEqual(await response.json(), { mode: 'sso', authenticated: true })
+              const image = await fetch(imageURL, { headers: { cookie } })
+              assert.equal(image.status, 200)
+              assert.equal(image.headers.get('cache-control'), 'private, no-store')
+              assert.deepEqual(Buffer.from(await image.arrayBuffer()), imageBytes)
+              imageRevoked = true
+              const revoked = await fetch(imageURL, { headers: { cookie } })
+              assert.equal(revoked.status, 403)
+              assert.equal(await revoked.text(), '')
+              imageRevoked = false
             }
             child.send({ command: 'weknora-probe', workspace, knowledgeBaseId: sso ? `kb-${user}-shared` : `kb-${user}`,
               sessionId: installed ? 'weknora-smoke-installed' : sso ? 'weknora-smoke-sso' : 'weknora-smoke' },

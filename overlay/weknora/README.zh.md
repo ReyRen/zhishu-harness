@@ -56,6 +56,8 @@ location ^~ /weknora/ {
 
 `knowledge_login_required` 表示需要重新打开已登录的平台会话后重试；`knowledge_backend_unavailable` 表示需要检查后端配置及网络。默认地址沿用原插件的开发入口；容器内的 `localhost` 指向自身。`docker/.env.example` 给出了 230 地址。独立 API Key 需要 `retrieve` 权限，问答还需要 `chat`；它不同于模型密钥和 SSO Client Secret。
 
-选择由 Session Projection 从原生 `knowledge` 命令的成功记录中恢复；不保存令牌或第二份会话状态文件。实际后端调用继续进入 gcs-webnora 现有请求和检索日志。`X-Request-ID` 携带 Worker 用户、Harness 会话和工具调用的哈希及随机后缀，用于关联知识库 ID、结果、状态和耗时，标识中不含凭据。当前 `/knowledge-search` 不会创建持久化审计条目，也没有独立调用历史页面；这类能力需要单独改造后端，不能用 Harness 伪造记录代替。
+选择知识库后，附图会检索所选库中已启用图片向量且嵌入模型支持图片的索引。每次使用第一张附图，文字问题仍会检索文档和 Wiki。文档与 Wiki 中有权读取的图片可以带图注显示在回答中。每次加载图片时，Host 使用当前登录用户的凭据访问知识库文件接口，由 gcs-webnora 再次校验权限。
+
+成功执行的 `/knowledge-search` 和 `/wiki-search` 记录在对应知识库的「活动记录」中，显示操作者、时间和检索方式。活动详情不含问题内容或图片字节。运维日志仍使用 `X-Request-ID` 关联 Worker 用户以及 Harness 会话和工具调用的哈希值。SSO 使用私有资源引用。独立 API Key 配置可请求公开资源链接，WebNora 拒绝为限定知识库的密钥提供公开链接时，使用私有资源引用。
 
 镜像构建通过本地模拟后端和确定性模型运行[无密钥 Web 冒烟验证](../../docker/smoke-weknora.mjs)，检查真实 Agent 调用、API Key 与 SSO 传输、所有者专用换证入口、独立凭据、越权拒绝、profile 归属和卸载后移除工具。[认证测试](../../docker/tests/weknora-auth.test.mjs) 覆盖用户绑定、刷新、撤销及退出竞态。[选择测试](../../docker/tests/weknora-selection.test.mjs) 覆盖重放、范围限制、权限撤销和取消；[选择器测试](../../docker/tests/weknora-picker.test.mjs) 覆盖命令确认和会话独立选择。真实平台票据、知识库权限和模型回答需要在部署时验证。

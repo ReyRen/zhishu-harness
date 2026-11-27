@@ -4,12 +4,13 @@ import { createKnowledgeRuntime } from './runtime.mjs'
 import { AccessibleKnowledgeClient, installSelection, knowledgeRequestID, SelectedKnowledgeClient, selectedArguments } from './selection.mjs'
 import { executeKnowledgeTool, installKnowledgeContext, knowledgeTool, overviewTool } from './retrieval.mjs'
 import { wikiReadTool } from './wiki.mjs'
+import { KNOWLEDGE_IMAGE_ROUTE, knowledgeImageHandler } from './media.mjs'
 
 export const inject = ['tools', 'connection', 'commands', 'sessionProjections', 'agents', 'systemPrompt']
 
 /** Register an owner-authenticated handoff and keep the upstream tool implementations. */
 export async function apply(ctx, config) {
-  const resolved = resolveConfig(config)
+  const resolved = resolveConfig({ resourceUrls: 'handle', ...config })
   // User profiles may configure tools, but cannot replace the Worker-assigned identity.
   const platformUserID = process.env.DSH_PLATFORM_USER_ID || undefined
   if (platformUserID && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(platformUserID)) {
@@ -34,7 +35,11 @@ export async function apply(ctx, config) {
       fetch: request => runtime.handle(request),
     }), 'weknora: owner-only SSO handoff')
   }
-  const proxied = { ...resolved, ...transport, tenantId: resolved.apiKey ? resolved.tenantId : undefined }
+  const proxied = { ...resolved, ...transport, tenantId: resolved.apiKey ? resolved.tenantId : undefined,
+    resourceUrls: resolved.apiKey ? resolved.resourceUrls : 'handle' }
+  ctx.effect(() => ctx.connection.fetch.register({ path: KNOWLEDGE_IMAGE_ROUTE, methods: ['GET'], requestBody: 'buffered',
+    fetch: knowledgeImageHandler(proxied, resolved.knowledgeBaseIds),
+  }), 'weknora: owner-only knowledge images')
   const selection = await installSelection(ctx, new AccessibleKnowledgeClient(proxied), resolved.knowledgeBaseIds)
   const run = (context, callback) => selection.run(context, (ids, signal, visible) => {
     const requestID = knowledgeRequestID(platformUserID, context.agent.id, context.callId)

@@ -56,6 +56,24 @@ describe('localPathMediaUrl', () => {
 })
 
 describe('AssistantMarkdown local-path images', () => {
+  it.each([MOUNTED_BASE, 'dsh-app://app/'])('renders private knowledge evidence under the current application at %s', (base) => {
+    vi.spyOn(document, 'baseURI', 'get').mockReturnValue(base)
+    const reference = './api/zhishu-knowledge/image?kb=shared&ref=resource%3A%2F%2FAbcdef0000000000000000'
+    const { container } = render(
+      <AssistantMarkdown renderSlot={() => null} useDisclosure={useDisclosure} useGroupAction={useSearchableHidden}
+        usePresentation={useDetailedPresentation} blocks={[textBlock(`![Chart](${reference})`)]}
+        streaming={false} loadImage={unusedImageLoader} t={t}
+      />,
+    )
+    const image = container.querySelector('img')
+    const url = new URL(image?.getAttribute('src') ?? '')
+    expect(image?.getAttribute('alt')).toBe('Chart')
+    expect(url.href.startsWith(base)).toBe(true)
+    expect(url.searchParams.get('load')).toMatch(/^\d+$/u)
+    expect(url.searchParams.get('ref')).toBe('resource://Abcdef0000000000000000')
+    expect(localPathMediaUrl(base, reference + '&next=https://outside.test')).toBeUndefined()
+  })
+
   it.each([BASE, 'dsh-app://app/'])('renders a local image in closing prose through %s', (base) => {
     vi.spyOn(document, 'baseURI', 'get').mockReturnValue(base)
     const { container } = render(

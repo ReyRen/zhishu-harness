@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { WeknoraClient, WeknoraApiError } from '@wxg-prc-cpg/dsh-weknora'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
+import { rewriteKnowledgeImages } from './media.mjs'
 
 export const SELECTION_KEY = 'zhishuKnowledge'
 export const SELECT_COMMAND = 'knowledge'
@@ -71,6 +72,7 @@ export async function visibleBases(client, allowedIds, signal) {
     .map(base => ({ id: base.id, name: typeof base.name === 'string' && base.name.trim() ? base.name : base.id,
       wiki: base.capabilities?.wiki === true,
       documentSearch: !(base.capabilities?.wiki === true && base.capabilities.vector === false && base.capabilities.keyword === false),
+      ...(base.capabilities?.vector === true && base.image_processing_config?.image_vector_enabled === true && { imageSearch: true }),
     }))
 }
 
@@ -83,6 +85,7 @@ export class SelectedKnowledgeClient extends AccessibleKnowledgeClient {
     const selected = bases.filter(base => knowledgeBaseIds.includes(base.id))
     this.wikiBaseIds = selected.filter(base => base.wiki).map(base => base.id)
     this.documentBaseIds = knowledgeBaseIds.filter(id => !selected.some(base => base.id === id && !base.documentSearch))
+    this.imageBaseIds = selected.filter(base => base.imageSearch).map(base => base.id)
   }
   headers() { return { ...super.headers(), 'X-Request-ID': this.requestID } }
   async listKnowledgeBases(signal) {
@@ -101,21 +104,27 @@ export class SelectedKnowledgeClient extends AccessibleKnowledgeClient {
     return document
   }
   async listChunks(input, signal) {
-    await this.getDocument(input.knowledgeId, signal)
-    return super.listChunks(input, signal)
+    const document = await this.getDocument(input.knowledgeId, signal)
+    const result = await super.listChunks(input, signal)
+    return { ...result, chunks: result.chunks.map(chunk => typeof chunk.content === 'string'
+      ? { ...chunk, content: rewriteKnowledgeImages(chunk.content, document.knowledge_base_id) } : chunk) }
   }
   async search(input, signal) {
     const result = await this.searchResult(input, signal)
     this.searchDiagnostics = result.diagnostics
+    this.searchHits = result.hits
     return result.hits
   }
   /** Preserve retrieval diagnostics independently of matching passages. */
   async searchResult(input, signal) {
     this.checkScope(input.knowledgeBaseIds)
     for (const id of input.knowledgeIds) await this.getDocument(id, signal)
-    if (!this.documentBaseIds.length) return { hits: [], diagnostics: { status: 'not_searched', reason: 'wiki_only' } }
+    const targetIds = input.queryImage ? this.imageBaseIds : this.documentBaseIds
+    if (!targetIds.length) return { hits: [], diagnostics: { status: 'not_searched',
+      reason: input.queryImage ? 'image_index_unavailable' : 'wiki_only' } }
     const envelope = await this.fetchJson('/knowledge-search', { method: 'POST', body: {
-      query: input.query, knowledge_base_ids: this.documentBaseIds,
+      query: input.query, knowledge_base_ids: targetIds,
+      ...(input.queryImage && { query_image: input.queryImage, disable_keywords_match: true }),
       ...(input.knowledgeIds.length ? { knowledge_ids: input.knowledgeIds } : {}),
     } }, signal)
     if (envelope?.success === false || !Array.isArray(envelope?.data)) throw new WeknoraApiError('Invalid knowledge search response', 502)
@@ -126,7 +135,8 @@ export class SelectedKnowledgeClient extends AccessibleKnowledgeClient {
     for (const key of ['candidate_count', 'result_count', 'threshold', 'effective_threshold', 'top_score']) {
       if (typeof rerank?.[key] === 'number' && Number.isFinite(rerank[key])) diagnostics[key] = rerank[key]
     }
-    return { hits: envelope.data, diagnostics }
+    return { hits: envelope.data.map(hit => typeof hit?.content === 'string' && targetIds.includes(hit.knowledge_base_id)
+      ? { ...hit, content: rewriteKnowledgeImages(hit.content, hit.knowledge_base_id) } : hit), diagnostics }
   }
   /** List one page of metadata from a selected base; the backend checks shared access. */
   async listDocuments(knowledgeBaseId, page, pageSize, signal) {
