@@ -10,7 +10,7 @@
 
 思维导图适配版由 `prepare-mind-workbench.mjs` 根据哈希锁定的上游归档和 `patches/` 中的已审查补丁构建。仓库启动、容器准备和 Desktop 打包生成同一个独立版本，生成的归档不提交。画布保存会保留待保存的编辑、跳过内容未变的文档，并排除过期轮询造成的外部更新误报；真正的新写入仍须由用户明确重新载入画布。
 
-Visual Workflow 由 [`prepare-visual-workflow.mjs`](prepare-visual-workflow.mjs) 根据锁定的已编译源码归档生成，GUI 和文件路由使用 Harness Host 的认证。容器和 Desktop 打包阶段准备完整依赖及 `bge-small-zh-v1.5` 量化模型，并校验每个模型文件的 SHA-256。用户从「设置 → 插件市场」安装到自己的 profile。工作流数据保存在 `DSH_HOME/visual-workflow`，卸载插件会保留数据。私有源保留逐字节一致的 `0.11.1-zhishu.1`、`1.1.1-zhishu.1` 和 `1.3.0-zhishu.1` 归档，供已有 profile 校验锁文件。
+Visual Workflow 由 [`prepare-visual-workflow.mjs`](prepare-visual-workflow.mjs) 根据锁定的已编译源码归档生成。已发布的插件通过兼容方法，把 GUI 和文件路由鉴权交给 Host 当前的 Connection。容器和 Desktop 打包阶段准备完整依赖及 `bge-small-zh-v1.5` 量化模型，并校验每个模型文件的 SHA-256。用户从「设置 → 插件市场」安装到自己的 profile。工作流数据保存在 `DSH_HOME/visual-workflow`，卸载插件会保留数据。私有源保留逐字节一致的 `0.11.1-zhishu.1`、`1.1.1-zhishu.1` 和 `1.3.0-zhishu.1` 归档，供已有 profile 校验锁文件。
 
 在「设置 → 插件市场」安装 Dify Migrator 即可使用其 `scan` 和 `convert` 命令。可视化工作流也包含同一转换器。在工作流工作台选择「迁移 Dify 工具」并上传 `.difypkg` 或 ZIP，可将兼容工具和 Xinference 模型提供商转换到当前用户的工作流数据目录。转换和本地向量检索可离线运行。Linux Web 镜像在 bubblewrap 中运行转换后的 Python 工具，使用只读工具包和独立临时目录。迁移后的模型提供商在目标环境配置服务地址和凭据。
 
