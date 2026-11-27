@@ -2,8 +2,10 @@
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { test } from 'node:test'
+import { resolveConfig, WeknoraClient } from '@wxg-prc-cpg/dsh-weknora'
 import { createKnowledgeRuntime } from '../../overlay/weknora/runtime.mjs'
 import { apply } from '../../overlay/weknora/index.mjs'
+import { knowledgeImageHandler } from '../../overlay/weknora/media.mjs'
 
 function token(user, expires = Date.now() + 3600_000) {
   return `fixture.${Buffer.from(JSON.stringify({ sub: user, exp: Math.floor(expires / 1000) })).toString('base64url')}.signature`
@@ -27,6 +29,10 @@ async function fixture(t, options = {}) {
         if (options.refreshDenied) { send(401, { error: 'revoked session' }); return }
         send(200, { success: true, access_token: token(body.refreshToken.replace('refresh-', '')), refresh_token: body.refreshToken })
       } else if (options.denied) send(options.denied, { error: 'permission denied' })
+      else if (options.image && req.url.startsWith('/api/v1/knowledge-bases/kb-test/files?')) {
+        res.writeHead(200, { 'content-type': options.imageType || 'image/png' })
+        res.end(Buffer.from('iVBORw0KGgo=', 'base64'))
+      }
       else if (options.redirect) { res.writeHead(302, { location: options.redirect }); res.end() }
       else send(200, { data: [{ id: 'kb-test' }] })
     })().catch(error => res.destroy(error))
@@ -123,6 +129,34 @@ test('the SSO bridge forwards Wiki search and page reads with user credentials',
   assert.equal(f.calls.length, 3)
 })
 
+test('the packaged client retries only the scoped resource-URL refusal', async t => {
+  const calls = []
+  const backend = createServer((request, response) => {
+    const url = new URL(request.url, 'http://fixture')
+    const mode = url.searchParams.get('resource_urls')
+    calls.push(mode)
+    if (mode === 'public') {
+      response.writeHead(403, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({ error: 'Scoped keys cannot use resource_urls=public' }))
+    } else {
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({ data: [{ id: 'kb-scoped' }] }))
+    }
+  })
+  await new Promise(resolve => backend.listen(0, '127.0.0.1', resolve))
+  t.after(async () => {
+    backend.closeAllConnections()
+    await new Promise(resolve => backend.close(resolve))
+  })
+  const config = resolveConfig({ baseUrl: `http://127.0.0.1:${backend.address().port}/api/v1`, apiKey: 'scoped-fixture' })
+  assert.equal(config.resourceUrls, 'handle')
+  const client = new WeknoraClient({ ...config, resourceUrls: 'public' })
+  const signal = AbortSignal.timeout(5000)
+  assert.equal((await client.listKnowledgeBases(signal))[0].id, 'kb-scoped')
+  await client.listKnowledgeBases(signal)
+  assert.deepEqual(calls, ['public', null, null])
+})
+
 test('expired credentials refresh once across concurrent retrievals', async t => {
   const f = await fixture(t, { expired: true })
   await f.runtime.signIn({ access_token: 'platform-369' })
@@ -131,6 +165,36 @@ test('expired credentials refresh once across concurrent retrievals', async t =>
   await Promise.all(responses.map(r => r.arrayBuffer()))
   assert.equal(f.calls.filter(c => c.path === '/api/v1/auth/refresh').length, 1)
   assert.ok(f.calls.slice(2).every(c => c.authorization?.startsWith('Bearer ')))
+})
+
+test('knowledge images require current SSO and do not leak bytes, credentials or paths after revocation', async t => {
+  const options = { image: true }
+  const f = await fixture(t, options)
+  const handle = knowledgeImageHandler({ ...f.transport, requestTimeoutMs: 2000 }, ['kb-test'])
+  const request = (id = 'kb-test', ref = 'resource://Abcdef0000000000000000') => new Request(
+    'https://host/dsh/api/zhishu-knowledge/image?' + new URLSearchParams({ kb: id, ref, load: '1' }),
+    { headers: { 'X-Tenant-ID': '999', 'Authorization': 'Bearer untrusted' } })
+  assert.equal((await handle(request())).status, 401)
+  assert.equal(f.calls.length, 0)
+  await f.runtime.signIn({ access_token: 'platform-369' })
+  assert.equal((await handle(request('foreign'))).status, 403)
+  assert.equal((await handle(request('kb-test', '/mnt/other-user/private.png'))).status, 400)
+  assert.equal(f.calls.length, 1)
+  const success = await handle(request())
+  assert.equal(success.status, 200)
+  assert.equal(success.headers.get('content-type'), 'image/png')
+  assert.equal(success.headers.get('cache-control'), 'private, no-store')
+  assert.equal(success.headers.get('cross-origin-resource-policy'), 'same-origin')
+  assert.deepEqual(Buffer.from(await success.arrayBuffer()), Buffer.from('iVBORw0KGgo=', 'base64'))
+  assert.equal(JSON.parse(Buffer.from(f.calls.at(-1).authorization.split('.')[1], 'base64url')).sub, '369')
+  assert.equal(f.calls.at(-1).apiKey, undefined)
+  assert.equal(new URL(f.calls.at(-1).path, 'http://fixture').searchParams.get('file_path'), 'resource://Abcdef0000000000000000')
+  options.imageType = 'text/html'
+  assert.equal((await handle(request())).status, 415)
+  options.denied = 403
+  const revoked = await handle(request())
+  assert.equal(revoked.status, 403)
+  assert.equal(await revoked.text(), '')
 })
 
 test('a revoked refresh clears authentication and never calls retrieval', async t => {

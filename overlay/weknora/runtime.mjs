@@ -3,11 +3,13 @@ import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { createServer } from 'node:http'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
+import { QUERY_IMAGE_BYTES, validImageReference } from './media.mjs'
 
 const BODY_LIMIT = 70_000
 const TOOL_BODY_LIMIT = 1024 * 1024
+const SEARCH_BODY_LIMIT = 4 * Math.ceil(QUERY_IMAGE_BYTES / 3) + TOOL_BODY_LIMIT
 const routes = new Map([
-  ['GET', /^\/(?:knowledge-bases|knowledge-bases\/[^/]+\/knowledge|shared-knowledge-bases|knowledge\/search|knowledge\/[^/]+|chunks\/[^/]+|knowledgebase\/[^/]+\/wiki\/pages\/[^/]+(?:\/[^/]+)*)$/u],
+  ['GET', /^\/(?:knowledge-bases|knowledge-bases\/[^/]+\/(?:knowledge|files)|shared-knowledge-bases|knowledge\/search|knowledge\/[^/]+|chunks\/[^/]+|knowledgebase\/[^/]+\/wiki\/pages\/[^/]+(?:\/[^/]+)*)$/u],
   ['POST', /^\/(?:knowledge-search|wiki-search|sessions|knowledge-chat\/[^/]+|agent-chat\/[^/]+)$/u],
 ])
 
@@ -143,8 +145,15 @@ export function createKnowledgeRuntime({ baseUrl, platformUserID, tenantId, requ
       if (!url.pathname.startsWith('/api/v1/') || !routes.get(incoming.method)?.test(path)) {
         throw new KnowledgeAuthError('unsupported_knowledge_operation', 404)
       }
-      const body = incoming.method === 'POST' ? await bodyBytes(incoming, TOOL_BODY_LIMIT) : undefined
-      const token = await authorization(controller.signal)
+      const image = /^\/knowledge-bases\/([^/]+)\/files$/u.exec(path)
+      if (image && (url.searchParams.size !== 1 || !validImageReference(image[1], url.searchParams.get('file_path')))) {
+        throw new KnowledgeAuthError('invalid_knowledge_image', 400)
+      }
+      const bodyLimit = path === '/knowledge-search' ? SEARCH_BODY_LIMIT : TOOL_BODY_LIMIT
+      const body = incoming.method === 'POST' ? await bodyBytes(incoming, bodyLimit) : undefined
+      const signal = AbortSignal.any([lifetime.signal, authorizedLifetime.signal, controller.signal, AbortSignal.timeout(chatTimeoutMs)])
+      const token = await authorization(signal)
+      signal.throwIfAborted()
       const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json', accept: incoming.headers.accept || 'application/json' }
       const requestID = incoming.headers['x-request-id']
       if (typeof requestID === 'string' && /^harness\.[A-Za-z0-9._-]{1,240}$/u.test(requestID)) headers['X-Request-ID'] = requestID
@@ -153,10 +162,14 @@ export function createKnowledgeRuntime({ baseUrl, platformUserID, tenantId, requ
       try {
         response = await request(`${backend}${path}${url.search}`, {
           method: incoming.method, body, headers, redirect: 'manual',
-          signal: AbortSignal.any([lifetime.signal, controller.signal, AbortSignal.timeout(chatTimeoutMs)]),
+          signal,
         })
       } catch { throw new KnowledgeAuthError('knowledge_backend_unavailable', 502) }
-      if (response.status === 401 && credentials?.token === token) clear()
+      if (response.status === 401 && credentials?.token === token) {
+        await response.body?.cancel()
+        clear()
+        throw new KnowledgeAuthError('knowledge_login_required', 401)
+      }
       if (response.status >= 300 && response.status < 400) {
         await response.body?.cancel()
         throw new KnowledgeAuthError('unexpected_backend_redirect', 502)

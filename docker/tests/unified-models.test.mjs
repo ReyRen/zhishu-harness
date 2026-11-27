@@ -56,7 +56,8 @@ test('vision requests use retained attachment bytes and text-only models retain 
   let reads = 0
   const attachment = { attachmentId: 'image-1', name: 'diagram.png', mediaType: 'image/png', width: 2, height: 1, bytes: 3 }
   const attachments = { imageHostPath: () => undefined, async readImageRequest(ref, target) {
-    reads++; assert.equal(ref, attachment); assert.equal(target.maxBytes, 3)
+    reads++; assert.equal(ref, attachment)
+    assert.deepEqual(target, { width: 2, height: 1, maxImageBytes: 3, imageTargetBytes: 3 })
     return { width: 2, height: 1, mediaType: 'image/png', data: Uint8Array.of(1, 2, 3) }
   } }
   const options = { provider: UNIFIED_PROVIDER, model: '10004:qwen-chat', messages: [{ role: 'user', content: [{ type: 'image', attachment }] }] }

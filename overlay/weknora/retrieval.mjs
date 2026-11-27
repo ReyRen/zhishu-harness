@@ -4,6 +4,7 @@ import { ToolArgsError } from '@deepseek-ai/dsh-tools'
 import { WeknoraApiError } from '@wxg-prc-cpg/dsh-weknora'
 import { KnowledgeScopeError } from './selection.mjs'
 import { searchWiki, wikiSchema } from './wiki.mjs'
+import { passageImages, readQueryImage } from './media.mjs'
 
 const text = value => [{ type: 'text', text: value }]
 const clip = (value, limit) => typeof value === 'string' ? value.slice(0, limit) : ''
@@ -14,6 +15,10 @@ const retrievalSchema = { type: 'object', properties: {
   rerank_outcome: { type: 'string' }, candidate_count: { type: 'number' }, result_count: { type: 'number' },
   threshold: { type: 'number' }, effective_threshold: { type: 'number' }, top_score: { type: 'number' },
 }, required: ['status'], additionalProperties: false }
+const imageSchema = { type: 'array', items: { type: 'object', properties: {
+  url: { type: 'string' }, caption: { type: 'string' },
+}, required: ['url', 'caption'], additionalProperties: false } }
+const imageInstructions = 'When an image supports the answer, copy its supplied URL into Markdown image syntax with a short caption. '
 
 function queryOf(args) {
   if (typeof args?.query !== 'string' || !args.query.trim()) {
@@ -79,15 +84,17 @@ export function knowledgeTool(definition, config) {
         query: { type: 'string', description: 'A specific question or a Wiki topic name.' },
       } },
       output: { ...definition.output,
-        schema: { ...definition.output.schema, properties: { ...definition.output.schema.properties, retrieval: retrievalSchema, wiki: wikiSchema },
+        schema: { ...definition.output.schema, properties: { ...definition.output.schema.properties,
+          retrieval: retrievalSchema, wiki: wikiSchema, images: imageSchema },
           required: [...definition.output.schema.required, 'retrieval'] },
         render(args, value) {
+          const images = value.images?.length ? text(imageInstructions + JSON.stringify(value.images)) : []
           if (value.wiki) {
             const passages = value.count ? definition.output.render(args, value)
               : value.retrieval.reason === 'wiki_only' ? [] : text('Document retrieval: ' + JSON.stringify(value.retrieval))
-            return [...passages, ...text('Wiki search results: ' + JSON.stringify(value.wiki))]
+            return [...passages, ...text('Wiki search results: ' + JSON.stringify(value.wiki)), ...images]
           }
-          if (value.count) return definition.output.render(args, value)
+          if (value.count) return [...definition.output.render(args, value), ...images]
           return text(`No matching passages for ${JSON.stringify(value.query)}. Retrieval: ${JSON.stringify(value.retrieval)}. `
             + 'This is not an empty-library result. Inspect overview or search with a specific document topic; keep the selected scope.')
         },
@@ -127,7 +134,9 @@ export async function executeKnowledgeTool(definition, client, args, context, co
   const result = await definition.execute({ ...args, query }, context)
   const maxResults = Number.isSafeInteger(args.max_results) && args.max_results > 0 ? args.max_results : config.maxResults
   const wiki = args.knowledge_ids?.length ? undefined : await searchWiki(client, config, query, context.signal, maxResults)
-  return { ...result, retrieval: client.searchDiagnostics, ...wiki && { wiki } }
+  const images = passageImages(client.searchHits, client.documentBaseIds,
+    Math.min(maxResults, config.maxResults), config.maxChunkChars)
+  return { ...result, retrieval: client.searchDiagnostics, ...wiki && { wiki }, ...images.length > 0 && { images } }
 }
 
 /**
@@ -168,6 +177,24 @@ function reportFailure(error) {
   throw error
 }
 
+async function searchAttachedImage(ctx, client, attachment, signal) {
+  if (!client.imageBaseIds.length) return { hits: [], diagnostics: { status: 'not_searched', reason: 'image_index_unavailable' } }
+  try {
+    const queryImage = await readQueryImage(ctx.get('attachments'), attachment, signal)
+    if (!queryImage) return { hits: [], diagnostics: { status: 'not_searched', reason: 'image_unavailable' } }
+    return await client.searchResult({ query: '', queryImage, knowledgeBaseIds: client.imageBaseIds, knowledgeIds: [] }, signal)
+  } catch (error) {
+    signal.throwIfAborted()
+    const reason = error instanceof WeknoraApiError && error.status === 400 ? 'image_query_rejected' : reportFailure(error)
+    return { hits: [], diagnostics: { status: 'failed', reason } }
+  }
+}
+
+function evidencePassage(hit, config) {
+  return { knowledge_id: hit.knowledge_id, document: clip(hit.knowledge_title || hit.knowledge_filename, config.maxChunkChars),
+    content: clip(hit.content, config.maxChunkChars), chunk_index: hit.chunk_index }
+}
+
 /**
  * Prefetch accepted human questions into natively logged model context.
  * @param ctx Plugin context that owns registrations and their disposal.
@@ -187,6 +214,8 @@ export function installKnowledgeContext(ctx, selection, config, run) {
       return 'The user selected knowledge bases for this conversation. Ground answers in the supplied retrieval and selected documents. '
         + 'For summaries inspect the document overview, page through omitted documents and use read_document for their contents. '
         + 'Cite document titles. Do not substitute memory, conversation logs or local files for these bases. '
+        + (current.images?.length ? imageInstructions : '')
+        + (current.image_retrieval ? 'Distinguish attachment-based retrieval from text and Wiki matches. Report when the image index was unavailable or image search failed. ' : '')
         + (current.wiki ? 'Cite Wiki pages that directly support the answer. Use ' + config.toolPrefix + '_wiki_read_page for page text and sources. '
           + 'Wiki pages can exist without source documents. Use both kinds of evidence when returned. '
           : 'No matching passages or rerank filtering does not mean an empty base. Only catalog total_documents=0 establishes emptiness. ')
@@ -200,9 +229,10 @@ export function installKnowledgeContext(ctx, selection, config, run) {
     if (decision.kind === 'reject') return decision
     const ids = selection.selectionOf(agent)
     if (!ids.length) { snapshots.delete(agent); return decision }
-    const question = decision.messages.filter(message => message.source.kind === 'user')
-      .flatMap(message => message.content).filter(part => part.type === 'text').map(part => part.text).join('\n').trim()
-    if (!question) return decision
+    const content = decision.messages.filter(message => message.source.kind === 'user').flatMap(message => message.content)
+    const question = content.filter(part => part.type === 'text').map(part => part.text).join('\n').trim()
+    const attachment = content.find(part => part.type === 'image')?.attachment
+    if (!question && !attachment) return decision
     const requestSignal = AbortSignal.any([signal, lifetime.signal])
     snapshots.delete(agent)
     let value
@@ -210,16 +240,21 @@ export function installKnowledgeContext(ctx, selection, config, run) {
       value = await run({ agent, signal: requestSignal, callId: `knowledge-prefetch-${turn}-${step}` }, async (client, retrievalSignal) => {
         const query = question.slice(0, config.maxChunkChars)
         const overview = await knowledgeOverview(client, config, {}, retrievalSignal)
-        const search = client.documentBaseIds.length && overview.total_documents === 0
+        const search = !query
+          ? { hits: [], diagnostics: { status: 'not_searched', reason: 'no_text_query' } }
+          : client.documentBaseIds.length && overview.total_documents === 0
           ? { hits: [], diagnostics: { status: 'not_searched', reason: 'empty_catalog' } }
           : await client.searchResult({ query, knowledgeBaseIds: ids, knowledgeIds: [] }, retrievalSignal)
-        const wiki = await searchWiki(client, config, query, retrievalSignal)
+        const wiki = query ? await searchWiki(client, config, query, retrievalSignal) : undefined
+        const image = attachment ? await searchAttachedImage(ctx, client, attachment, retrievalSignal) : undefined
+        const imageHits = image?.hits.slice(0, config.maxResults) ?? []
+        const textHits = search.hits.slice(0, config.maxResults)
+        const images = passageImages([...imageHits, ...textHits], ids, config.maxResults, config.maxChunkChars)
         return { status: 'retrieved', query, query_truncated: query.length !== question.length, overview,
           ...wiki && { wiki },
-          retrieval: search.diagnostics, passages: search.hits.slice(0, config.maxResults).map(hit => ({
-            knowledge_id: hit.knowledge_id, document: clip(hit.knowledge_title || hit.knowledge_filename, config.maxChunkChars),
-            content: clip(hit.content, config.maxChunkChars), chunk_index: hit.chunk_index,
-          })) }
+          retrieval: search.diagnostics, passages: textHits.map(hit => evidencePassage(hit, config)),
+          ...image && { image_retrieval: { ...image.diagnostics, passages: imageHits.map(hit => evidencePassage(hit, config)) } },
+          ...images.length > 0 && { images } }
       })
     } catch (error) {
       requestSignal.throwIfAborted()

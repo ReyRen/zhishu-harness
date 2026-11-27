@@ -4,6 +4,9 @@ import { createServer } from 'node:http'
 import { test } from 'node:test'
 import { apply } from '../../overlay/weknora/index.mjs'
 
+const resource = 'resource://Abcdef0000000000000000'
+const imageURL = './api/zhishu-knowledge/image?kb=own&ref=resource%3A%2F%2FAbcdef0000000000000000'
+
 async function fixture(t, options = {}) {
   const state = { revoked: false, filtered: false, broken: false, beforeDocuments: undefined }
   const calls = [], tools = new Map(), cleanups = []
@@ -16,7 +19,9 @@ async function fixture(t, options = {}) {
       const body = raw ? JSON.parse(raw) : undefined
       calls.push({ path: url.pathname, body, query: Object.fromEntries(url.searchParams) })
       const send = (status, data) => { response.writeHead(status, { 'content-type': 'application/json' }); response.end(JSON.stringify(data)) }
-      if (url.pathname === '/api/v1/knowledge-bases') return send(200, { data: [{ id: 'own', name: 'Owned' }] })
+      if (url.pathname === '/api/v1/knowledge-bases') return send(200, { data: [{ id: 'own', name: 'Owned',
+        ...(options.image ? { capabilities: { vector: true }, image_processing_config: { image_vector_enabled: true } } : {}),
+      }] })
       if (url.pathname === '/api/v1/shared-knowledge-bases') return send(200, { data: state.revoked ? [] : [{ knowledge_base: {
         id: 'shared', name: 'Shared', ...(options.wiki ? { capabilities: { wiki: true, vector: false, keyword: false } } : {}),
       } }] })
@@ -39,12 +44,20 @@ async function fixture(t, options = {}) {
       }
       if (options.wiki && url.pathname === '/api/v1/knowledgebase/shared/wiki/pages/concept/cedar') {
         return send(200, { id: 'wiki-cedar', knowledge_base_id: 'shared', slug: 'concept/cedar', title: 'Cedar policy',
-          content: 'Cedar records are retained for 47 days.', source_refs: ['cedar-source|Policy notes'] })
+          content: options.image ? `![Chart](${resource})` : 'Cedar records are retained for 47 days.',
+          source_refs: ['cedar-source|Policy notes'] })
       }
-      if (url.pathname === '/api/v1/knowledge-search') return send(200, { data: state.filtered ? [] : [{
-        knowledge_id: 'own-doc-0', knowledge_title: 'Backup policy', content: 'Backups last 30 days.', chunk_index: 0,
-      }], meta: { rerank: { outcome: state.filtered ? 'all_below_threshold' : 'selected', candidate_count: 13,
-        result_count: state.filtered ? 0 : 1, top_score: state.filtered ? 0.09 : 0.95, effective_threshold: 0.2 } } })
+      if (url.pathname === '/api/v1/knowledge-search') {
+        if (body.query_image && options.rejectImage) return send(400, { error: 'embedding model cannot embed images' })
+        return send(200, { data: state.filtered ? [] : [{
+          knowledge_id: 'own-doc-0', knowledge_base_id: 'own', knowledge_title: 'Backup policy',
+          content: body.query_image ? 'The matching chart.' : 'Backups last 30 days.', chunk_index: 0,
+          ...(options.image ? { image_info: JSON.stringify([{ url: resource, caption: 'Backup chart' },
+            { url: 'https://external.test/image.png' }]),
+          matched_images: [{ url: resource, knowledge_base_id: 'own' }] } : {}),
+        }], meta: { rerank: { outcome: state.filtered ? 'all_below_threshold' : 'selected', candidate_count: 13,
+          result_count: state.filtered ? 0 : 1, top_score: state.filtered ? 0.09 : 0.95, effective_threshold: 0.2 } } })
+      }
       return send(404, { error: 'fixture route not found' })
     })().catch(error => response.destroy(error))
   })
@@ -67,11 +80,16 @@ async function fixture(t, options = {}) {
       onChanged(listener) { notify = listener; return () => {} },
     },
     connection: { fetch: { register() { return () => {} } } },
+    get(name) { return name === 'attachments' ? { readImageRequest: async () => ({
+      data: Buffer.from('normalized-fixture-image'), mediaType: 'image/png',
+    }) } : undefined },
   }, { baseUrl: `http://127.0.0.1:${backend.address().port}/api/v1`, apiKey: 'retrieval-fixture', maxResults: 2, maxChunkChars: 64 })
   const context = () => provider.text({ agent })
   const snapshot = () => JSON.parse(context().split('\n').at(-1))
-  const prepare = (question, signal = AbortSignal.timeout(5000)) => preStep({ agent, turn: 1, step: 1, signal },
-    async () => ({ kind: 'enter', messages: [{ source: { kind: 'user' }, content: [{ type: 'text', text: question }] }] }))
+  const prepare = (question, signal = AbortSignal.timeout(5000), image = false) => preStep({ agent, turn: 1, step: 1, signal },
+    async () => ({ kind: 'enter', messages: [{ source: { kind: 'user' }, content: [{ type: 'text', text: question },
+      ...(image ? [{ type: 'image', attachment: { width: 4, height: 4 } }] : []),
+    ] }] }))
   const execute = (name, args) => tools.get('weknora_' + name).execute(args, { agent, callId: 'call', signal: AbortSignal.timeout(5000) })
   return { state, calls, session, context, snapshot, prepare, execute, tools,
     unload: () => { for (const cleanup of [...cleanups].reverse()) cleanup() },
@@ -209,4 +227,38 @@ test('unloading automatic retrieval aborts pending discovery before it can publi
   } finally { release.resolve(); await Promise.allSettled([pending]) }
   assert.equal(f.snapshot().status, 'not_retrieved')
   assert.equal(f.calls.some(row => row.path.endsWith('/knowledge-search')), false)
+})
+
+test('an attached image searches only opted-in selected indexes and supplies private image citations', async t => {
+  const f = await fixture(t, { ids: ['own', 'shared'], image: true })
+  await f.prepare('Find this chart', undefined, true)
+  const searches = f.calls.filter(row => row.path.endsWith('/knowledge-search')).map(row => row.body)
+  assert.deepEqual(searches[0].knowledge_base_ids, ['own', 'shared'])
+  assert.equal(searches[0].query_image, undefined)
+  assert.deepEqual(searches[1].knowledge_base_ids, ['own'])
+  assert.equal(searches[1].disable_keywords_match, true)
+  assert.equal(Buffer.from(searches[1].query_image, 'base64').toString(), 'normalized-fixture-image')
+  assert.deepEqual(f.snapshot().images, [{ url: imageURL, caption: 'Backup chart' }])
+  assert.equal(f.snapshot().image_retrieval.passages[0].content, 'The matching chart.')
+  assert.ok(!f.context().includes(searches[1].query_image))
+  const result = await f.execute('search', { query: 'chart' })
+  assert.deepEqual(result.images, f.snapshot().images)
+})
+
+test('image-only questions make no text request and report unavailable or rejected image indexes', async t => {
+  const f = await fixture(t, { ids: ['own', 'shared'], image: true, rejectImage: true })
+  await f.prepare('', undefined, true)
+  assert.equal(f.snapshot().retrieval.reason, 'no_text_query')
+  assert.equal(f.snapshot().image_retrieval.reason, 'image_query_rejected')
+  f.session.choice = ['shared']
+  const before = f.calls.length
+  await f.prepare('', undefined, true)
+  assert.equal(f.snapshot().image_retrieval.reason, 'image_index_unavailable')
+  assert.equal(f.calls.slice(before).some(row => row.path.endsWith('/knowledge-search')), false)
+})
+
+test('Wiki image destinations retain their caption and resolve through the current application', async t => {
+  const f = await fixture(t, { ids: ['shared'], wiki: true, image: true })
+  const page = await f.execute('wiki_read_page', { knowledge_base_id: 'shared', slug: 'concept/cedar' })
+  assert.equal(page.content, `![Chart](${imageURL.replace('kb=own', 'kb=shared')})`)
 })
