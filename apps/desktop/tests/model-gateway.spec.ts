@@ -109,9 +109,9 @@ describe('model gateway server', () => {
     expect(parsed.harness.target).toContain('127.0.0.1')
     const harnessOrigin = `http://127.0.0.1:${String(MODEL_HARNESS_PORT)}`
     const frame = await fetch(`${harnessOrigin}/weknora/sso/platform`)
-    expect((await frame.json()).url).toBe('/knowledge-proxy/sso/platform')
+    expect(await frame.json()).toMatchObject({ url: '/knowledge-proxy/sso/platform' })
     const rest = await fetch(`${harnessOrigin}/api/health`)
-    expect((await rest.json()).url).toBe('/api/health')
+    expect(await rest.json()).toMatchObject({ url: '/api/health' })
   })
 
   it('keeps Upgrade and Connection on the harness WebSocket handshake', async () => {
