@@ -129,7 +129,7 @@ IMAGE_ID="$(docker image inspect --format '{{.Id}}' "$IMAGE")"
 printf '%s %s\n' "$IMAGE" "$IMAGE_ID"
 ```
 
-The image includes native Web, bundled primary runtime and seven Office skills. Debian mirror build arguments are available for network issues; temporary build-host workarounds must not become permanent dependencies.
+The image includes native Web, bundled primary runtime and the unified Office skill. Debian mirror build arguments are available for network issues; temporary build-host workarounds must not become permanent dependencies.
 
 Install `docker/security/install.sh` on each target Worker before using the image. It installs a named AppArmor policy and scoped seccomp file, not a global Docker configuration change. It refuses to overwrite different policy contents: policy changes require review and a new profile name before rolling containers.
 

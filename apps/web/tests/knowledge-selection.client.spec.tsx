@@ -113,7 +113,7 @@ it.each(['https://front.test:3002/', 'https://another-site.test:8443/harness/'])
   async (pageURL) => {
     fixture(pageURL)
     const frame = await screen.findByTitle('知识库')
-    await waitFor(() => expect(frame.getAttribute('src')).toBe('/weknora/sso/platform'))
+    await waitFor(() => { expect(frame.getAttribute('src')).toBe('/weknora/sso/platform') })
     const source = new URL(frame.getAttribute('src')!, pageURL)
     expect(source.origin).toBe(new URL(pageURL).origin)
   },

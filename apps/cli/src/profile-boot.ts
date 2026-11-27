@@ -14,14 +14,12 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, st
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { FiberState, type Context } from '@deepseek-ai/cordis'
-import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import {
   boot,
   readProfilePatches,
   createRuntimeResolution,
   initProfile,
   installFailLoud,
-  loadOverlayPatches,
   loadProfile,
   reportSkippedBundles,
   PluginPackages,
@@ -207,8 +205,8 @@ interface ComposedProfile {
   installAnchor: string
   /** Immutable runtime resolution computed before any plugin imports. */
   resolution: RuntimeResolution
-  /** Command-line overlay contents, frozen for this invocation. */
-  overlays: PatchOptions[]
+  /** Absolute command-line overlay files, in argv order. */
+  overlayPaths: string[]
 }
 
 /** Profile booted by the desktop shell. Container web keeps the name `web`. */
@@ -293,8 +291,7 @@ async function composeProfile(
     : fileURLToPath(new URL('../../desktop-host/package.json', import.meta.url)))
   const resolutionOptions = { installAnchor, profile }
   const resolution = await createRuntimeResolution(resolutionOptions)
-  const overlays = [...platformPatches, ...patchFiles].flatMap(file => loadOverlayPatches(NAME, resolve(file)))
-  return { profile, installAnchor, resolution, overlays }
+  return { profile, installAnchor, resolution, overlayPaths: [...platformPatches, ...patchFiles].map(file => resolve(file)) }
 }
 
 /** An application-owned profile and its independent installation fallback. */
@@ -393,7 +390,7 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
       installAnchor: composed.installAnchor,
       startedBundles: composed.profile.layers.map(layer => layer.packageName),
       cwd: process.cwd(), home: resolveDshHome(),
-      overlays: composed.overlays, telemetryDisabledEnv: process.env.DSH_TELEMETRY_DISABLED,
+      overlayPaths: composed.overlayPaths, telemetryDisabledEnv: process.env.DSH_TELEMETRY_DISABLED,
     }
     const ctx = await boot(NAME, rootConfig, readProfilePatches(NAME, profileContext, composed.profile), async (hostCtx) => {
       app.current = hostCtx

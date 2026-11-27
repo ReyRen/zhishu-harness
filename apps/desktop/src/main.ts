@@ -43,7 +43,7 @@ import { desktopUpdateChannel, desktopUpdateVerifiesCodeSignature } from './upda
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
 import { prepareDesktopUpdateWindow } from './update-window.ts'
 import { DesktopCommandManager } from './command-management.ts'
-import { serveWebDocument, authenticateWebHost, forwardWebRequest, removeLegacyHostCookies } from './web-document.ts'
+import { serveWebDocument, forwardWebRequest, removeLegacyHostCookies } from './web-document.ts'
 import { DesktopFatalRecovery } from './fatal-recovery.ts'
 import { pruneCrashReports, RendererConsoleTail, writeCrashReport, type CrashReportSource } from './crash-report.ts'
 import { OperationJournal } from './operation-journal.ts'
@@ -567,7 +567,7 @@ async function main(): Promise<void> {
     return {
       start: async () => {
         const ready = await host.start()
-        const cookie = await authenticateWebHost(ready.url)
+        const cookie = ready.authenticationCookie
         hostCookie = cookie
         hostUrl = ready.url
         void removeLegacyHostCookies(session.defaultSession.cookies, ready.url)
@@ -595,7 +595,7 @@ async function main(): Promise<void> {
         }, () => {
           // The stream reconnects; a transport failure does not change account state.
         }, () => {
-          modelGate?.presentLogin()
+          if (!quitting) modelGate?.presentLogin()
         }, (enabled) => { analyticsEnabled = enabled })
       },
       stop: async () => {
@@ -1213,6 +1213,9 @@ async function main(): Promise<void> {
         click: () => { void showAbout().catch((error: unknown) => { console.error(error) }) } }
       : { label: currentDesktopLocale().messages.aboutMenu, role: 'about' },
     { type: 'separator' },
+    shortcuts.settingsMenuItem(currentDesktopLocale().messages.settingsMenu,
+      enteredWorkspace && !isMandatory(), () => { focusPrimaryWindow() }),
+    { type: 'separator' },
     { label: currentDesktopLocale().messages.checkUpdatesMenu, click: () => { void openUpdatePrompt(true) } },
     ...process.platform === 'darwin' || process.platform === 'win32'
       ? [{ label: currentDesktopLocale().messages.cliCommandMenu, click: () => { void commandManager.show() } }] : [],
@@ -1387,7 +1390,9 @@ async function main(): Promise<void> {
     if (process.platform === 'win32') window.setBackgroundColor(chromeFallbackFill())
     if (activate) window.show()
     else window.showInactive()
+    const wasInWorkspace = enteredWorkspace
     enteredWorkspace = true
+    if (!wasInWorkspace) refreshApplicationMenu()
     if (welcomeWindow !== undefined) {
       welcomeWindow.close()
       window.webContents.send(DESKTOP_IPC.enterWorkspace)
@@ -1413,7 +1418,12 @@ async function main(): Promise<void> {
     refreshApplicationMenu()
     const window = mainWindow ?? createMainWindow()
     if (!development) await startPackagedModelSite(process.resourcesPath, hostEnvironment.WEKNORA_BASE_URL)
-    modelGate ??= new ModelPlatformGate(modelPreload, () => enterWorkspace())
+    if (process.platform === 'win32') window.setBackgroundColor(chromeFallbackFill())
+    modelGate ??= new ModelPlatformGate(modelPreload, () => enterWorkspace(), () => {
+      if (!enteredWorkspace) return
+      enteredWorkspace = false
+      refreshApplicationMenu()
+    })
     modelGate.attach(window)
     // Model login is the gate. A valid platform cookie continues into the model
     // site, which then opens the Harness workspace. DeepSeek welcome stays unused.
@@ -1527,7 +1537,10 @@ async function main(): Promise<void> {
       }
       mandatoryUI?.sync()
       if (state.blocking && !wasBlocking) void updateSchedule.check(false, true).catch((error: unknown) => { console.error(error) })
-      wasBlocking = state.blocking
+      if (state.blocking !== wasBlocking) {
+        wasBlocking = state.blocking
+        refreshApplicationMenu()
+      }
     }, policyAuth?.request, () => desktopClientMetadata(locale.id))
     const policy = mandatoryPolicy
     mandatoryUI = new DesktopMandatoryUpdateWindow({

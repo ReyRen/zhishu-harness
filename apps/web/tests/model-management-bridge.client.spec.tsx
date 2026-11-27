@@ -15,8 +15,9 @@ it('opens settings without a Desktop launcher only for the trusted knowledge fra
   let modelsChanged: (() => void) | undefined
   let KnowledgePanel: React.ComponentType<Record<string, unknown>> = () => null
   let panelProps: Record<string, unknown> = {}
+  const location = new URL('https://harness.test:3002/')
   const carrier = {
-    parent: {}, top: {}, setTimeout, clearTimeout,
+    parent: {}, top: {}, location, setTimeout, clearTimeout,
     addEventListener: window.addEventListener.bind(window), removeEventListener: window.removeEventListener.bind(window),
     dispatchEvent: window.dispatchEvent.bind(window), setInterval() { return 1 }, clearInterval() {},
     __ModuleLoader__: { load(entry: { factory(require: (name: string) => unknown): { apply: (ctx: object) => void } }) {
@@ -25,7 +26,7 @@ it('opens settings without a Desktop launcher only for the trusted knowledge fra
   }
   const load = async (path: string) => {
     runInNewContext(await readFile(resolve(import.meta.dirname, '../../../overlay', path), 'utf8'), {
-      window: carrier, document, location: window.location, Event: window.Event, URL,
+      window: carrier, document, location, Event: window.Event, URL,
       console, AbortController, AbortSignal, fetch: async () => Response.json({ mode: 'api-key', authenticated: true }),
     })
   }
@@ -51,19 +52,21 @@ it('opens settings without a Desktop launcher only for the trusted knowledge fra
     const page = render(<KnowledgePanel {...panelProps} />)
     await waitFor(() => { expect(page.container.querySelector('iframe')).not.toBeNull() })
     const frame = page.container.querySelector('iframe')!
+    const frameWindow = frame.contentWindow!
+    expect(frame.getAttribute('src')).toBe('/weknora/sso/platform')
     const request = (origin: string, source: Window | null) => {
       window.dispatchEvent(new MessageEvent('message', { origin, source, data: { type: 'weknora:open-model-settings' } }))
     }
-    act(() => { request('http://172.18.36.230:5175', window); request('https://evil.test', frame.contentWindow) })
+    act(() => { request(location.origin, window); request('https://other.test', frameWindow) })
     expect(navigate).not.toHaveBeenCalled()
-    act(() => { request('http://172.18.36.230:5175', frame.contentWindow) })
+    act(() => { request(location.origin, frameWindow) })
     expect(navigate).toHaveBeenCalledExactlyOnceWith('settings/open', 'models')
-    const post = vi.spyOn(frame.contentWindow!, 'postMessage')
+    const post = vi.spyOn(frameWindow, 'postMessage')
     act(() => { modelsChanged?.() })
-    expect(post).toHaveBeenCalledWith({ type: 'weknora:models-updated' }, 'http://172.18.36.230:5175')
+    expect(post).toHaveBeenCalledWith({ type: 'weknora:models-updated' }, location.origin)
     page.unmount()
     expect(modelsChanged).toBeUndefined()
-    act(() => { request('http://172.18.36.230:5175', frame.contentWindow) })
+    act(() => { request(location.origin, frameWindow) })
     expect(navigate).toHaveBeenCalledTimes(1)
   } finally {
     cleanup()
