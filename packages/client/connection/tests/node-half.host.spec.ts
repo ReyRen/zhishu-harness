@@ -22,6 +22,7 @@ import {
   type PeerScope,
 } from '../src/index.ts'
 import { DEFAULT_MAX_REQUEST_BODY_BYTES } from '../src/http-bridge.ts'
+import type { HostConnectionService } from '../src/rpc-host.ts'
 import { provideBrowserCredentials } from './browser-credentials.ts'
 import * as Token from '@deepseek-ai/dsh-host-authentication-token'
 import { BrowserAuth } from '@deepseek-ai/dsh-host-authentication-token/src/browser-auth.ts'
@@ -696,6 +697,27 @@ describe('connection node half', () => {
     await Promise.all([connection.browserPeer.dispose(), connection.browserPeer.dispose()])
     await remove()
     await dispose()
+  })
+
+  it('admits published bundle requests from a fiber that injects only Connection', async () => {
+    const { ctx, dispose } = await mounted({ trustedHosts: ['harness.example'] })
+    try {
+      const host = 'harness.example'
+      const cookie = await browserCookie(ctx, host)
+      const requests = [fakeRequest({ host, cookie }), fakeRequest({ host }), fakeRequest({ host: 'other.example', cookie })]
+      const statuses: Array<number | undefined> = []
+      const bundle = ctx.plugin({
+        inject: ['connection'],
+        apply(bundleCtx: Context) {
+          const requestRejection = (bundleCtx.connection as HostConnectionService).requestRejection
+          statuses.push(...requests.map(requestRejection))
+        },
+      })
+      await bundle.await()
+      expect(statuses).toEqual([undefined, 401, 403])
+    } finally {
+      await dispose()
+    }
   })
 
   it('applies the configured trust fence and JSON envelope checks to generic channels', async () => {

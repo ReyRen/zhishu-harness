@@ -121,11 +121,11 @@ export class HostConnectionService extends Service implements HostConnectionHand
   }
 
   /**
-   * Preserve route admission for the immutable Visual Workflow packages in the platform registry.
+   * Admit requests from published platform bundles through the Host's credential scope.
    * @param request - original request from the Workflow route.
    * @returns the current Connection's rejection status, or undefined for an admitted request.
    */
-  requestRejection(request: ConnectionTrustRequest): 401 | 403 | 503 | undefined {
+  readonly requestRejection = (request: ConnectionTrustRequest): 401 | 403 | 503 | undefined => {
     const admission = this.admit(request)
     return 'rejection' in admission ? admission.rejection : undefined
   }
