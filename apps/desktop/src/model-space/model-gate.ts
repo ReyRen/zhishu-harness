@@ -101,8 +101,9 @@ export class ModelPlatformGate {
   /**
    * @param preload - sandboxed preload for the model view.
    * @param onAuthenticated - opens the Harness workspace after platform login.
+   * @param onSignedOut - revokes workspace actions when the platform session ends.
    */
-  constructor(private readonly preload: string, onAuthenticated: () => Promise<void>) {
+  constructor(private readonly preload: string, onAuthenticated: () => Promise<void>, private readonly onSignedOut: () => void) {
     this.onAuthenticated = onAuthenticated
     ipcMain.removeHandler(MODEL_SPACE_IPC.state)
     ipcMain.removeHandler(MODEL_SPACE_IPC.switch)
@@ -321,7 +322,7 @@ export class ModelPlatformGate {
     const view = this.view
     const window = this.window
     if (view === undefined || window === undefined || window.isDestroyed()) return
-    this.authenticated = false
+    this.signOut()
     this.show('business')
     window.show()
     void view.webContents.loadURL(`${this.origin}/login`)
@@ -551,21 +552,25 @@ export class ModelPlatformGate {
       void this.onAuthenticated()
       return
     }
-    const entered = this.authenticated
-    this.authenticated = false
-    if (entered) {
-      this.account = null
-      this.publishAccount()
-    }
+    const entered = this.signOut()
     // Repeated observations of the same login page must not republish the caption.
     if (entered || this.active !== 'business') this.show('business')
     if (decision === 'signed-out' && entered && !window.isDestroyed() && window.isVisible()) window.show()
   }
 
+  private signOut(): boolean {
+    if (!this.authenticated) return false
+    this.authenticated = false
+    this.account = null
+    this.publishAccount()
+    this.onSignedOut()
+    return true
+  }
+
   /** Ask the platform who is logged in, then tell the conversation page. */
   private async loadAccount(): Promise<void> {
     const account = await this.fetchAccount()
-    if (account === undefined) return
+    if (account === undefined || !this.authenticated) return
     this.account = account
     this.publishAccount()
   }

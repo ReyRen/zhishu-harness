@@ -8,6 +8,8 @@
  */
 import type {} from '@deepseek-ai/dsh-client-product-analytics/client'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { SyncedConfig } from '@deepseek-ai/dsh-client-config/types'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 // Type-only: pulls the shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
@@ -28,7 +30,7 @@ import { createModelsOperations } from './operations.ts'
 import { createSettingsSchemaOperations } from './schema-operations.ts'
 import { en, ja, es, fr, de, ru, pt, zh, type ModelsKey } from './locales.ts'
 import { WELCOME_NOTICE_SETTINGS_NAMESPACE } from '../onboarding-copy.ts'
-import { Config, ONBOARDING_CONFIG_GLOBAL } from '../onboarding-config.ts'
+import type { ModelsConfig } from '../types.ts'
 import { PlatformModelsSection, type PlatformModelsInjected } from './PlatformModelsSection.tsx'
 import { PlatformModelsApi } from './platform-models-api.ts'
 import { createPlatformModelBrowser, PlatformModelsAuthentication } from './platform-models-auth.ts'
@@ -50,6 +52,9 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 /** Dictionary namespace owned by this plugin. */
 const NS = 'settings.models'
+
+/** Credential-onboarding choice while the Host sends none; the Host schema default. */
+const ABSENT_CREDENTIAL_ONBOARDING = true
 
 export type {
   ModelsSettingsState, ProviderDirectoryEntry, ProviderRow,
@@ -81,12 +86,16 @@ export const inject = [
  * the ledger, wire its store to the connection, and keep it fresh on every
  * pushed invalidation (settings, credentials, or provider topology).
  * @param ctx - client root context.
+ * @param config - Host-synced credential-onboarding choice, followed live until the official-DeepSeek step mounts.
  */
-export function apply(ctx: ClientContext): void {
-  const page = globalThis as Partial<Record<typeof ONBOARDING_CONFIG_GLOBAL, unknown>>
-  const payload = page[ONBOARDING_CONFIG_GLOBAL]
-  const configured = Config(payload === undefined ? {} : payload)
-  const credentialOnboarding = configured.credentialOnboarding && !('dshDesktop' in globalThis)
+export function apply(ctx: ClientContext, config: SyncedConfig<ModelsConfig>): void {
+  const nativeShell = 'dshDesktop' in globalThis
+  const platformModelManagement = config.platformModelManagement.get() ?? false
+  // Whether the official-DeepSeek step opens on its own; the native shell owns its own onboarding.
+  const automatic: ObservableSnapshot<boolean> = {
+    getSnapshot: () => !nativeShell && (config.credentialOnboarding.get() ?? ABSENT_CREDENTIAL_ONBOARDING),
+    subscribe: listener => config.credentialOnboarding.subscribe(listener),
+  }
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-settings-models: copy dictionaries')
 
   const schema = createSettingsSchemaOperations(ctx.settingsSchema)
@@ -105,10 +114,9 @@ export function apply(ctx: ClientContext): void {
     t,
   })
   const deepSeekOnboardingInjected = (): DeepSeekOnboardingInjected => ({
-    automatic: credentialOnboarding,
     track: (name, attributes) => ctx.get('productAnalytics')?.track(name, attributes),
     controller,
-    hooks: { models: controller.store },
+    hooks: { models: controller.store, automatic },
     operations,
     schema,
     t,
@@ -140,7 +148,7 @@ export function apply(ctx: ClientContext): void {
     }
   }, 'ui-settings-models: pushed invalidations')
 
-  if (!configured.platformModelManagement) ctx.slots.inject('settings.section', () => ctx.slots.register({
+  if (!platformModelManagement) ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: 'models',
     order: 10,
@@ -151,10 +159,10 @@ export function apply(ctx: ClientContext): void {
       'settings.models.footer': { kind: 'list', scope: 'root' },
     },
   }, ModelsSection))
-  if (configured.platformModelManagement) {
+  if (platformModelManagement) {
     const namespace = 'settings.models.platform'
     ctx.effect(() => ctx.locale.register(namespace, { en: platformModelsEn, zh: platformModelsZh }), 'ui-settings-models: native copy')
-    const auth = new PlatformModelsAuthentication(createPlatformModelBrowser(configured.platformModelTicketTimeoutMs))
+    const auth = new PlatformModelsAuthentication(createPlatformModelBrowser(config.platformModelTicketTimeoutMs.get() ?? 30_000))
     const native = new PlatformModelsStore(new PlatformModelsApi(), auth)
     const nativeText = ctx.locale.bind(namespace) as PlatformModelsInjected['t']
     ctx.effect(() => {
@@ -172,7 +180,7 @@ export function apply(ctx: ClientContext): void {
       inject: (): PlatformModelsInjected => ({ controller: native, hooks: { snapshot: native.store }, t: nativeText }),
     }, PlatformModelsSection))
   }
-  if (!('dshDesktop' in globalThis)) ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
+  if (!nativeShell) ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
     name: 'settings.onboarding',
     id: 'welcome-notice',
     order: -100,

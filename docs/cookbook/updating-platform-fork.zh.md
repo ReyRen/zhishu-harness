@@ -129,7 +129,7 @@ IMAGE_ID="$(docker image inspect --format '{{.Id}}' "$IMAGE")"
 printf '%s %s\n' "$IMAGE" "$IMAGE_ID"
 ```
 
-镜像包含原生 Web、打包的 primary runtime 和七项 Office skills。网络异常可用 Debian 镜像源构建参数，临时构建中转不能成为长期依赖。
+镜像包含原生 Web、打包的 primary runtime 和统一的 Office skill。网络异常可用 Debian 镜像源构建参数，临时构建中转不能成为长期依赖。
 
 使用镜像前在每个 Worker 安装 `docker/security/install.sh`，它安装独立命名 AppArmor 策略和限定 seccomp 文件，不改 Docker 全局配置。不同内容不能直接覆盖现有策略：策略变更须审查并使用新 profile 名称，再逐用户更新。
 

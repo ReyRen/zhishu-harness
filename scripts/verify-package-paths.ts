@@ -2,7 +2,7 @@
  * Find stale root-relative `packages/...` references in repo-authored prose and
  * TypeScript. A missing path is reported only when it names a real package leaf
  * outside its own explaining group directory; globs, placeholders, hypothetical
- * packages, and unbuilt `lib/` output are outside the check.
+ * packages, pinned upstream release links, and unbuilt `lib/` output are outside the check.
  */
 
 import { existsSync, globSync } from 'node:fs'
@@ -53,9 +53,12 @@ function realPackageNames(repoRoot: string): Set<string> {
  * characters only, so a glob (`*`), placeholder (`<`, `>`), or brace expansion
  * (`{`, `}`, `,`) terminates the match before those chars and is never probed —
  * those are patterns, not real paths. A trailing `.`/`/` (e.g. a sentence-ending
- * period) is trimmed before the existence check.
+ * period) is trimmed before the existence check. Consume pinned upstream release
+ * URLs as whole tokens because their package paths resolve in the tagged tree.
  */
-const PKG_REF = /\bpackages\/[A-Za-z0-9._/-]+/g
+const PKG_PATH = /\bpackages\/[A-Za-z0-9._/-]+/
+const UPSTREAM_RELEASE_BLOB = /https:\/\/github\.com\/deepseek-ai\/deepseek-harness\/blob\/dsh-v\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?\//
+const PKG_REF = new RegExp(`${UPSTREAM_RELEASE_BLOB.source}${PKG_PATH.source}|${PKG_PATH.source}`, 'g')
 
 function isDriftedPackageReference(repoRoot: string, packageNames: ReadonlySet<string>, ref: string): boolean {
   if (existsSync(resolve(repoRoot, ref))) return false
@@ -77,7 +80,7 @@ function isDriftedPackageReference(repoRoot: string, packageNames: ReadonlySet<s
 }
 
 /**
- * Find moved-package references outside checked historical schema content.
+ * Find moved-package references outside checked historical schema content and upstream release URLs.
  * @param repoRoot - absolute repository root used to resolve references.
  * @param absPath - absolute source file to inspect.
  * @param packageNames - current package leaf directory names.
@@ -90,7 +93,7 @@ export function findPackagePathViolations(repoRoot: string, absPath: string, pac
     PKG_REF,
     // Remove trailing separators or sentence punctuation matched greedily.
     ref => ref.replace(/[./]+$/, ''),
-    ref => isDriftedPackageReference(repoRoot, packageNames, ref),
+    ref => ref.startsWith('packages/') && isDriftedPackageReference(repoRoot, packageNames, ref),
     historicalSchemaRegion,
   )
 }

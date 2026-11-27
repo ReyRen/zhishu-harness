@@ -70,4 +70,13 @@ describe('historical package references', () => {
     expect(scan(file, [currentReference, 'packages/hypothetical/unpublished/src/types.ts', removedReference].join('\n')))
       .toEqual([{ file, line: 3, ref: removedReference }])
   })
+
+  it('checks local and current links beside a pinned upstream release link', () => {
+    const file = 'docs/upgrade.md'
+    const upstream = 'https://github.com/deepseek-ai/deepseek-harness/blob'
+    const releaseLink = `[Release](${upstream}/dsh-v0.2.1-alpha.2/${removedReference}#usage)`
+    const currentLink = `[Current](${upstream}/master/${removedReference})`
+    expect(scan(file, `${releaseLink} [Local](../${removedReference})\n${currentLink}`))
+      .toEqual([{ file, line: 1, ref: removedReference }, { file, line: 2, ref: removedReference }])
+  })
 })

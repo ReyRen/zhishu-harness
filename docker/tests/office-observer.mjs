@@ -19,12 +19,9 @@ export function apply(ctx) {
       const definition = ctx.tools.get('load_workspace_dependencies')
       if (!definition) throw new Error('Web did not register load_workspace_dependencies')
       const runtime = await definition.execute({})
-      const names = ['office', 'office-docx', 'office-pptx', 'office-xlsx']
-      const skills = await Promise.all(names.map(async (name) => {
-        const skill = await ctx.skills.get(name)
-        if (!skill) throw new Error(`Web did not register ${name}`)
-        return { name, provider: skill.provider, resourceBase: skill.resourceBase, content: skill.content }
-      }))
+      const skill = await ctx.skills.get('office')
+      assert.ok(skill, 'Web must register the shipped Office skill')
+      const skills = [{ name: 'office', provider: skill.provider, resourceBase: skill.resourceBase, content: skill.content }]
       execFileSync(runtime.python, ['-I', '-B', join(import.meta.dirname, 'create-office.py'), message.directory],
         { timeout: 60000, stdio: 'pipe' })
       const handle = await ctx.agents.create({ sessionId: 'office-image-smoke',
